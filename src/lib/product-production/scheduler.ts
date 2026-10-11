@@ -2490,7 +2490,13 @@ async function ensurePlan(input: {
           .equals([state.build.productionId, state.build.parentBuildNumber!]).first()
         if (!parent?.id) throw new Error('[text-content-revision] 原视觉合同的父 Build 已丢失')
         await carryForwardProductBuildArtifactsAcrossBuildsV1({ scope: input.scope, sourceBuildId: parent.id,
-          targetBuildId: state.build.id!, targetControlEpoch: plan.controlEpoch, artifactKeys: retainedKeys })
+          targetBuildId: state.build.id!, targetControlEpoch: plan.controlEpoch, artifactKeys: retainedKeys,
+          // The verified author command may retain art from a narrative-rejected
+          // parent. Keep the exact recovery identity through child pause/repair.
+          ...(parent.status === 'recovery-required' ? { recoverySource: {
+            briefHash: parent.briefHash, planHash: parent.planHash, controlEpoch: parent.controlEpoch,
+          } } : {}),
+        })
       }
       const epochCarryKeys = reusableArtifactKeys.filter(key => !retainedKeys.includes(key))
       if (epochCarryKeys.length > 0) await carryForwardProductBuildArtifactsToEpochV1({

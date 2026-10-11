@@ -8480,6 +8480,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         expect(repaired, JSON.stringify(repaired)).toMatchObject({ ok: true })
         expect(Number(repaired.result.buildNumber)).toBe(rejectedParent.buildNumber + 1)
         expect(await db.productBuilds.get(failed.buildId)).toEqual(rejectedParent)
+        // A content child may retain art from a rejected narrative parent.
+        // Recovering the child must retain that exact parent recovery proof.
+        const pausedChild = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'pause', commandId: 'formal.batch.quality-child.pause',
+            expectedStateRevision: repaired.stateRevision, reason: '复验退回父版本派生后的暂停恢复' } })
+        expect(pausedChild.ok).toBe(true)
+        const resumedChild = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'resume', commandId: 'formal.batch.quality-child.resume',
+            expectedStateRevision: pausedChild.stateRevision } })
+        expect(resumedChild.ok).toBe(true)
       } else if (recoveryMode === 'dialogue-repair' || recoveryMode === 'quality-repair') {
         const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
           command: { type: 'pause', commandId: 'formal.batch.repair.pause', expectedStateRevision: current.stateRevision, reason: '定点修复已采纳对白' } })

@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：2.5.0 · 生效：2026-10-10
+> 层级：L2 · 版本：2.5.1 · 生效：2026-10-11
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -118,3 +118,5 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 此路径复用既有 `productBuilds` / `productBuildArtifacts` / `productProductionCommands`、已登记 Context Gateway、候选采纳与 Blob 生命周期，不建立第二套存储或世界写回路径。形式校验和自动游玩通过仍不代表真实作品已完成专业审校或真人验收。
 
 审查 Provider 失败后，可以在暂停的 `recovery-required` 状态定点修订已经签收的三幕对白；仍须绑定原稿版本、hash 和失败前 Plan，不允许修改质量报告。文字修订子 Build 的审查重试，以及 beat/choice/speaker 身份完全不变的对白修订，可以跨越纯执行依赖失效保留已明确授权的视觉合同；必须重新完成叙事、审图和运行质量闭包。改变发言者或稳定绑定、缺少原稿证据、图片或权利漂移时，不得应用这条保留边界。
+
+若保留图片的父 Build 本身因叙事审查退回，子 Build 的暂停恢复和对白修订仍须携带该父版本精确的 Brief hash、Plan hash 与 epoch 恢复凭据。凭据只用于已通过作者命令、图片字节、权利和直接父子关系复验的视觉集合；不能把失败父版本当作质量通过，也不能据此复用其质量报告。
