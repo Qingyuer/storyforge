@@ -18,7 +18,8 @@ const sourceFiles = new Set(
 )
 
 const entrypoints = [
-  // HTML entry installs the website build boundary before loading application stores.
+  'src/main.tsx',
+  // Showcase HTML alone selects this entry to isolate stores before loading the app.
   'src/entry.ts',
   // Product-approved i18n scaffold: retained until the English milestone is decided.
   'src/i18n/index.ts',
