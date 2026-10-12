@@ -29,6 +29,8 @@ Mention the bot and ask directly, without another command:
 
 Topics include project basics, features and limitations, getting started, installation, model configuration, backup and export, common problems and development progress. For troubleshooting, describe the **feature, steps and error text**.
 
+Ordinary Q&A currently processes only the first **1,000 characters** of each question. Summarize long error reports first, then provide necessary details in follow-up questions; this limit does not apply to image descriptions.
+
 The bot can use relevant group discussion from the previous **10 minutes**, but does not remember every message or maintain long-term chat memory. Answers use the public knowledge base and GitHub; members' statements are not substitutes for verified project facts.
 
 Synchronization takes time and answers can be wrong. Main-branch changes, tagged releases and live website deployments are different states; an answer is not a promise that a feature is live.
