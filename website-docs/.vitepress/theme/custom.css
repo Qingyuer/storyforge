@@ -13,19 +13,42 @@ body { background-image:radial-gradient(circle at 12% 0%,rgba(51,139,118,.12),tr
 .feedback-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:24px 0}.feedback-card{display:block;padding:20px;border:1px solid var(--vp-c-border);border-radius:14px;background:var(--vp-c-bg-soft);color:var(--vp-c-text-1)!important;text-decoration:none!important;transition:border-color .2s ease,transform .2s ease,background .2s ease}.feedback-card:hover{border-color:var(--vp-c-brand-1);background:var(--vp-c-brand-soft);transform:translateY(-2px)}.feedback-card strong,.feedback-card span{display:block}.feedback-card span{margin-top:8px;color:var(--vp-c-text-2);font-size:14px;line-height:1.7}@media(max-width:720px){.feedback-grid{grid-template-columns:1fr}}
 .source-note{font-size:13px;color:var(--vp-c-text-2)}
 
-/* Keep full navigation labels; use the existing accessible menu before they crowd. */
-@media (max-width:1439px){
-  .VPNavBar .VPNavBarMenu,.VPNavBar .VPNavBarExtra,.VPNavBar .VPNavBarTranslations,.VPNavBar .VPNavBarAppearance,.VPNavBar .VPNavBarSocialLinks{display:none}
-  .VPNavBar .VPNavBarHamburger{display:flex}
-  .VPNav .VPNavScreen{display:block}
-}
-@media (min-width:1440px) and (max-width:1799px){
-  .VPNavBarSearch .DocSearch-Button-Placeholder,.VPNavBarSearch .DocSearch-Button-Keys{display:none}
-  .VPNavBarSearch{padding-left:12px}
-  .VPNavBar .VPNavBarSocialLinks{display:none}
-}
-.VPNavBarMenu a[href="https://storyforge-lab.com/"]{align-self:center;height:34px;margin-right:8px;padding:0 12px;border:1px solid var(--vp-c-brand-1);border-radius:6px;color:var(--vp-c-brand-1);line-height:32px;white-space:nowrap}
+/* Keep primary tabs visible in their own row. The shared height also offsets
+   VitePress content, sidebar and anchor targets on narrow screens. */
+:root{--vp-nav-height:120px}
+.VPNavBar .container>.title,.VPNavBar.has-sidebar .container>.title,.VPNavBar .VPNavBarTitle .title,.VPNavBar .content-body{height:64px}
+.VPNavBar .content-body{--vp-nav-height:64px}
+.VPNavBar.has-sidebar .content,.VPNavBar.has-sidebar:not(.home.top) .content-body{position:static}
+.VPNavBar .VPNavBarMenu{position:absolute;top:64px;left:16px;right:16px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:56px;max-width:1328px;margin:0 auto;border-top:1px solid var(--vp-c-divider)}
+.VPNavBar .VPNavBarMenuLink{display:flex;align-items:center;justify-content:center;min-width:0;height:auto;padding:8px 12px;white-space:normal;text-align:center;line-height:1.4;font-size:14px}
+.VPNavBar .VPNavBarMenuLink.active{background:var(--vp-c-brand-soft);border-radius:6px}
+.VPNavBar .VPNavBarHamburger,.VPNavBar .VPNavBarExtra,.VPNav .VPNavScreen{display:none}
+.VPNavBar .VPNavBarTranslations,.VPNavBar .VPNavBarAppearance{display:flex}
+.VPNavBar .VPNavBarSocialLinks{display:none}
+.VPNavBar .content-body,.VPNavBar:not(.home){background:var(--vp-nav-bg-color)}
+.VPNavBarMenu a[href="https://storyforge-lab.com/"]{color:var(--vp-c-brand-1);font-weight:600}
 .VPNavBarMenu a[href="https://storyforge-lab.com/"]:hover{background:var(--vp-c-brand-soft)}
+@media(min-width:960px){.VPSidebar .curtain{top:calc(var(--vp-nav-height) * -1)}}
+@media(max-width:1099px){
+  :root{--vp-nav-height:160px}
+  .VPNavBar .VPNavBarMenu{grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:48px}
+  .VPNavBarSearch .DocSearch-Button-Placeholder,.VPNavBarSearch .DocSearch-Button-Keys{display:none}
+}
+@media(max-width:639px){
+  :root{--vp-nav-height:208px}
+  .VPNavBar .VPNavBarMenu{left:12px;right:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .VPNavBar .VPNavBarMenuLink{font-size:12px;padding:6px}
+  .VPNavBar .wrapper{padding:0 12px}
+  .VPNavBarTitle .logo{margin-right:6px;width:24px;height:24px}
+  .VPNavBarTitle .title{font-size:14px}
+  .VPNavBar .VPNavBarAppearance{margin-left:8px}
+  .VPNavBar .VPNavBarTranslations{padding-left:6px;margin-right:0}
+  .VPNavBar .content-body{column-gap:4px}
+  .VPNavBar .translations::before,.VPNavBar .appearance::before{display:none}
+  .VPNavBar .VPNavBarSearch{flex-grow:0;padding-left:4px}
+  .VPNavBar .VPNavBarAppearance{margin-left:0}
+  .VPNavBar .VPNavBarTranslations{padding-left:0}
+}
 
 .knowledge-banner{display:flex;align-items:center;gap:20px;min-height:156px;margin:0 0 32px;padding:26px 30px;border:1px solid var(--vp-c-border);border-left:4px solid var(--vp-c-brand-1);border-radius:16px;background:var(--vp-c-bg-soft);box-sizing:border-box}
 .knowledge-banner__mark{width:64px;height:64px;flex:none;object-fit:contain}
