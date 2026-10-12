@@ -1,6 +1,12 @@
 # Pending development and branch audit
 
-## Current review: October 12, 2026
+## October 12, 2026 · Website experience and navigation delivery
+
+[PR #122](https://github.com/yuanbw2025/storyforge/pull/122) delivers the source for the real website experience: a separate showcase build reuses the project interface, workspaces and examples while isolating browser storage and disabling model configuration and AI calls. The downloaded application retains its creation capabilities. No business tables, migrations or ownership changes are introduced. Website entry points, the teal landscape theme and the public Workshop platform are delivered to the main branch through [platform PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2).
+
+The [website experience](https://storyforge-lab.com/storyforge/) is independently deployed. Always-visible navigation was merged through [PR #126](https://github.com/yuanbw2025/storyforge/pull/126) and automatically deployed. Main-branch source, the fixed online experience package and formal releases are verified separately; the public Workshop currently provides a catalog and downloads, while online submissions remain closed. The snapshot below predates this integration; its unmerged website-branch status does not replace the current state of the linked PRs.
+
+## Pre-integration snapshot: October 12, 2026
 
 Baseline: remote main `ce10e774`. All 31 local branches (including this maintenance branch) and 48 worktrees, including detached ones, were enumerated. The QQ bot guide was merged through [PR #123](https://github.com/yuanbw2025/storyforge/pull/123) and [deployed successfully](https://github.com/yuanbw2025/storyforge/actions/runs/38239411813). Its guide and changelog are already synchronized, so this round does not duplicate them.
 

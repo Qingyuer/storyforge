@@ -2,6 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App'
+import { IS_SHOWCASE } from './lib/showcase/policy'
+import ShowcaseShell from './components/showcase/ShowcaseShell'
 import ErrorBoundary from './components/shared/ErrorBoundary'
 import { DialogProvider } from './components/shared/Dialog'
 import { ToastProvider } from './components/shared/Toast'
@@ -16,7 +18,7 @@ import './index.css'
 
 // 从当前主题闭集恢复；未知值回到默认主题。
 applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
-registerStoryForgeServiceWorker()
+if (!IS_SHOWCASE) registerStoryForgeServiceWorker()
 installRuntimeDiagnostics()
 
 /**
@@ -41,7 +43,7 @@ async function requestPersistentStorage() {
 
 async function bootstrap() {
   // 0. FB-11: 尽早申请持久化存储,降低 IndexedDB 被浏览器驱逐("重置")的概率。
-  void requestPersistentStorage()
+  if (!IS_SHOWCASE) void requestPersistentStorage()
 
   // 0. 三注册表是启动硬门；不完整的读写与生命周期定义不得进入 UI。
   validateRegistry()
@@ -70,7 +72,7 @@ async function bootstrap() {
         <ErrorBoundary>
           <BrowserRouter basename="/storyforge/">
             <ToastProvider>
-              <App />
+              {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <App />}
             </ToastProvider>
           </BrowserRouter>
         </ErrorBoundary>

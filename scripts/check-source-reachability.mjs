@@ -19,6 +19,8 @@ const sourceFiles = new Set(
 
 const entrypoints = [
   'src/main.tsx',
+  // Showcase HTML alone selects this entry to isolate stores before loading the app.
+  'src/entry.ts',
   // Product-approved i18n scaffold: retained until the English milestone is decided.
   'src/i18n/index.ts',
   // AGENT-1 Phase 27.1-a/b is a headless public boundary for tools and the read-only AgentRunner.

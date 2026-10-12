@@ -64,7 +64,9 @@
     "plugins:build-examples": "node tools/plugin-sdk/build-examples.mjs",
     "plugins:check": "node tools/plugin-sdk/cli.mjs check",
     "plugins:build-kit": "node tools/plugin-sdk/build-developer-kit.mjs",
-    "plugins:check-kit": "node tools/plugin-sdk/build-developer-kit.mjs --check && node --test tools/plugin-sdk/catalog-entries.test.mjs"
+    "plugins:check-kit": "node tools/plugin-sdk/build-developer-kit.mjs --check && node --test tools/plugin-sdk/catalog-entries.test.mjs",
+    "build:showcase": "tsc -b && vite build --mode showcase",
+    "test:showcase": "playwright test --config playwright.showcase.config.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",

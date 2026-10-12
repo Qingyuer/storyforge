@@ -1,6 +1,12 @@
 # 待合并开发记录与分支核对
 
-## 2026-10-12 当前核对
+## 2026-10-12 专项交付 · 官网体验与导航
+
+官网真实界面的源码交付见 [PR #122](https://github.com/yuanbw2025/storyforge/pull/122)：独立展示构建复用项目界面、工作台与示例，隔离浏览器存储并关闭模型配置和 AI 调用。普通下载版继续保留完整创作能力；没有新增业务表、迁移或改变作品归属。官网入口、青绿山水主题和公开工坊平台的主干交付见 [平台 PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2)。
+
+[官网项目体验](https://storyforge-lab.com/storyforge/)已独立部署；顶部常驻导航已通过 [PR #126](https://github.com/yuanbw2025/storyforge/pull/126) 合入主干并自动部署。主干源码、固定线上体验包与正式版本仍分别核对；当前公开工坊提供目录与下载，在线投稿尚未开放。下方是本次整合前的分支核对快照，其中官网分支的未合并描述不能代替上述 PR 的当前状态。
+
+## 2026-10-12 整合前核对快照
 
 基线：远程 main `ce10e774`。完整枚举 31 个本地分支（含本轮维护分支）、48 个工作区，包含 detached。QQ 机器人指南已通过 [PR #123](https://github.com/yuanbw2025/storyforge/pull/123) 合入，且[知识库部署成功](https://github.com/yuanbw2025/storyforge/actions/runs/38239411813)；指南和更新日志已同步，本轮不重复补写。
 

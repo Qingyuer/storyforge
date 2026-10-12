@@ -25,3 +25,6 @@ presentation/
 release/
 packaging/desktop-server/web/*
 !packaging/desktop-server/web/placeholder.txt
+
+# Isolated public website build
+dist-showcase/
