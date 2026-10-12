@@ -18,7 +18,8 @@ const sourceFiles = new Set(
 )
 
 const entrypoints = [
-  'src/main.tsx',
+  // HTML entry installs the website build boundary before loading application stores.
+  'src/entry.ts',
   // Product-approved i18n scaffold: retained until the English milestone is decided.
   'src/i18n/index.ts',
   // AGENT-1 Phase 27.1-a/b is a headless public boundary for tools and the read-only AgentRunner.

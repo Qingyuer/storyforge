@@ -9,7 +9,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 export default tseslint.config(
   {
     ignores: [
-      'dist', 'dev-dist', 'coverage', 'node_modules',
+      'dist', 'dist-showcase', 'dev-dist', 'coverage', 'node_modules',
       '**/.vitepress/cache/**', '**/.vitepress/dist/**',
       '**/*.config.{js,ts,mjs,cjs}', 'scripts/**', 'public/**',
     ],

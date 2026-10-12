@@ -1,3 +1,4 @@
+import { IS_SHOWCASE, SHOWCASE_DATABASE } from '../showcase/policy'
 import type { ExtensionPackage, ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
 import type { TtrpgAuthoringDraftV1 } from "../ttrpg/authoring-contract";
 import type { ChatAuthoringDraftV1 } from '../character-interaction/authoring-contract'
@@ -455,4 +456,4 @@ export class StoryForgeDB extends Dexie {
   }
 }
 
-export const db = new StoryForgeDB()
+export const db = new StoryForgeDB(IS_SHOWCASE ? SHOWCASE_DATABASE : STORYFORGE_DATABASE_NAME)

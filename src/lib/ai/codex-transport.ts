@@ -1,3 +1,4 @@
+import { assertGenerationAvailable } from '../showcase/policy'
 import type { ChatMessage } from '../types'
 import type { TokenUsage } from './logger'
 import type { ChatResult } from './client'
@@ -14,6 +15,7 @@ export function isLocalCodexHost(): boolean {
   return typeof location !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
 }
 export async function codexRequest<T>(path: string, body?: unknown): Promise<T> {
+  assertGenerationAvailable()
   if (!isLocalCodexHost()) throw new Error('Codex 订阅连接需要本机运行 StoryForge；线上静态站点不能直接调用本机登录。')
   let response: Response
   try {

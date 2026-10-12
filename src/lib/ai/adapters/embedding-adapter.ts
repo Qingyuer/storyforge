@@ -6,6 +6,7 @@
  * 失败抛错由调用方决定降级——绝不污染主流程。
  */
 import type { EmbeddingConfig } from '../../types'
+import { IS_SHOWCASE, assertGenerationAvailable } from '../../showcase/policy'
 import { recordUsage } from '../usage-log'
 import { estimateTokens } from '../context-budget'
 
@@ -16,7 +17,7 @@ export function embeddingModelTag(cfg: EmbeddingConfig): string {
 
 /** 配置是否可用于真正发起嵌入调用。 */
 export function isEmbeddingReady(cfg: EmbeddingConfig | null | undefined): cfg is EmbeddingConfig {
-  return !!(cfg && cfg.provider !== 'codex' && cfg.enabled && cfg.baseUrl && cfg.model && (cfg.apiKey || cfg.provider === 'ollama'))
+  return !IS_SHOWCASE && !!(cfg && cfg.provider !== 'codex' && cfg.enabled && cfg.baseUrl && cfg.model && (cfg.apiKey || cfg.provider === 'ollama'))
 }
 
 const EMBED_TIMEOUT_MS = 60_000
@@ -31,6 +32,7 @@ export async function embedTexts(
   projectId?: number | null,
   signal?: AbortSignal,
 ): Promise<number[][]> {
+  assertGenerationAvailable()
   if (cfg.provider === 'codex') throw new Error('Codex 本机订阅连接不提供向量嵌入；请配置独立的 Embedding API。')
   if (!texts.length) return []
   const baseUrl = cfg.baseUrl.replace(/\/+$/, '')

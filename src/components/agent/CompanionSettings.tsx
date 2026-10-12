@@ -1,3 +1,4 @@
+import { IS_SHOWCASE, SHOWCASE_NOTICE } from '../../lib/showcase/policy'
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useCompanionStore } from '../../stores/companion'
@@ -63,6 +64,7 @@ export default function CompanionSettings({ onClose }: { onClose: () => void }) 
     } catch (cause) { if (alive.current) setError(voiceError(cause)) }
   }
   const serviceFields = (kind: 'input' | 'output') => {
+    if (IS_SHOWCASE) return <p>{SHOWCASE_NOTICE}</p>
     const config = preferences[kind]
     const label = kind === 'input' ? '识别' : '合成'
     const change = (key: keyof VoiceService, value: string) => update({ [kind]: { ...config, [key]: value } })

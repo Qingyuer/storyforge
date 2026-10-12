@@ -1,3 +1,4 @@
+import { IS_SHOWCASE, SHOWCASE_NOTICE } from '../lib/showcase/policy'
 import { streamCodex } from '../lib/ai/codex-transport'
 import { create } from 'zustand'
 import type { AIConfig, AIProvider, AIConfigPreset, EmbeddingConfig } from '../lib/types'
@@ -231,6 +232,7 @@ function getChineseExplanation(status: number, msg: string): string {
 
 /** 从 localStorage 加载配置 */
 function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
+  if (IS_SHOWCASE) return { config: { ...DEFAULT_CONFIG }, rememberApiKey: false }
   let savedConfig: Partial<AIConfig> = {}
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -322,22 +324,24 @@ const initial = loadInitialConfig()
 export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   config: initial.config,
   rememberApiKey: initial.rememberApiKey,
-  presets: loadPresets(),
+  presets: IS_SHOWCASE ? [] : loadPresets(),
   taskRoutes: loadTaskRoutes(),
   agentContextProfiles: loadAgentContextProfiles(),
   agentTeamBudgetProfile: loadAgentTeamBudgetProfile(),
   creativeQualityMode: loadCreativeQualityMode(),
   activePresetId: null,
   editingPresetId: null,
-  embedding: loadEmbeddingConfig(initial.rememberApiKey),
+  embedding: IS_SHOWCASE ? { ...DEFAULT_EMBEDDING } : loadEmbeddingConfig(initial.rememberApiKey),
 
   setEmbeddingConfig: (partial: Partial<EmbeddingConfig>) => {
+    if (IS_SHOWCASE) return
     const next = { ...get().embedding, ...partial }
     persistEmbeddingConfig(next, get().rememberApiKey)
     set({ embedding: next })
   },
 
   setConfig: (partial: Partial<AIConfig>) => {
+    if (IS_SHOWCASE) return
     const newConfig = normalizeConfigModel({ ...get().config, ...partial })
     persistConfig(newConfig, get().rememberApiKey)
     // 手动改动配置后，与已选预设脱钩（除非改动等于该预设）
@@ -345,12 +349,14 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   setRememberApiKey: (remember: boolean) => {
+    if (IS_SHOWCASE) return
     persistConfig(get().config, remember)
     persistEmbeddingConfig(get().embedding, remember)
     set({ rememberApiKey: remember })
   },
 
   saveAsPreset: (name: string) => {
+    if (IS_SHOWCASE) return ''
     const id = nanoid()
     const preset: AIConfigPreset = {
       id,
@@ -365,6 +371,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   applyPreset: (id: string) => {
+    if (IS_SHOWCASE) return
     const preset = get().presets.find(p => p.id === id)
     if (!preset) return
     const current = get().config
@@ -377,6 +384,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   updatePresetFromCurrent: (id: string) => {
+    if (IS_SHOWCASE) return
     const presets = get().presets.map(p => p.id === id ? {
       ...p,
       config: presetConfig(get().config, get().rememberApiKey),
@@ -441,6 +449,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   switchProvider: (provider: AIProvider) => {
+    if (IS_SHOWCASE) return
     const preset = PROVIDER_PRESETS[provider] || {}
     const newConfig = normalizeConfigModel({
       ...get().config,
@@ -453,6 +462,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   testConnection: async (): Promise<TestResult> => {
+    if (IS_SHOWCASE) return { ok: false, message: SHOWCASE_NOTICE }
     const { config } = get()
     if (config.provider === 'codex') {
       const startedAt = Date.now()
