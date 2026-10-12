@@ -82,6 +82,8 @@ test('examples and project interface remain usable at mobile widths', async ({ p
 })
 
 test('actual novel, screenplay and comic readers and packaged town remain available without AI', async ({ page }) => {
+  // The real town includes original multi-megabyte artwork; measure completion on the public link.
+  if (process.env.SHOWCASE_BASE_URL) test.setTimeout(600_000)
   await page.goto('./home/examples?type=short')
   await page.getByRole('button', { name: '阅读完整样例《盐从记忆里长出来》' }).click()
   await expect(page.getByRole('dialog')).toContainText('盐从记忆里长出来')
@@ -95,7 +97,7 @@ test('actual novel, screenplay and comic readers and packaged town remain availa
   await expect.poll(() => page.locator('.comic-showcase-reader figure img').first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(500)
   await page.goto('./home/examples?type=town')
   await page.getByRole('button', { name: '导入原型并准备游玩' }).click()
-  await expect(page).toHaveURL(/town\/play\?project=\d+&work=\d+/, { timeout: 60_000 })
+  await expect(page).toHaveURL(/town\/play\?project=\d+&work=\d+/, { timeout: process.env.SHOWCASE_BASE_URL ? 480_000 : 60_000 })
   await page.reload()
   await expect(page.locator('.showcase-app')).toContainText('回潮镇')
 })

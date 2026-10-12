@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/showcase',
-  timeout: 90_000,
+  timeout: process.env.SHOWCASE_BASE_URL ? 180_000 : 90_000,
+  expect: { timeout: process.env.SHOWCASE_BASE_URL ? 20_000 : 5_000 },
   workers: 1,
   use: {
     ...devices['Desktop Chrome'],
