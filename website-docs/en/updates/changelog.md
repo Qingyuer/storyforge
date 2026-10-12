@@ -2,6 +2,14 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version remains 3.9.1; tagged releases retain their original content. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## October 12, 2026 · Website appearance and knowledge-base navigation
+
+The website hero now shares the project's default teal mountain artwork and palette. The project experience button opens a [separate experience page](https://storyforge-lab.com/storyforge/) with the real interface, examples and manual editing. API configuration and AI generation are unavailable there; download the project for full authoring.
+
+The website, knowledge-base home, prompts and methods, changelog, feedback and GitHub tabs remain visible at the top of the knowledge base. On narrow screens they wrap into rows instead of being hidden in the top-right menu. Search, language selection and the light/dark switch remain available.
+
+These changes affect public presentation only, without changing work data or releasing a new project version. Source review: [project PR #122](https://github.com/yuanbw2025/storyforge/pull/122) and [website PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2). Website deployment and main-branch integration are verified separately.
+
 ## October 10, 2026 · Reading unnamed Canon records
 
 Fixed false conflicts when multiple unnamed story-progress or crossing records shared a category title. AI retrieval distinguishes them by record identity. Conflict checks for author-named records and worldview titles retain their existing rules; no data migration is needed. See [longform settings](/en/features/longform/planning).
