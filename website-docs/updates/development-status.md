@@ -1,6 +1,24 @@
 # 待合并开发记录与分支核对
 
-## 2026-10-10 当前核对
+## 2026-10-12 专项交付 · 官网体验与导航
+
+官网真实界面的源码交付见 [PR #122](https://github.com/yuanbw2025/storyforge/pull/122)：独立展示构建复用项目界面、工作台与示例，隔离浏览器存储并关闭模型配置和 AI 调用。普通下载版继续保留完整创作能力；没有新增业务表、迁移或改变作品归属。官网入口、青绿山水主题和公开工坊平台的主干交付见 [平台 PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2)。
+
+[官网项目体验](https://storyforge-lab.com/storyforge/)已独立部署；顶部常驻导航已通过 [PR #126](https://github.com/yuanbw2025/storyforge/pull/126) 合入主干并自动部署。主干源码、固定线上体验包与正式版本仍分别核对；当前公开工坊提供目录与下载，在线投稿尚未开放。下方是本次整合前的分支核对快照，其中官网分支的未合并描述不能代替上述 PR 的当前状态。
+
+## 2026-10-12 整合前核对快照
+
+基线：远程 main `ce10e774`。完整枚举 31 个本地分支（含本轮维护分支）、48 个工作区，包含 detached。QQ 机器人指南已通过 [PR #123](https://github.com/yuanbw2025/storyforge/pull/123) 合入，且[知识库部署成功](https://github.com/yuanbw2025/storyforge/actions/runs/38239411813)；指南和更新日志已同步，本轮不重复补写。
+
+- `feat/text-adventure-delivery-20261010`：20 个主干外提交，0 个仅本地，[草稿 PR #119](https://github.com/yuanbw2025/storyforge/pull/119) 仍未合并。此前记录的保图修订与任务恢复之外，新增备份导出账本索引、冻结场景与转录文本绑定、分支行动反馈、结局提示、分支播放与生成正文隔离、拒绝后恢复凭据保护。最新 PR head `38c5e1c8` 的[远端检查已通过](https://github.com/yuanbw2025/storyforge/actions/runs/38108748168)，不等于合入或上线。
+- `fix/adventure-branch-transcript` 与 `fix/flagship-backup-export-index` 指向同一 head `5642c839`，均为上面文字冒险分支的祖先；备份索引与分支转录修复只记一次，不作为两个遗漏产品重复合并。
+- `feat/website-experience-20261012`：4 个主干外提交，0 个仅本地，已推送至[草稿 PR #122](https://github.com/yuanbw2025/storyforge/pull/122)，尚未合并。实现独立展示构建中的真实界面体验及 AI 调用限制、展示入口隔离、知识库顶部导航；本轮未发现该 PR 的检查记录，不把分支中的入口描述写成已上线指南。
+- `/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge`：观察到 5 个未提交条目，包含角色聊天开发方案、文档路由、权威清单与检查器调整。
+- `/Users/qinyingying/.codex/worktrees/ttrpg-plan-20261012/storyforge`：观察到 8 个未提交条目，包含跑团开发方案、产品契约、能力基线、路由与检查器调整。上述两处仅登记观察范围，不表示方案已定稿或产品已实现。
+- 旧首页 CSS 两处未提交、内置游戏旧工作区 72 项差异、归档测试缓存和其余历史分支仍按下方去重结论处理。没有提交、推送、合并或清理作者的开发工作。
+
+
+## 2026-10-10 历史核对
 
 本轮基线为远程 main `6da4c2dc`，完整枚举 25 个本地分支（含本轮维护分支）与 44 个工作区。下方 10 月 8 日快照保留作历史证据。
 

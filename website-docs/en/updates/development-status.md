@@ -1,6 +1,24 @@
 # Pending development and branch audit
 
-## Current review: October 10, 2026
+## October 12, 2026 · Website experience and navigation delivery
+
+[PR #122](https://github.com/yuanbw2025/storyforge/pull/122) delivers the source for the real website experience: a separate showcase build reuses the project interface, workspaces and examples while isolating browser storage and disabling model configuration and AI calls. The downloaded application retains its creation capabilities. No business tables, migrations or ownership changes are introduced. Website entry points, the teal landscape theme and the public Workshop platform are delivered to the main branch through [platform PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2).
+
+The [website experience](https://storyforge-lab.com/storyforge/) is independently deployed. Always-visible navigation was merged through [PR #126](https://github.com/yuanbw2025/storyforge/pull/126) and automatically deployed. Main-branch source, the fixed online experience package and formal releases are verified separately; the public Workshop currently provides a catalog and downloads, while online submissions remain closed. The snapshot below predates this integration; its unmerged website-branch status does not replace the current state of the linked PRs.
+
+## Pre-integration snapshot: October 12, 2026
+
+Baseline: remote main `ce10e774`. All 31 local branches (including this maintenance branch) and 48 worktrees, including detached ones, were enumerated. The QQ bot guide was merged through [PR #123](https://github.com/yuanbw2025/storyforge/pull/123) and [deployed successfully](https://github.com/yuanbw2025/storyforge/actions/runs/38239411813). Its guide and changelog are already synchronized, so this round does not duplicate them.
+
+- `feat/text-adventure-delivery-20261010`: 20 commits outside main, none local-only. [Draft PR #119](https://github.com/yuanbw2025/storyforge/pull/119) remains unmerged. In addition to the previously recorded image-preserving revision and task recovery, development adds indexed backup ledger export, frozen-scene transcript binding, branch-action feedback, ending hints, isolation of branch playback and generated prose, and preservation of rejected-parent recovery proof. [Remote checks passed](https://github.com/yuanbw2025/storyforge/actions/runs/38108748168) for the latest PR head `38c5e1c8`; this does not establish integration or online availability.
+- `fix/adventure-branch-transcript` and `fix/flagship-backup-export-index` share head `5642c839` and are both ancestors of the text-adventure branch above. Backup indexing and branch transcript fixes are recorded once, not treated as two additional products to merge.
+- `feat/website-experience-20261012`: four commits outside main, none local-only; pushed to [draft PR #122](https://github.com/yuanbw2025/storyforge/pull/122), still unmerged. Development covers the real interface in an isolated showcase build with AI calls restricted, showcase-only entry points, and top-level knowledge-base navigation. No PR check records were found this round; its entry-point descriptions are not published as available user-guide features.
+- `/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge`: five observed uncommitted entries cover a character-chat development plan, document routing, authority listings, and checker changes.
+- `/Users/qinyingying/.codex/worktrees/ttrpg-plan-20261012/storyforge`: eight observed uncommitted entries cover a TTRPG development plan, product contract, capability baseline, routing, and checker changes. These two worktrees are observations only; neither a finalized plan nor an implemented product is established.
+- The two old home CSS modifications, 72 differences in the old built-in-game worktree, archived test cache, and other historical branches retain the deduplication conclusions below. This maintenance has not submitted, pushed, merged, or cleaned the authors' development work.
+
+
+## Historical review: October 10, 2026
 
 The baseline is remote main `6da4c2dc`. This round enumerated all 25 local branches (including this maintenance branch) and 44 worktrees. The October 8 snapshot below remains historical evidence.
 

@@ -10,6 +10,14 @@ The website, knowledge-base home, prompts and methods, changelog, feedback and G
 
 These changes affect public presentation only, without changing work data or releasing a new project version. Source review: [project PR #122](https://github.com/yuanbw2025/storyforge/pull/122) and [website PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2). Website deployment and main-branch integration are verified separately.
 
+The navigation fix is integrated separately into the deployment branch so routine knowledge-base updates preserve the visible tabs.
+
+## October 12, 2026 · QQ group bot usage guide
+
+Added the [StoryForge QQ bot guide](/en/guides/qqbot), covering project Q&A, public commands, text-to-image generation, prompt refinement, consecutive requests from one member, image-and-text attribution, upload retries, update notifications and privacy. Results identify a nickname, task number and description summary; native mention notifications and visible references to the original command are not promised.
+
+This documents the configured group assistant. It does not add an image service to the StoryForge web app or mark a new release. Evidence: [documentation commit 0a2d7fc1](https://github.com/yuanbw2025/storyforge/commit/0a2d7fc1c2964bf4d5c0d37cf153ffbe2770308d). The group assistant runs independently from the app.
+
 ## October 10, 2026 · Reading unnamed Canon records
 
 Fixed false conflicts when multiple unnamed story-progress or crossing records shared a category title. AI retrieval distinguishes them by record identity. Conflict checks for author-named records and worldview titles retain their existing rules; no data migration is needed. See [longform settings](/en/features/longform/planning).
