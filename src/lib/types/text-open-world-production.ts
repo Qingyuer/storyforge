@@ -16,6 +16,7 @@ import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } 
 import type { TextOpenWorldRuntimeModuleKeyV1 } from './text-open-world-runtime'
 import type { WorkspaceScope } from './world-ownership'
 import type { AIProvider } from './ai'
+import type { TextOpenWorldResponsibilitySnapshotV1 } from '../open-world/responsibility-assembly'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -4164,7 +4165,9 @@ export interface TextOpenWorldSemanticReviewV1 {
  * into the single ProductRuntimePackage consumed by preview and ProductRelease. */
 export interface TextOpenWorldIntegrationReportV1 {
   schema: 'storyforge.text-open-world-integration-report'
-  version: 1
+  version: 1 | 2
+  /** Required for v2. Historical v1 reports retain their original hash. */
+  responsibilitySnapshot?: TextOpenWorldResponsibilitySnapshotV1
   productType: 'text-open-world'
   productInstanceKey: string
   runtimePackageHash: string
