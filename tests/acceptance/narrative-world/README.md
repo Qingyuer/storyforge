@@ -69,7 +69,7 @@ npm run test:narrative-world:baseline -- --output test-results/narrative-world/c
 
 P1 表示增强能力接入前应优先处理的共享读取/语义问题，不表示已发现线上安全事件。本轮没有证据支持数据丢失或对外泄漏的 P0 判断。
 
-按照既定依赖，下一工作包是 **NW-1A：IR 身份、时间和 codec**，然后进入 1B/1C 和各 2x 卡。上述排序用于安排反例和退出门，不授权跳过合同直接重写生产模块。小型现有接口修复可以另拆维护任务，但要保留同一考卷与版本兼容性。
+0B 交付时的下一工作包为 **NW-1A：IR 身份、时间和 codec**（实施结果见下方后续对照），然后进入 1B/1C 和各 2x 卡。上述排序用于安排反例和退出门，不授权跳过合同直接重写生产模块。小型现有接口修复可以另拆维护任务，但要保留同一考卷与版本兼容性。
 
 ## 已有保护与结论边界
 
@@ -95,3 +95,25 @@ gold 由文本与明确的封闭世界依赖标注构成，经过本次 Agent �
 10万/30万/100万字符扩展、IR+lexical、vector/planner 与消融均未运行。本轮记录原文短样本，不把“低频事实”场景叫作百万字长尾成绩。已冻结参考配置：Apple M1 Pro、32 GiB、macOS 26.6.2、Chrome for Testing 151.0.7922.34；浏览器仅读取安装版本，实际评测在 Node v24.16.0 / happy-dom / fake-indexeddb 中完成。NW-2E 按既定冷/热运行次数和去重规模指标另行验收。
 
 工程验证回执见 [WORLD-ENGINE.md §22](../../../docs/products/WORLD-ENGINE.md#22-nw-0b-评测基线与处理优先级2026-10-13)；本目录不提升任何产品、真实模型或真人质量状态。
+
+## NW-1A 后续对照：身份、时间与编码
+
+NW-1A 的实际实现与限制见 [WORLD-ENGINE.md §23](../../../docs/products/WORLD-ENGINE.md#23-nw-1a-身份时间和编码合同2026-10-13)。本轮增加后台合同，不改 provider、修改影响算法或 v3 发布策略。
+
+- [合同回执](./ir-contract-20261013-v1.json)：同一 12 场景/120 查询/48 修改的 249 个证据跨度（含重复引用）通过新 codec；同名身份、改名/重排、旧章序与 release hash 保持均 12/12。独立编解码/时间/生命周期反例见 `R-NW-1A-ir-codec.test.ts`。
+- [编码 golden](./ir-codec-golden-v1.json)：八类 variant 的 record/root hash 及 Unicode 码点排序黄金向量。原文不做 NFC/换行转换，有序集合不排序。
+- [NW-1A 后重跑 v3](./baseline-20261013-nw1a-v1.json)：所有原 expected/observed 与 [旧基线](./baseline-20261013-v1.json) 相同；查询仍为 24/60/36，修改影响 precision 41.67%。没有把合同通过折算成查询质量提升。
+
+已解决的合同层风险：名称/排序参与身份、未知时间被误当精确时间、多个时间轴混用、裸跨 namespace 引用、额外 JSON 字段/不安全数字、UTF-8 截断、循环依赖哈希、旧 hash 被静默重绑。旧数据缺 UID 保留 partial；现有显式创建仍负责分配，读操作不补写。正常备份恢复保持 owner code，世界包 remix 则生成新 namespace；两者均有隔离回归。
+
+本轮没有新增领域持久化字段、迁移、UI 或 AI 入口；hard-rule 执行器、条件时间映射/隐式反向转换、外部世界引用装配、语义 projector/查询过滤仍不支持。G01/G04/G05 的表示前置已具备，但原 10 类缺口全部保留。下一卡为 NW-1B。
+
+```bash
+# 普通复现：必须与已审查的合同回执及 v3 基线一致
+npx vitest run tests/regression/R-NW-1A-ir-codec.test.ts tests/regression/R-NW-0B-evidence.test.ts
+
+# 明确生成候选合同回执，再审查输入 hash/逐场景结果；不可覆盖旧版本
+NW_IR_REPORT=/tmp/nw1a-candidate.json npx vitest run tests/regression/R-NW-1A-ir-codec.test.ts
+```
+
+以上是确定性合同与隔离数据库证据；未做文学质量、真实模型、独立人工或规模性能验收。

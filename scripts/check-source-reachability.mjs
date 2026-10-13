@@ -30,6 +30,9 @@ const entrypoints = [
   'src/lib/context-gateway/index.ts',
   // Neutral world-to-product source contracts are a headless architecture API.
   'src/lib/product/source.ts',
+  // NW-1A is a headless identity/time/codec contract. Domain projection and
+  // release/Gateway activation follow in NW-1B/2A/2B; no author UI is exposed.
+  'src/lib/world-engine/narrative-ir.ts',
   // Text-open-world owns this headless durable expression Harness. It is an
   // internal capability boundary, never a product route or session identity.
   'src/lib/open-world/evolution-harness.ts',

@@ -756,7 +756,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.importantLocations, name: 'importantLocations', owner: 'project',
-    resourceIdentity: RESOURCE_IDENTITY('location', 'location', '重要地点'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('location', 'location', '重要地点'), narrativeEntityType: 'location' },
     worldSemantic: { version: 1, area: 'entities', resourceKind: 'location', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_DOMAIN_OWNER,
     exportable: true, tree: { parentField: 'parentId' }, exportIdField: true,
@@ -777,7 +777,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   // ───────────────────── 角色 ─────────────────────
   { table: db.characters, name: 'characters', owner: 'project', homeWorldScoped: true,
-    resourceIdentity: RESOURCE_IDENTITY('character', 'character', '角色', 'registered-fields'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('character', 'character', '角色', 'registered-fields'), narrativeEntityType: 'character' },
     worldSemantic: { version: 1, area: 'characters', resourceKind: 'character', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_DOMAIN_OWNER,
     exportable: true,
@@ -1104,7 +1104,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: '分类 schema 属于当前 World 根，具体词条再按 worldGroupId 隔离' },
 
   { table: db.codexEntries, name: 'codexEntries', owner: 'project', worldScoped: true,
-    resourceIdentity: RESOURCE_IDENTITY('codex-entry', 'codex-entry', '设定词条'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('codex-entry', 'codex-entry', '设定词条'), narrativeEntityType: 'codex-entry' },
     worldSemantic: { version: 1, area: 'entities', resourceKind: 'codex-entry', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_DOMAIN_OWNER,
     exportable: true,
@@ -1404,7 +1404,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   // ───────────────────── 多世界 ─────────────────────
   { table: db.worldGroups, name: 'worldGroups', owner: 'project', exportable: true,
-    resourceIdentity: RESOURCE_IDENTITY('world-group', 'world', '世界'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('world-group', 'world', '世界'), narrativeEntityType: 'world-group' },
     worldSemantic: { version: 1, area: 'multi-world', resourceKind: 'world-group', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_DOMAIN_OWNER,
     exportIdField: true, exportOrderBy: 'order',

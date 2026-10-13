@@ -1,6 +1,6 @@
 # StoryForge 上下文路由
 
-> 版本：2.8.1 · 生效：2026-10-13
+> 版本：2.8.2 · 生效：2026-10-13
 > 目标：保持项目级关联理解，同时只读取当前任务需要的现行文档与源码。三注册表和数据红线不因上下文精简而降低。
 
 ## 1. 默认入口
@@ -29,7 +29,7 @@
 | 短篇、剧本、漫画 | work/adaptation kind、source manifest、产物 owner | `products/INDEPENDENT-CREATION.md`、`roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md` 和且仅和目标产品的专项方案、对应领域代码和表/Skill | 另外两个独立创作产品内部实现、世界引擎或游戏媒资的无关实现 |
 | 漫剧前期生产 | MotionDrama Work、source manifest、series/episode、asset/shot/reference、Image/Video Prompt IR | `products/MOTION-DRAMA.md`、`roadmap/MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`、对应 motion-drama 代码与三注册表 | 页漫排字/页面、最终视频/剪辑、世界与上层产品媒资内部实现 |
 | 世界引擎、WorldRelease、世界版本/封存/出口 | World draft/release、codec/hash、source gateway | `products/WORLD-ENGINE.md` §1～11、§13、§18；数据治理、world-engine 代码与三注册表 | 上层运行状态、产品媒资实现 |
-| Narrative IR、角色知识、时间与因果 | temporalFacts、knowledgeLedger、事件/故事线、source UID/证据、projector | `products/WORLD-ENGINE.md` §10～12、§16、§18～19、§22（NW-0B 反例）；命中的领域类型/采纳/生命周期与反例 | 将 Work 缓存或产品私域当冻结 Canon |
+| Narrative IR、角色知识、时间与因果 | temporalFacts、knowledgeLedger、事件/故事线、source UID/证据、projector | `products/WORLD-ENGINE.md` §10～12、§16、§18～19、§22～23（NW-0B 反例与 NW-1A 已实现合同）；命中的领域类型/采纳/生命周期与反例 | 将 Work 缓存或产品私域当冻结 Canon |
 | 世界检索、世界推演、人物视角/秘密 | world-release-provider、typed query、policy/manifest、hypothesis owner | `products/WORLD-ENGINE.md` §13～16、§19；Gateway、source-contracts、对应测试 | 未实现 query/validate/simulate 不得按现成功能调用 |
 | 产品 Requirement Compiler、上层产品读取世界 | product adapter、精确 selection/依赖闭包、SourcePlan/Manifest | `products/WORLD-ENGINE.md` §14、§17～20；`products/UPPER-PRODUCTS.md`、目标产品契约 | 不读取或复制世界物理表清单，不引入全产品万能 payload |
 | 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner；文字冒险还须读取 `products/TEXT-ADVENTURE.md`，专业生产任务再由其路由到 `products/text-adventure-production/README.md` | 其它上层产品内部细节 |

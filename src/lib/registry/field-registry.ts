@@ -161,6 +161,9 @@ export const STORY_CORE_GENERATABLE_FIELD_SPECS = [
 export type StoryCoreGeneratableField = typeof STORY_CORE_GENERATABLE_FIELD_SPECS[number]['field']
 
 export const FIELD_REGISTRY: FieldSpec[] = [
+  // NW-1A: ragDocumentId, semanticSubKey, IR IDs/hashes/time context and alias
+  // receipts stay system-owned. No IR projection field is an adoption target;
+  // the exact field whitelist rejects model-supplied identity metadata.
   object('extensionRecords', 'payload'),
   // MEMORY-5: author-edited workspace roots. Stable identities, owner IDs,
   // active pointers and derived counters remain outside the editable surface.

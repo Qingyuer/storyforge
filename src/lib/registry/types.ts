@@ -342,6 +342,8 @@ export interface TableSpec<T = any> {
     version: 1
     field: 'ragDocumentId'
     resourceKind: string
+    /** NW-1A entity identity classification, not a writable IR/Canon field. */
+    narrativeEntityType?: 'character' | 'location' | 'codex-entry' | 'world-group'
     /** Context Gateway catalog metadata remains on this registry entry. */
     contextKind: ContextResourceKind
     label: string

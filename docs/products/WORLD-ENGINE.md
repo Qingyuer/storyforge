@@ -1,8 +1,8 @@
 # 叙事世界基座 · 世界引擎专项权威
 
-> 版本：2.1.0 · 生效：2026-10-13 · 权威层级：L2 · 对应总纲：§5、S1 世界封存
+> 版本：2.2.0 · 生效：2026-10-13 · 权威层级：L2 · 对应总纲：§5、S1 世界封存
 > 本文是世界引擎专项唯一最高权威，服从 L0 总纲及 L1 数据/Harness 标准。§1～9 保留产品边界与现有入口；§10 为重新核实的事实；§11～19 是本次确定的目标合同、施工顺序与评测，不代表生产代码已经实现。
-> NW-0A 设计已形成；NW-0B 原创评测、反例和守门的实测见 §22。Phase 1、Phase 2 及推演生产实现尚未实施，不启动上层产品开发。
+> NW-0A 设计、NW-0B 基线和 NW-1A 身份/时间/编码合同已形成，分别见 §20.3、§22、§23。领域投影/采纳、Phase 2 及推演尚待实施，不启动上层产品开发。
 
 ## 阅读导航
 
@@ -16,6 +16,7 @@
 | 上层产品读取、Requirement Compiler | §14、§17、§20 |
 | 实际施工、验收和设计裁决 | §18～21；当前排期以 roadmap 为准 |
 | NW-0B 考卷、当前成绩、反例与优先级 | §22；样本与运行入口在 tests/acceptance/narrative-world |
+| NW-1A 实际代码、合同限制与基线对照 | §23；不将合同校验当成 provider 查询修复 |
 
 ## 1. 定义
 
@@ -257,7 +258,7 @@ Branch 是 scope 身份，Hypothesis 是独立假设工件，不是新的 Canon 
 
 ### 12.2 公共信封及身份
 
-以下为设计用 TypeScript 结构，不是当前 `src` 已导出的类型。各 variant 必须以 discriminated union 和 exact-key codec 实现，禁止 `Record<string, any>` 作为持久化合同。
+以下为目标公共信封；NW-1A 已将信封、八类 variant 与时间实现为 `src/lib/types/narrative-ir.ts` / `narrative-time.ts` 和 exact-key codec，实际 wire 细节及未接入边界见 §23。领域持久化与投影仍待 1B，禁止 `Record<string, any>` 作为持久化合同。
 
 ```ts
 type SemanticKind =
@@ -661,7 +662,7 @@ Compiler 是产品侧“把目标转成类型化读取要求、接收证据并�
 
 ### 18.1 开工卡公共合同
 
-NW 是世界引擎专项工作包前缀，不替代总纲 A～F 阶段或已完成 D-WORLD-01～04。下列卡片保留设计合同；NW-0A 与 NW-0B 的实现状态分别见 §20.3、§22，其余仍待实施。进入实际施工前重新 fetch、核对最新 schema/接口和本表目标；不得把下面“建议新增测试文件名”写成已存在或已通过。
+NW 是世界引擎专项工作包前缀，不替代总纲 A～F 阶段或已完成 D-WORLD-01～04。下列卡片保留设计合同；NW-0A、NW-0B、NW-1A 的实现状态分别见 §20.3、§22、§23，其余仍待实施。进入实际施工前重新 fetch、核对最新 schema/接口和本表目标；不得把后续卡“建议新增测试文件名”写成已存在或已通过。
 
 所有卡片继承以下约束，逐卡的“验证/失败”行为是额外要求：
 
@@ -1061,7 +1062,7 @@ PR状态来自本轮 `gh pr list --state open`。这些PR仅作背景，未在�
 
 优先级的含义和逐项根因在 findings 中冻结；没有证据支持本轮宣称已发现线上 P0 数据丢失/对外泄漏。显式两 key 的计划与编译均完整，不能把 count-only 反例推广为所有产品生产路径漏读。`author-canon` 记录仍保留 belief/action/status，不宣称所有调用方已经混淆真相。
 
-下一卡是 **NW-1A**；0B 放行的是身份/时间/codec 施工前置，不是 IR、增强查询、产品体验或研究结论。Phase 1/2 及具体修复没有在本卡启动。
+0B 交付时下一卡为 **NW-1A**（后续实测见 §23）；0B 放行的是身份/时间/codec 施工前置，不是 IR、增强查询、产品体验或研究结论。Phase 1/2 及具体修复没有在 0B 卡启动。
 
 ### 22.4 验证与未测范围
 
@@ -1081,3 +1082,50 @@ PR状态来自本轮 `gh pr list --state open`。这些PR仅作背景，未在�
 串行队列仅协调本机验证资源，不是项目运行依赖；复现通常直接运行 `CI=1 npm run ci`。完整 CI 不包含本卡未授权的真实模型评测或产品 E2E。
 
 没有运行产品 E2E、真实模型、独立真人或 10万/30万/100万字符测量。原文答案原子已保存但未做自然语言回答评分；当前短场景不代表长篇文学质量。参考设备已冻结为 Apple M1 Pro / 32 GiB / macOS 26.6.2 / Chrome for Testing 151.0.7922.34，浏览器只读取版本；实际执行环境为 Node v24.16.0 / happy-dom / fake-indexeddb。2E 仍需既定冷/热次数、去重规模、性能和降级验收，不得从单元测试时长推断性能门通过。
+
+## 23. NW-1A 身份、时间和编码合同（2026-10-13）
+
+### 23.1 实际边界与入口
+
+产品=世界引擎/共享叙事语义基座；生命周期=产品能力研发；位置=S1 编译前的后台合同，不提供 S2/S3 新入口。交接物为 typed IR compiler artifact、时间/身份诊断、编码 golden vectors 与同语料对照。现有 World/Work 仍持有源数据，媒资仍归产品。本卡基于 `0656c584`，开工 fetch 后 origin/main 仍为 `646beba1`，独立分支 `feat/narrative-ir-contracts-20261013`。
+
+入口闭包：既有 `PROJECT_TABLES.resourceIdentity` / `ragDocumentId` → `inspectNarrativeIdentitiesV1` 的只读 owner/唯一性校验 → 稳定 semanticId 与注册 FK 映射；既有分步骤/节点的 `resolveCanonicalChapterSequence` → 冻结 sequence；明确提供的 typed records/原文证据 → `compileNarrativeIRBundleV1` → exact codec/引用/证据/hash 校验。调用方进入 1B 时还须捕获一致来源快照和 revision vector，不能把本卡只读身份检查当成原子封存事务。
+
+| 已实施 | 代码与不变量 |
+|---|---|
+| 身份/来源 | `world-engine/narrative-identity.ts`；semanticId 由 owner namespace、kind、持久 resource UID、`root` 或持久 sub UID 编码；不含显示名、自增 ID、章节排序。重复 UID（包括未选中同表行）、非法 kind/owner、跨 Work/World 读取拒绝 |
+| 同名/子记录/alias | 四类实体来源由 PROJECT_TABLES.resourceIdentity.narrativeEntityType 登记。两个同名角色保持两份身份；merge alias 必须同 namespace、有确认引用且无环；derivation 必须换 namespace、保留来源 revision；v3 仅按 worldCode/releaseHash/resourceKey 显式映射，无证据返回 release-local |
+| 时间 | `types/narrative-time.ts` / `world-engine/narrative-time.ts`；BigInt 比较规范 tick，发生/有效/叙述/揭示/获知与审计时间分离；状态为 [start,end)，open/unknown 不混用；before 偏序检查环和传递冲突，不生成 causes |
+| 多时制 | timeline 冻结 world/branch/calendar/unit/epoch；无有向映射返回 incomparable-time。v1 实现有证据/确认、版本化、有界分段仿射映射，不隐式求逆/串联；非整数目标不强行四舍五入。条件映射与更复杂转换仍不支持 |
+| 编码/值/证据 | `narrative-ir-codec.ts` 的八类 union、六类 TypedValue、信封/证据/alias exact keys；未知版本/字段/非 JSON 数值拒绝。原文使用 raw-utf8-v1，不替换换行或 Unicode；跨度须非空并位于码点边界 |
+| 哈希/闭包 | `narrative-json.ts` 按 Unicode 码点排序；语义集合按稳定键排序，有序值保序。先计算 record hash（排除自身、解析后的引用 hash 与全局 revision vector），再绑定依赖，最后 bundle root；循环语义引用可验证，旧依赖 hash 不可静默重绑 |
+| 保守旧数据 | 缺 UID 返回 partial，读取零回填；UID 创建仍复用已有显式 `stampNewRecord` 写入事务。旧自由文本日期保留 unknown；章节只能给 narratedAt，不能补 acquiredAt。throughChapterId 仅接受同一冻结 release 的显式坐标图 |
+
+没有新增表、索引、DB/schema 或备份版本；schema v11/备份 v15 不变。`NarrativeSystemMetadataV1` 仅声明未来子记录的可选系统字段类型，未给现有领域增设任意 JSON 存储口。`FIELD_REGISTRY`/Adoption 的现有闭集拒绝模型写入 UID、subKey、semanticId、hash 或新 time 字段；测试覆盖零写入。AI 尚不读取新 IR，因此不增加 Context source/Skill/run。新的后台编译边界在 source-reachability 中单独登记，不接作者 UI，不修改旧 v3 codec/hash。
+
+### 23.2 Wire 裁决与后续接缝
+
+- `NarrativeIRBundleV1` 是 `{schema,irVersion,scope,records,evidence,timeContext,aliases,semanticRootHash}` 的编译中间物，允许 Work owner，无需虚构公共世界；不是 WorldRelease v4、WorldReference 或另一份可写 Canon。§12 的最终 release 外层绑定留待 2A。
+- `SemanticRefV1` 当前只表达同 bundle 的 typed id/hash；裸跨 owner/branch 引用失败。精确外部 WorldReference＋通道的装配留待 1B/2A，不借一个无效字符串伪装支持。
+- `provenance.sourceField` 在此 wire 为 JSON pointer，与调用方冻结的 `{sourceResourceKey,sourceRevision,fieldPointer,text}` 一一对应。字段提取、语义抽取、确认凭据真实性和 publishPolicy 属于后续 projector/采纳边界；codec 校验不授予权限或作者确认。
+- 支持 historical、belief、intent 的无损表示；不据此把旧 v3 的 superseded 历史重新发布，也不修改 `ContextResourceAuthorityV1`。hard rule 名称虽可解析，但当前无已登记叙事执行器，完整验证返回 validator-unavailable；不能把散文规则升级为机器证明。
+- 正常备份恢复保持 World/Work code 和资源 UID、重映射物理 FK；显式世界包 remix 创建新 worldCode/namespace 并保留原 release hash/lineage。两类操作的身份语义分别验收，不修改原包字节。
+- 待 1B 接入领域元数据、publishPolicy、证据与依赖 projector；1C 接入作者候选采纳；2A/2B 接入冻结索引和读取过滤。这里完成的是后续修复需要的合同，而不是提前宣称这些路径生效。
+
+### 23.3 同一考卷的结果与验证
+
+[NW-1A 逐场景回执](../../tests/acceptance/narrative-world/ir-contract-20261013-v1.json)记录 12 个 NW-0B 场景族，120 查询和 48 修改所引用的 249 个原文跨度通过新证据校验；12/12 同名实体身份独立、改名/输入重排后身份不变、冻结章序不漂移、旧 release hash 保持。这里的 249 包含不同问题重复引用的跨度，不当作 249 条独立内容。
+
+[再次运行的 v3 回执](../../tests/acceptance/narrative-world/baseline-20261013-nw1a-v1.json)与原 0B 的全部 expected/observed 相同：查询 24 pass / 60 gap / 36 unsupported，修改影响 precision 41.67% / recall 100%，保护不变量 48/48。原考卷、旧回执、findings 均保留；10 类原缺口没有因此改判通过。G01/G04/G05 所需的身份、时间、历史/模态表示前置已实现，真正的读取和投影改善仍要按 1B/2A/2B 复测。
+
+定向回归为 72 项 NW-1A、25 项 NW-0B，并验证现有资源 UID/备份、世界包和节点同源路径。2026-10-14 完成完整 V-ENG，未修改依赖、放宽断言或降低验证阈值：
+
+| 检查 | 最终回执 |
+|---|---|
+| 完整 CI | `CI=1 npm run ci` 退出码 0；本地以低 CPU 优先级执行，保留两进程隔离覆盖率配置 |
+| 全量测试/覆盖率 | 790 个文件、4,375 项测试通过；配置内 statements/lines 88.16%、branches 74.53%、functions 86.80%，覆盖率闸门通过 |
+| 治理与文档 | architecture、required-tables（128 表）、AI 手册/入口、source-reachability、docs、roadmap、agent-context/freshness、project-metrics 等通过 |
+| lint / 类型 / 构建 | 全量 lint、`tsc --noEmit`、正式 build（含 UI preview 类型检查）、bundle-size 全部通过 |
+| 依赖与输入 | 生产依赖 0 vulnerabilities；15 个合同输入指纹与最终代码匹配；原 0B 语料、旧基线与 findings 字节保持不变 |
+
+无新增 UID 准备 UI、生产存储/恢复流程或产品 API，故未启动产品 E2E；既有恢复与世界包路径在隔离 fake-indexeddb 中回归。真实模型、独立人工、规模性能和上层产品体验均未验收。
