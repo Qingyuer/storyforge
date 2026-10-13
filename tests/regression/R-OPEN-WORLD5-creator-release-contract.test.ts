@@ -16,6 +16,15 @@ afterAll(async () => {
 })
 
 describe('TOW-G5-10 · Creator不可变Release合同', () => {
+  it('version 2 release quality carries calibration and visual hashes through portable verification', async () => {
+    const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release', 2)
+    await expect(verifyProductReleaseManifestV1(fixture.manifest)).resolves.toEqual(fixture.manifest)
+    const original = JSON.stringify(fixture.manifest)
+    fixture.manifest.sourceContracts.releaseQuality.evidence.visualReviewReceiptHash = null
+    await expect(verifyProductReleaseManifestV1(fixture.manifest)).rejects.toThrow()
+    await expect(verifyProductReleaseManifestV1(JSON.parse(original))).resolves.toBeDefined()
+  }, 60_000)
+
   it.each(['world-release', 'novel'] as const)(
     '冻结 %s 来源、Artifact、装配、质量和作者授权，并能从Release创建正式Session',
     async sourceKind => {

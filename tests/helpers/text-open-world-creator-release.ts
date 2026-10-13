@@ -71,6 +71,7 @@ function sortedReceipts(rows: TextOpenWorldCreatorReleaseArtifactReceiptV1[]) {
 
 export async function createTextOpenWorldCreatorReleaseFixtureV1(
   sourceKind: 'world-release' | 'novel' = 'world-release',
+  qualityVersion: 1 | 2 = 1,
 ) {
   const sourceWorkspace = sourceKind === 'world-release'
     ? await seedCurrentProductWorld(`Creator Release World ${crypto.randomUUID()}`)
@@ -224,7 +225,8 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
   }
   const completedAt = frozenAt + 3
   const qualityEvidence: TextOpenWorldCreatorReleaseQualityEvidenceV1 = {
-    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: qualityVersion,
+    ...(qualityVersion === 2 ? { calibrationReceiptHash: '2'.repeat(64), visualReviewReceiptHash: '3'.repeat(64) } : {}),
     build: buildBinding, hardGateReceiptHash: '9'.repeat(64),
     semanticDecisionReceiptHash: 'a'.repeat(64), grayboxReceiptHash: 'b'.repeat(64),
     issueReceiptHashes: [], issueWaiverReceiptHashes: [], issueSetHash: 'c'.repeat(64),
@@ -236,12 +238,15 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
     verifierId: 'storyforge.creator-release-quality-join', verifierVersion: '1',
     verifierKind: 'deterministic' as const,
     inputHashes: [runtimePackageHash, buildBinding.previewHash, qualityEvidence.hardGateReceiptHash,
-      qualityEvidence.semanticDecisionReceiptHash, qualityEvidence.grayboxReceiptHash, qualityEvidence.issueSetHash],
+      ...(qualityVersion === 2 ? [qualityEvidence.calibrationReceiptHash!] : []),
+      qualityEvidence.semanticDecisionReceiptHash, qualityEvidence.grayboxReceiptHash, qualityEvidence.issueSetHash,
+      ...(qualityVersion === 2 ? [qualityEvidence.visualReviewReceiptHash!] : [])],
     environmentHash: null, measuredJson: canonicalProductProductionJsonV2(qualityEvidence),
     status: 'passed' as const, thresholdProfileId: RECEIPT_POLICY_ID,
     thresholdProfileVersion: '1',
-    evidenceRefs: [qualityEvidence.hardGateReceiptHash, qualityEvidence.semanticDecisionReceiptHash,
-      qualityEvidence.grayboxReceiptHash], createdAt: completedAt,
+    evidenceRefs: [qualityEvidence.hardGateReceiptHash,
+      ...(qualityVersion === 2 ? [qualityEvidence.calibrationReceiptHash!] : []), qualityEvidence.semanticDecisionReceiptHash,
+      qualityEvidence.grayboxReceiptHash, ...(qualityVersion === 2 ? [qualityEvidence.visualReviewReceiptHash!] : [])], createdAt: completedAt,
   }
   const releaseQuality = {
     rowId: 1, gateId: TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
