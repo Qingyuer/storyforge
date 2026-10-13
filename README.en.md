@@ -12,7 +12,65 @@
 
 StoryForge is an open-source, local-first AI narrative creation and experience toolkit. Write long or short fiction, adapt a novel into a screenplay or comic, build reusable worlds, and explore character interaction and playable stories. You choose the workflow and approve AI candidates before they become part of your work.
 
-> Long fiction, short fiction, screenplays, comics and the world engine have released entries. Nodes and interactive products are previews. This README is available in nine languages; this does not imply matching coverage in the interface or linked documents. Screenshots and many guides are in Chinese.
+> Long fiction, short fiction, screenplays, comics, motion-drama preproduction, and the world engine have released entries. Nodes and interactive products are previews. This README is available in nine languages; this does not imply matching coverage in the interface or linked documents. Screenshots and many guides are in Chinese.
+
+## Official website, preview, and knowledge base
+
+Start with the website overview, explore the real interface in the isolated preview, then download the source and follow the knowledge base for full creation.
+
+| Entry | Purpose |
+|---|---|
+| [Website](https://storyforge-lab.com/) | Project introduction, product overview, community Workshop, and contact information |
+| [Project preview](https://storyforge-lab.com/storyforge/) | Browse real screens and examples, create trial copies, and edit manually; API settings, AI generation, and external services are disabled |
+| [Community Workshop](https://storyforge-lab.com/workshop) | Discover plugins and content packs, review authors and dependencies, and download for local import |
+| [Official knowledge base](https://docs.storyforge-lab.com/en/) | Installation, quick start, product workflows, model setup, backups, Prompt methods, plugin development, and troubleshooting |
+| [Updates and development status](https://docs.storyforge-lab.com/en/updates/changelog) | Mainline user changes, unmerged development, and historical review evidence |
+
+[Development status](https://docs.storyforge-lab.com/en/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+The knowledge base is available in Chinese and English. Preview data uses separate browser storage; manuscripts do not automatically move between the preview, the full local app, domains, or ports. Releases are fixed snapshots; mainline capabilities, app deployment, and documentation publication are separate states.
+
+## Recent capabilities and how to use them
+
+Reviewed against remote main on October 13, 2026. Long fiction, short fiction, screenplays, comics, motion-drama materials, and the world engine have released entries. Nodes and interactive products remain previews; plugin API 1 / SDK 0.1 is a developer preview.
+
+### Motion-drama preproduction: story to shot packages
+
+Start from an idea or novel and develop a series bible, episode plans, character/costume/location/prop/sound materials, episode scripts, storyboards, and reference frames. Image and motion prompts are separate. Review continuity, rights, and target-tool constraints, then export Seedance, Runway, LTX, or generic adapter packages. Materials and deliveries retain versions; revisions require checking affected shots. Video generation, editing, mixing, and final production happen in external tools. Packages do not guarantee every current third-party plan supports all options.
+
+[Usage guide](https://docs.storyforge-lab.com/en/features/motion-drama)
+
+### Plugins and Workshop: tools chosen per work
+
+Install functional plugins, code-free content packs, or bundles with locked dependencies; enable them per work or world. Twelve reference packs cover notes, cards, calendars, timelines, story boards, node flows, AI tasks, and external tools. Dedicated replacement interfaces currently cover world history and story progression. Explicitly enable the developer preview at `/workshop/discover`, create a separate trial work/world, and confirm trust before enabling. Disabling or uninstalling retains plugin data. Developers can check and pack `.sfplugin` files with the public SDK or use the documented AI instructions and Skill kit. Native UI plugins run on the same origin: trust their authors and code; capability declarations are not a malicious-code sandbox. The public Workshop and local installation manager have distinct roles.
+
+[Usage guide](https://docs.storyforge-lab.com/en/workshop/)
+
+### Node preview: connect, revise, and recover
+
+Add or search nodes on the canvas, drag from either input or output ports, select compatible nodes, and reconnect links. Select built-in or personal Prompt templates, bind variables, and attach temperature, output-token, or candidate-count controls. Edits stay with the graph instead of changing the global template. Run to a node processes only its required upstream path. Saved candidate edits and versions use the same longform adoption chain where permitted. Recover saved results after refresh; continuing generation is a separate action. Complete cross-mode acceptance remains ongoing.
+
+[Usage guide](https://docs.storyforge-lab.com/en/features/nodes)
+
+### Local Codex and task-specific model configuration
+
+Alongside cloud APIs and local compatible services such as Ollama or LM Studio, local execution can reuse a signed-in ChatGPT account through Codex app-server. Detect the login, select available models, and assign task presets without entering an API key for this channel. It supports text and structured output, not a purely static hosted app; images, audio, and embeddings need separate configuration. Subscription limits and model permissions apply. Recent-request records help after disconnection; unknown outcomes are not automatically resent or switched to another paid API.
+
+[Usage guide](https://docs.storyforge-lab.com/en/getting-started/model-config)
+
+## Technical characteristics: what each layer does
+
+| Technology or design | Implementation and value |
+|---|---|
+| React + TypeScript + Vite | Product interfaces, explicit domain types, and separate builds; Zustand manages interaction state, TipTap edits prose, and Three.js renders built-in 3D scenes |
+| Dexie / IndexedDB and lifecycle | Works and saves remain in browser storage; PROJECT_TABLES governs backup, import, deletion, migration, and reference remapping; prose export differs from a full backup |
+| Traceable context and adoption | CONTEXT_SOURCES + assembleContext() register reads; Context Gateway retrieves sources on demand; FIELD_REGISTRY + AdoptionSchema + adopt() govern official writes |
+| Durable Harness and version checks | Skills, Run Contracts, events, checkpoints, candidates, and receipts link task inputs to results; scope/version checks protect adoption and persisted candidates support recovery |
+| Independent products and frozen worlds | Work owns creative content; worlds seal versioned semantics; downstream products read their own SourcePlan and own media, releases, and saves rather than rewriting the source novel |
+
+See the architecture and evidence below for implementation boundaries. Engineering checks preserve evidence and state; literary quality, character performance, and provider capabilities still require author judgment.
+
+**Further reading:** [Motion-drama guide](https://docs.storyforge-lab.com/en/features/motion-drama) · [Workshop installation and development](https://docs.storyforge-lab.com/en/workshop/) · [Node guide](https://docs.storyforge-lab.com/en/features/nodes) · [Model configuration](https://docs.storyforge-lab.com/en/getting-started/model-config) · [Backup and recovery](https://docs.storyforge-lab.com/en/guides/backup-restore) · [Prompt methods](https://docs.storyforge-lab.com/en/prompts/) · [Feedback and support](https://docs.storyforge-lab.com/en/feedback/)
 
 ## Try an original story
 
@@ -61,7 +119,7 @@ The games use frozen scripts without free-form AI dialogue or voice acting, and 
 
 ## Quick start
 
-> This introduction describes `main`, checked on September 9, 2026. Long-form writing, short fiction, screenplay adaptation, comic adaptation, and the world engine have released product entries. Nodes and interactive products are previews. Historical GitHub Releases do not include subsequent changes; the hosted site may lag behind `main`. Use current source for the features shown here. Screenshots are from an isolated local workspace, not an author's private manuscript.
+> This introduction describes `main`, checked on October 13, 2026. Long-form writing, short fiction, screenplay adaptation, comic adaptation, motion-drama preproduction, and the world engine have released product entries. Nodes and interactive products are previews. Historical GitHub Releases do not include subsequent changes; the hosted site may lag behind `main`. Use current source for the features shown here. Screenshots are from an isolated local workspace, not an author's private manuscript.
 
 Open the [web app](https://yuanbw.vercel.app/storyforge/) or run the source locally. Core local creation does not require a StoryForge account. AI generation uses your own provider credentials; cloud API charges are separate.
 
@@ -76,7 +134,7 @@ npm run dev
 
 Open the address printed by Vite, with the `/storyforge/` path. Keep the terminal running while using the app. A downloaded source ZIP needs the same commands after extraction; it is not a desktop installer.
 
-On the home page, open the top-right model/settings button (`模型与本地设置`). Choose a provider, enter your API Key, Base URL and an accessible model, then test the connection. Test a small generation before a large task. A successful connection does not establish task quality, account balance or context capacity. For browser CORS errors, follow the settings panel's local proxy instructions.
+On the home page, open the top-right model/settings button (`模型与本地设置`). For API providers, choose a provider, enter your API Key, Base URL and an accessible model, then test the connection. Test a small generation before a large task. A successful connection does not establish task quality, account balance or context capacity. For browser CORS errors, follow the settings panel's local proxy instructions.
 
 ## Choose your starting point
 
@@ -88,6 +146,7 @@ On the home page, open the top-right model/settings button (`模型与本地设�
 | Finish short fiction | Short novel | Story design, chapter cards, drafting, review, frozen release, Markdown/TXT/JSON export |
 | Adapt a novel into a screenplay | Novel to screenplay | Frozen source, adaptation decisions, beats, scene writing, review, Fountain/FDX/print export |
 | Adapt a novel into a comic | Novel to comic | Pages, panels, visual references, lettering, storyboard/visual releases and PNG/WebP/CBZ/PDF export; visual output depends on supported image services or suitable author assets |
+| Prepare an animated series | Motion-drama materials | Series bible, episodes, materials, storyboards, reference frames, and tool packages; video production remains external |
 | Build a world | World engine | Semantic content, explicit derivation, frozen world versions and read access |
 | Compose a visual workflow | Node authoring | Preview; shares the long-form backend and work data |
 | Play an original adventure | TTRPG → Published adventures | Community preview of *Fog Harbor: The Last Light* |

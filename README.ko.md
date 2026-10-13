@@ -12,9 +12,67 @@
 
 StoryForge는 데이터를 로컬에 보관하는 방식을 기본으로 하는 오픈 소스 AI 서사 창작·체험 도구입니다. 장편과 단편을 쓰고, 소설을 시나리오나 만화로 각색하고, 재사용할 세계를 만들고, 상호작용형 이야기를 탐색할 수 있습니다. 작업 방식은 작가가 선택하며, AI 제안은 작가의 확인과 승인을 거쳐 작품에 반영됩니다.
 
-> 2026년 9월 9일의 `main`을 기준으로 확인했습니다. 장편, 단편, 시나리오, 만화, 세계 엔진에는 정식 진입점이 있습니다. 노드 모드와 상호작용형 제품은 미리보기입니다. 이 README의 번역이 전체 화면과 연결 문서의 한국어 지원을 뜻하지는 않습니다. 스크린샷과 많은 안내서는 중국어입니다.
+> 2026년 10월 13일의 `main`을 기준으로 확인했습니다. 장편, 단편, 시나리오, 만화, 애니메이션 사전 제작, 세계 엔진에는 정식 진입점이 있습니다. 노드 모드와 상호작용형 제품은 미리보기입니다. 이 README의 번역이 전체 화면과 연결 문서의 한국어 지원을 뜻하지는 않습니다. 스크린샷과 많은 안내서는 중국어입니다.
 
 <a id="try-a-story"></a>
+
+## 공식 사이트·체험판·공식 지식 베이스
+
+공식 사이트에서 개요를 보고, 분리된 체험판에서 실제 화면을 살펴본 뒤, 정식 창작은 소스를 내려받아 시작하세요.
+
+| 입구 | 용도 |
+|---|---|
+| [공식 사이트](https://storyforge-lab.com/) | 프로젝트, 제품, 커뮤니티 공방과 연락처 |
+| [체험판](https://storyforge-lab.com/storyforge/) | 실제 화면, 예제, 체험용 복사본과 수동 편집. API 설정·AI 생성·외부 서비스는 비활성화 |
+| [커뮤니티 공방](https://storyforge-lab.com/workshop) | 플러그인·콘텐츠를 찾고 작성자와 의존성을 확인한 뒤 로컬 앱으로 가져오기 |
+| [공식 지식 베이스](https://docs.storyforge-lab.com/en/) | 설치, 시작, 제품 사용, 모델 설정, 백업, Prompt 방법, 플러그인 개발과 문제 해결 |
+| [업데이트·개발 상태](https://docs.storyforge-lab.com/en/updates/changelog) | main 변경, 미병합 개발, 과거 확인 근거 |
+
+[개발 상태](https://docs.storyforge-lab.com/en/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+지식 베이스는 중국어와 영어로 제공됩니다. 체험판 저장소는 분리되며 로컬판·도메인·포트 사이에서 원고는 자동 공유되지 않습니다. Release는 고정 버전이고 main, 앱 배포, 문서 배포는 따로 확인합니다.
+
+## 최근 기능과 사용법
+
+2026년 10월 13일 원격 main 기준으로 확인했습니다. 장편, 단편, 시나리오, 만화, 애니메이션 제작 소재, 세계 엔진은 정식 입구를 제공합니다. 노드·인터랙티브 제품은 미리보기이며 플러그인 API 1 / SDK 0.1은 개발 미리보기입니다.
+
+### 애니메이션 사전 제작
+
+아이디어나 소설에서 시리즈 설정, 회차 계획, 인물·의상·장소·소품·소리 소재, 회차 대본, 스토리보드와 참조 프레임을 준비합니다. 이미지와 동작 Prompt를 분리하고 연속성·권리·도구 제약을 확인하여 Seedance, Runway, LTX 또는 일반 입력 패키지를 만듭니다. 소재와 납품은 버전을 유지하며 수정 후 영향받는 샷을 확인합니다. 영상 생성·편집·믹싱·완성본은 외부 도구에서 처리하며 제공자의 모든 요금제가 모든 옵션을 지원하는 것은 아닙니다.
+
+[사용 가이드](https://docs.storyforge-lab.com/en/features/motion-drama)
+
+### 플러그인과 창작 공방
+
+기능 플러그인, 코드 없는 콘텐츠 팩, 의존 버전을 고정한 묶음을 작품·세계별로 사용합니다. 12개 예제는 메모, 카드, 달력, 연표, 이야기 보드, 노드, AI와 외부 도구를 보여줍니다. 전용 교체 대상은 세계 역사와 이야기 진행입니다. `/workshop/discover`에서 미리보기를 직접 켜고 체험 작품을 만든 뒤 신뢰를 확인하세요. 비활성화·제거해도 데이터는 유지됩니다. 공개 SDK로 `.sfplugin`을 검사·패키징하며 AI 지침과 Skill 자료도 제공합니다. 네이티브 UI는 같은 origin에서 실행되므로 작성자와 코드를 신뢰해야 합니다. 기능 선언은 악성 코드 샌드박스가 아닙니다. 공개 공방과 로컬 설치 관리는 역할이 다릅니다.
+
+[사용 가이드](https://docs.storyforge-lab.com/en/workshop/)
+
+### 노드 연결·수정·복구
+
+노드를 추가하거나 검색하고 입력·출력 포트에서 호환 노드로 연결합니다. Prompt 템플릿, 변수, 온도, 출력 Tokens와 후보 수를 그래프에 저장하며 전역 템플릿은 바꾸지 않습니다. 특정 노드까지 실행하면 필요한 상위 노드만 처리합니다. 저장된 후보는 허용된 공식 노드에서 같은 장편 채택 경로를 사용합니다. 새로고침 후 복구가 새 생성을 시작하지는 않습니다. 모드 간 전체 검증은 계속됩니다.
+
+[사용 가이드](https://docs.storyforge-lab.com/en/features/nodes)
+
+### 로컬 Codex와 작업별 모델
+
+API와 로컬 호환 서비스 외에 Codex app-server로 로컬 ChatGPT 로그인을 재사용할 수 있습니다. 로그인 감지, 모델 선택, 작업 프리셋을 설정하며 이 경로에는 API Key가 필요 없습니다. 텍스트·구조화 출력 전용으로 정적 호스팅 앱에서는 사용할 수 없습니다. 이미지·음성·임베딩은 별도 설정입니다. 구독 한도와 모델 권한이 적용됩니다. 연결이 끊기면 최근 요청을 확인할 수 있으며 결과가 불명확한 요청을 자동 재전송하거나 다른 유료 API로 전환하지 않습니다.
+
+[사용 가이드](https://docs.storyforge-lab.com/en/getting-started/model-config)
+
+## 기술 특징
+
+| 기술·설계 | 역할과 가치 |
+|---|---|
+| React + TypeScript + Vite | 제품 UI와 도메인 타입. Zustand는 상태, TipTap은 본문 편집, Three.js는 내장 3D 장면을 담당 |
+| Dexie / IndexedDB | 로컬 저장. PROJECT_TABLES가 백업·가져오기·삭제·마이그레이션·참조 재매핑을 관리 |
+| 추적 가능한 컨텍스트와 채택 | CONTEXT_SOURCES + assembleContext()가 읽기를 등록. Context Gateway가 자료를 찾고 FIELD_REGISTRY + AdoptionSchema + adopt()가 공식 쓰기를 제어 |
+| 지속형 Harness | Skill·계약·이벤트·checkpoint·후보·receipt. 버전과 범위를 확인하고 저장된 결과 복구를 지원 |
+| 독립 제품과 고정 세계 | Work가 작품을 소유. 제품별 SourcePlan으로 읽고 각자 소재·출시·저장 상태를 소유하여 원작을 덮어쓰지 않음 |
+
+구현 범위는 아래 구조와 근거를 참고하세요. 문학적 품질, 캐릭터 표현, 제공자 능력은 여전히 작가의 판단이 필요합니다.
+
+**더 읽기：** [애니메이션 사전 제작](https://docs.storyforge-lab.com/en/features/motion-drama) · [플러그인 설치·개발](https://docs.storyforge-lab.com/en/workshop/) · [노드](https://docs.storyforge-lab.com/en/features/nodes) · [모델 설정](https://docs.storyforge-lab.com/en/getting-started/model-config) · [백업·복구](https://docs.storyforge-lab.com/en/guides/backup-restore) · [Prompt 방법](https://docs.storyforge-lab.com/en/prompts/) · [피드백](https://docs.storyforge-lab.com/en/feedback/)
 
 ## 오리지널 이야기를 체험하세요
 
@@ -76,6 +134,7 @@ Vite가 표시하는 주소의 `/storyforge/` 경로를 열고, 사용하는 동
 | 짧은 작품 완성하기 | 단편 소설 | 설계, 장 카드, 집필, 검토, 불변 판본. Markdown/TXT/JSON |
 | 소설을 시나리오로 각색 | 소설에서 시나리오 | 고정 원전, 각색 판단, 구조화 장면, 검토. Fountain/FDX/인쇄 |
 | 소설을 만화로 각색 | 소설에서 만화 | 페이지, 컷, 시각 참조, 레터링, 판본. PNG/WebP/CBZ/PDF |
+| 애니메이션 시리즈 준비 | 제작 소재 | 시리즈 설정, 회차, 소재, 스토리보드, 참조 프레임, 도구 패키지. 영상은 외부 제작 |
 | 세계 만들기 | 세계 엔진 | 의미 콘텐츠, 명시적 파생, 불변 버전, 읽기 |
 | 시각적으로 과정 구성 | 노드 모드 | 미리보기. 장편과 같은 제작 로직 및 작품 데이터 사용 |
 | 플레이하거나 체험 제작 | TTRPG / 캐릭터 대화 / AI 마을 / 텍스트 게임 | 독자적인 제작·실행 수명 주기를 가진 미리보기 |
