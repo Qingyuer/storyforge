@@ -79,6 +79,7 @@ const activeDocs = [
   'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
+  'docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md',
   'docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md',
   'docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md',
   'docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md',
