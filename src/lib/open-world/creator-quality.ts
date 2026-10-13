@@ -2709,7 +2709,8 @@ export async function recordTextOpenWorldVisualReviewV1(input: {
   if (input.expectedAssetsHash !== visual.consistency.assetsHash || visual.consistency.issues.length > 0) {
     fail('图片集合已变化或基础一致性检查未通过')
   }
-  if (!stringListsEqual(input.decisions.map(item => item.artifactKey), visual.assets.map(item => item.artifactKey))) {
+  const decisionKeys = input.decisions.map(item => item.artifactKey).sort((left, right) => left.localeCompare(right))
+  if (!stringListsEqual(decisionKeys, visual.assets.map(item => item.artifactKey))) {
     fail('必须对当前全部图片逐一确认，不能漏项或重复')
   }
   const evidence = parseTextOpenWorldVisualReviewEvidenceV1({
