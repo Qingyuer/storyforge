@@ -1,3 +1,4 @@
+import { assertGenerationAvailable } from '../showcase/policy'
 import { streamCodex, CODEX_BASE_URL } from './codex-transport'
 import type { AIConfig, ChatMessage } from '../types'
 import { AIError, CodexRequestError } from '../types'
@@ -251,6 +252,7 @@ export async function chatWithImagesV1(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  assertGenerationAvailable()
   if (!images.length || images.length > 12) throw new Error('[AI] 多模态请求必须包含 1–12 张图片')
   const parsedImages = images.map(parseChatImageInputV1)
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
@@ -317,6 +319,7 @@ export async function* streamChat(
   result?: StreamResult,
   meta?: AICallMeta,
 ): AsyncGenerator<string> {
+  assertGenerationAvailable()
   const resolved = resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = resolved.config
@@ -451,6 +454,7 @@ export async function chat(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  assertGenerationAvailable()
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
   }
@@ -554,6 +558,7 @@ async function* loggedCodex(
   messages: ChatMessage[], config: AIConfig, taskKind: AITaskKind | null,
   meta?: AICallMeta, signal?: AbortSignal, result?: ChatResult, schema?: Record<string, unknown>, responseFormat?: 'json_object',
 ): AsyncGenerator<string> {
+  assertGenerationAvailable()
   if (meta?.category?.startsWith('eval.')) throw new CodexRequestError('Codex 订阅暂不支持当前带 API 金额统计的模型评测；请显式选择 API 评测预设。')
   const startedAt = Date.now()
   const receipt = result ?? {}

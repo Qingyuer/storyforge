@@ -1,4 +1,5 @@
 import type { ImageGenerationBindingV1 } from './capability'
+import { assertGenerationAvailable } from '../showcase/policy'
 
 const MAX_BYTES = 25 * 1024 * 1024
 
@@ -33,6 +34,7 @@ export async function requestOpenAICompatibleImagesV1(input: {
   height: number
   signal?: AbortSignal
 }): Promise<{ requestId: string | null; images: ArrayBuffer[] }> {
+  assertGenerationAvailable()
   if (!Number.isInteger(input.count) || input.count < 1 || input.count > 4 || !input.prompt.trim() || input.prompt.length > 16_000) throw new Error('[media] 图片请求数量或 Prompt 非法')
   const response = await fetch(`${input.binding.baseUrl}/images/generations`, {
     method: 'POST', signal: input.signal,

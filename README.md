@@ -12,9 +12,11 @@
 
 **教程与交流：** [B 站视频教程](https://www.bilibili.com/video/BV1q37j6QExh/) · [知乎专栏](https://zhuanlan.zhihu.com/p/2038714210188780594) · **QQ 交流群：1082374587** · [更多联系方式](#交流与支持)
 
-<p align="center">开源、本地优先的 AI 叙事创作与体验工具。创作长短篇小说，将小说改编成剧本或漫画；也可以派生世界，制作跑团等互动体验。</p>
+<p align="center">开源、本地优先的 AI 叙事创作与体验工具。创作长短篇小说，将小说改编成剧本、漫画与漫剧素材；通过插件组合自己的工具，也可以派生世界，制作跑团等互动体验。</p>
 
 <p align="center">
+  <a href="https://storyforge-lab.com/">官网</a> ·
+  <a href="https://docs.storyforge-lab.com/">官方知识库</a> ·
   <a href="#快速开始">开始创作</a> ·
   <a href="#先体验一个故事">体验《雾港》</a> ·
   <a href="#共享技术底座">查看技术架构</a>
@@ -24,10 +26,74 @@
   <a href="https://github.com/yuanbw2025/storyforge/stargazers"><img src="https://img.shields.io/github/stars/yuanbw2025/storyforge?style=flat" alt="GitHub Stars" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/Local--first-IndexedDB-967453" alt="Local-first / IndexedDB" />
-  <img src="https://img.shields.io/badge/AI-Bring_Your_Own_Key-32776B" alt="使用自己的模型 API Key" />
+  <img src="https://img.shields.io/badge/AI-API_or_Local_Codex-32776B" alt="自选模型 API 或本机 Codex" />
 </p>
 
-> 长篇、短篇、剧本、漫画和世界引擎提供正式入口；节点与互动产品为预览。README 提供九种语言；界面及关联文档的语言覆盖请以实际内容为准。
+> 长篇、短篇、剧本、漫画、漫剧素材和世界引擎提供正式入口；节点与互动产品为预览。README 提供九种语言；界面及关联文档的语言覆盖请以实际内容为准。
+
+## 官网、体验与官方知识库
+
+首次了解项目，先看官网介绍；想看真实界面，可进入独立体验页；准备正式创作，再下载源码并按知识库配置。
+
+| 入口 | 可以做什么 |
+|---|---|
+| [官网](https://storyforge-lab.com/) | 项目介绍、产品概览、社区创意工坊与联系信息 |
+| [项目体验](https://storyforge-lab.com/storyforge/) | 浏览真实界面、阅读示例、创建体验副本并手动编辑；关闭 API 配置、AI 生成与外部服务 |
+| [社区创意工坊](https://storyforge-lab.com/workshop) | 发现社区插件与内容包，查看作者、依赖与能力说明，下载后在本地应用导入 |
+| [官方知识库](https://docs.storyforge-lab.com/) | 安装、五分钟上手、产品操作、模型配置、备份恢复、Prompt 方法、插件开发与故障排查 |
+| [更新与开发状态](https://docs.storyforge-lab.com/updates/changelog) | 分别查看主干用户变化、尚未合并的开发和历史核对证据 |
+
+[开发状态](https://docs.storyforge-lab.com/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+知识库目前提供中文和英文。体验版使用独立浏览器数据空间；它与完整本地版、其他域名及端口不自动共享手稿。旧 Release 是固定历史版本，主干能力、应用部署和知识库发布分别核对。
+
+## 近期能力与使用方式
+
+以下依据 2026-10-13 远程 main 核对。长篇、短篇、剧本、漫画、漫剧素材和世界引擎提供正式入口；节点与互动产品保持预览，插件 API 1 / SDK 0.1 为开发预览。
+
+### 漫剧前期生产：从故事到逐镜交付包
+
+从一句话或小说来源进入“漫剧素材”，把创作推进到系列圣经、分集规划、角色/服装/场景/道具/声音物料、逐集节拍与剧本、分镜和参考帧。画面与运动提示词分别维护，质量审查检查连续性、素材权利和目标工具约束，再生成 Seedance、Runway、LTX 或通用工具适配包。物料与交付保留版本，修订后检查受影响镜头。交付终点在外部视频生成之前，视频生成、剪辑、配音混音与成片需在后续工具完成；适配包不承诺第三方当前套餐支持所有能力。
+
+[详细使用指南](https://docs.storyforge-lab.com/features/motion-drama)
+
+### 插件与创意工坊：按作品组合工具
+
+可安装功能插件、无代码内容包和锁定依赖的组合包，按作品或世界启用。12 个参考包展示便笺、卡片、历法、时间线、情节看板、节点流程、自定义 AI 和外部工具；首批专用替换接口是世界历史与故事进程。
+
+打开应用 `/workshop/discover` 并明确开启开发预览后，可先创建独立体验作品或世界，再确认信任与安装。停用、卸载保留插件数据，重新安装对应版本恢复专用交互。
+
+开发者可用公开 SDK 检查、打包 `.sfplugin`，或把知识库的指令与 Skill 资料包交给自己的 AI 编写。原生界面插件同源运行，须信任作者与代码；能力声明不是恶意代码沙箱。官网创意工坊与应用内本地安装管理有不同职责。
+
+[详细使用指南](https://docs.storyforge-lab.com/workshop/)
+
+### 节点预览：拆解、连接、修订与恢复
+
+从节点库点击或拖入节点，也可在画布搜索创建；从输入或输出端口拖线，选择兼容节点，断开后重新连接。生成节点可选内置或自有 Prompt 模板，绑定变量、补充要求和温度、输出 Tokens、候选数量等控制。
+
+模板调整随当前图保存，不改全局模板。“运行到此节点”只处理目标与必要上游，其他分支可留作草稿；候选修改与版本选择保存后，允许的正式节点沿同一长篇采纳链写回。刷新后可先恢复已保存结果，继续生成仍需另行操作；完整跨模式验收持续进行。
+
+[详细使用指南](https://docs.storyforge-lab.com/features/nodes)
+
+### 本机 Codex 与多模型任务配置
+
+除云端 API 和 Ollama / LM Studio 等兼容服务外，本地运行可通过 Codex app-server 复用已登录的 ChatGPT 账号，在设置中检测登录、选择实际可用模型并分配任务预设，无需在该通道填写 API Key。它仅接文本与结构化输出，纯静态线上版不可使用；图片、语音、向量仍需独立配置。订阅有模型权限与用量限制，不能理解为免费无限；断线后可查最近请求，结果未知不会自动重发，也不会自动切到其他付费 API。
+
+[详细使用指南](https://docs.storyforge-lab.com/getting-started/model-config)
+
+## 技术特色：每层解决什么问题
+
+| 技术与设计 | 实现方式与价值 |
+|---|---|
+| React + TypeScript + Vite | 产品界面、明确的领域类型和独立构建；Zustand 管理交互状态，TipTap 支持正文编辑，Three.js 承载内置 3D 场景 |
+| Dexie / IndexedDB 与数据生命周期 | 作品和存档在浏览器本地保存；PROJECT_TABLES 统一表的备份、导入、删除、迁移与引用重映射，正文导出与完整备份分工明确 |
+| 可追溯的上下文与采纳 | CONTEXT_SOURCES + assembleContext() 登记读取；Context Gateway 按需检索并保留来源；FIELD_REGISTRY + AdoptionSchema + adopt() 限定正式写回 |
+| 持久化 Harness 与版本保护 | Skill / Run Contract、事件、检查点、候选和回执连接一次任务的输入与结果；采纳前检查作用域及版本，保存后的候选支持恢复 |
+| 独立产品与冻结世界 | Work 拥有作品内容；世界封存可版本化语义，衍生产品按各自 SourcePlan 读取，独立拥有媒资、发布与存档，避免一次游玩反向改写原作 |
+
+源码入口与边界见下文架构、产品目录和回归证据。工程约束帮助保留依据与恢复状态，文学效果、角色表现和第三方模型能力仍需作者判断。
+
+**继续阅读：** [漫剧指南](https://docs.storyforge-lab.com/features/motion-drama) · [工坊安装与开发](https://docs.storyforge-lab.com/workshop/) · [节点指南](https://docs.storyforge-lab.com/features/nodes) · [模型配置](https://docs.storyforge-lab.com/getting-started/model-config) · [备份恢复](https://docs.storyforge-lab.com/guides/backup-restore) · [Prompt 与创作方法](https://docs.storyforge-lab.com/prompts/) · [反馈与支持](https://docs.storyforge-lab.com/feedback/)
 
 ## 先体验一个故事
 
@@ -89,7 +155,13 @@
 
 ## 快速开始
 
-> **版本说明**：界面与操作路径于 2026-09-15 更新为当前青绿 UI。长篇、短篇、剧本、漫画和世界引擎已提供正式入口；文字冒险和文字开放世界仍在开发；在线服务与各产品专项能力以页面说明为准。旧 Release 是固定版本，不包含后续主干全部功能；在线站点可能有部署时差。体验本文新功能，推荐使用最新主干源码。
+> **版本说明**：本文按 2026-10-13 的 main 核对；现有界面截图保留 2026-09-15 的青绿 UI 展示。长篇、短篇、剧本、漫画、漫剧素材和世界引擎已提供正式入口；文字冒险和文字开放世界仍在开发；在线服务与各产品专项能力以页面说明为准。旧 Release 是固定版本，不包含后续主干全部功能；在线站点可能有部署时差。体验本文新功能，推荐使用最新主干源码。
+
+### 官网项目体验
+
+[进入官网体验版](https://storyforge-lab.com/storyforge/)：浏览真实产品界面、内置作品和示例副本，可尝试手动编辑；API 配置、AI 生成与外部服务关闭。体验数据保存在当前浏览器独立空间，不会上传，也不读取本地版的手稿或密钥。正式创作请使用下方完整版本，并自行备份。
+
+开发者可用 `npm run build:showcase` 生成独立的 `dist-showcase/` 静态体验包，部署在 `/storyforge/`。它与普通 `npm run build` 共用页面和领域逻辑，使用独立数据库与存储前缀。不要用普通构建替代官网体验构建；部署还需配置只读静态路由和 CSP，参考 platform 仓库的 `docs/WEBSITE-EXPERIENCE.md`。
 
 ### 在线打开
 
@@ -119,7 +191,7 @@ npm run dev
 ### 第一次接入 AI
 
 1. 点击首页右上角 **“模型与本地设置”**，或在长篇工作区左侧进入 **“设置”**。
-2. 选择服务商，填写自己的 API Key、Base URL 和模型名称；模型需在你的账户中实际可调用。
+2. 选择服务商。API 通道填写自己的 API Key、Base URL 和模型名称；本机 Codex 通道检测 ChatGPT 登录并选择模型，无需填写 Key。模型需在你的账户中实际可调用。
 3. 使用连接测试检查配置，再以一次小规模生成验证任务效果。连接成功不代表余额、输出长度和所有任务能力都已满足。
 4. 出现跨域错误时，按设置页提示使用本地代理。不要把 API Key 填进作品简介、提示词或公开反馈。
 
@@ -135,6 +207,7 @@ npm run dev
 | 完成一篇结构紧凑的故事 | 短篇 → 作品库 → 新建短篇 | 故事设计、章节卡、逐章创作、审校与成稿导出 |
 | 把已有小说改成剧本 | 剧本 → 作品库 | 来源分析、改编规划、场景写作与 Fountain / FDX / 打印导出 |
 | 把已有小说改成漫画 | 漫画 → 作品库 | 分页、分镜、角色视觉资料、图像与排字、分镜版或视觉版导出 |
+| 准备漫剧、短剧的视频制作资料 | 漫剧素材 → 作品库 → 漫剧制作台 | 系列设定、逐集剧本、版本化物料、分镜、参考帧与外部工具输入包 |
 | 搭建可复用的故事世界 | 世界引擎 → 我的世界 → 新建世界 | 独立设定、角色与规则；确认后封存为可引用的世界版本 |
 | 自由组合长篇创作步骤 | 长篇 → 长篇工作台 → 节点创作 | 在可视节点中连接资料与生成动作，复用长篇的数据与能力 |
 | 先玩一段现成的故事 | 跑团 → 作品库 / 游玩 | 《雾港：最后一盏灯》：AI KP、调查、同伴、秘密与结局选择 |
@@ -331,7 +404,7 @@ flowchart LR
 flowchart TB
   subgraph PRODUCTS["产品层 · 各自的领域服务与数据所有权"]
     L["长篇 / 节点"]
-    C["短篇 / 剧本 / 漫画"]
+    C["短篇 / 剧本 / 漫画 / 漫剧素材"]
     W["世界引擎"]
     I["跑团 / 角色聊天 / 小镇 / 文字游戏"]
   end
@@ -416,6 +489,7 @@ StoryForge 使用你自己的模型服务，API 费用由相应服务商收取�
 | 云端文本服务 | DeepSeek、通义千问、豆包、MiniMax、智谱、文心、Kimi、OpenAI、Claude、Gemini 等 |
 | 聚合与兼容接口 | Poe、NVIDIA NIM、魔搭等预设，以及自定义 Base URL |
 | 本地模型 | Ollama、LM Studio 等本地兼容服务 |
+| 本机订阅连接 | Codex app-server 复用本机 ChatGPT 登录，文本与结构化输出；订阅限制仍生效 |
 | 图像与其他媒资 | 在具体产品中配置对应 provider；与文本生成能力分别验证 |
 
 这些是当前接入选项，**不是每个模型都已通过所有产品的效果测试**。模型名称、可用额度与能力以服务商账户为准。完整设置实现见 [AIConfigPanel](./src/components/settings/AIConfigPanel.tsx)。

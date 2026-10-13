@@ -89,3 +89,7 @@ Build 装配固定 SourceManifest、内容 Artifact receipts、RuntimePackage、
 - 自动构造的任务物品明确标为任务物品，并提供所属目标说明。运行包修正通过既有 runtime 演化创建新 Build，既有冻结 Build、媒资和存档保持原来源；界面优化不迁移或覆盖玩家进度。
 
 逐句播放、行动记录及最近行动润色以唯一 `commandId` 识别行动，事件序号只作为本时间线的证据位置。检查点分支继承父历史但重置序号时，不得把新行动误判为已显示，或把其润色投影到序号相同的父记录。
+
+### 独立网页播放器
+
+独立发行使用同一个 `AdventureGamePlayer`、运行 store 和确定性命令，不复制第二套剧情解释器。独立入口只加载已复验的候选产品包及其必需媒资，复用现有 Work 创建与产品包导入生命周期；不启动创作路由、模型连接、提示词初始化或 Service Worker。正式网页包合同、构建、存储隔离和未验收 Preview 的边界见 [12 · 独立网页交付](12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md#独立网页交付)。

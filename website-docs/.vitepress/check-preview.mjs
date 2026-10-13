@@ -24,7 +24,7 @@ const watch = page => {
 const sourcePaths = ['/workshop/', '/workshop/install', '/workshop/develop', '/workshop/ai', '/workshop/publish', '/workshop/troubleshooting', '/', '/getting-started/', '/features/longform/', '/features/comic', '/features/interactive/ttrpg', '/guides/backup-restore', '/prompts/', '/prompts/b/b-9', '/prompts/c/c-01', '/prompts/d/d-08', '/updates/changelog', '/feedback/', '/feedback/bug', '/feedback/feature', '/feedback/documentation']
 const paths = [...sourcePaths, ...sourcePaths.map(path => '/en' + path)]
 try {
-  for (const width of [1440, 1024, 390]) {
+  for (const width of [1440, 1024, 390, 320]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } })
     watch(page)
     // Never create real feedback while exercising local pages.
@@ -36,6 +36,15 @@ try {
       if (overflow) errors.push('Horizontal overflow: ' + width + ' ' + path)
       if (await page.locator('.VPNotFound').count()) errors.push('404: ' + path)
       if (path === '/' || path === '/en/') {
+        const tabs = page.locator('.VPNavBarMenu a')
+        if (await tabs.count() !== 6) errors.push('Missing primary tabs: ' + path)
+        const obscured = await tabs.evaluateAll(links => links.filter(link => {
+          const rect = link.getBoundingClientRect()
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+          return !rect.width || !rect.height || rect.bottom > window.innerHeight || !link.contains(hit)
+        }).map(link => link.textContent))
+        if (obscured.length) errors.push('Primary tabs obscured: ' + path + ' ' + obscured.join(', '))
+        if (await page.locator('.VPNavBarHamburger').isVisible()) errors.push('Primary tabs hidden behind menu')
         const banner = await page.locator('.knowledge-banner').boundingBox()
         if (!banner || (width >= 1024 && (banner.height < 140 || banner.height > 180))) errors.push('Banner size: ' + JSON.stringify(banner))
         if (width >= 1024 && !await page.locator('.VPSidebar').isVisible()) errors.push('Missing home sidebar')
@@ -65,4 +74,4 @@ try {
   await browser.close()
 }
 if (errors.length) throw new Error([...new Set(errors)].join('\n'))
-console.log('Preview passed: ' + routes.length + ' routes; ' + paths.length + ' pages at 1440/1024/390 px. Screenshots: ' + output)
+console.log('Preview passed: ' + routes.length + ' routes; ' + paths.length + ' pages at 1440/1024/390/320 px. Screenshots: ' + output)

@@ -88,6 +88,7 @@ const zhSidebar = [
     collapsed: false,
     items: [
       { text: '使用指南概览', link: '/guides/' },
+      { text: 'QQ 群机器人使用说明', link: '/guides/qqbot' },
       { text: '内置作品与示例', link: '/guides/examples' },
       { text: '导入小说与参考资料', link: '/guides/import' },
       { text: 'AI 候选、确认与恢复', link: '/guides/ai-workflow' },
@@ -249,6 +250,7 @@ export default defineConfig({
   appearance: 'dark',
   sitemap: { hostname: 'https://docs.storyforge-lab.com' },
   head: [
+    ['script', { defer: '', src: 'https://storyforge-lab.com/site-metrics.js' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/brand/storyforge-mark.svg' }],
     ['meta', { name: 'theme-color', content: '#0b1d1a' }],
   ],

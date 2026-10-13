@@ -1,3 +1,5 @@
+import { IS_SHOWCASE } from '../../lib/showcase/policy'
+import ShowcaseNotice from '../showcase/ShowcaseNotice'
 /**
  * NS-5 · 语义检索(embedding)配置卡 — Labs。
  * 默认关闭=纯关键词检索(零额外成本/不外传)。开启后:配置 OpenAI 兼容 /embeddings 端点,
@@ -29,6 +31,10 @@ const PRESETS: Array<{ label: string; note: string; cfg: Partial<EmbeddingConfig
 ]
 
 export default function EmbeddingConfigCard() {
+  return IS_SHOWCASE ? <ShowcaseNotice /> : <EmbeddingConfigCardFull />
+}
+
+function EmbeddingConfigCardFull() {
   const { embedding, setEmbeddingConfig } = useAIConfigStore()
   const currentProjectId = useProjectStore(s => s.currentProjectId)
   const [indexing, setIndexing] = useState(false)

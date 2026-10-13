@@ -1,3 +1,5 @@
+import { IS_SHOWCASE } from '../../lib/showcase/policy'
+import ShowcaseNotice from '../showcase/ShowcaseNotice'
 import CodexConnectionCard from './CodexConnectionCard'
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
@@ -41,6 +43,10 @@ export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean
 ]
 
 export default function AIConfigPanel() {
+  return IS_SHOWCASE ? <ShowcaseNotice /> : <AIConfigPanelFull />
+}
+
+function AIConfigPanelFull() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
     presets, taskRoutes, agentContextProfiles, agentTeamBudgetProfile, creativeQualityMode,

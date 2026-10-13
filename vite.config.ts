@@ -85,7 +85,9 @@ function installBaseRedirect(server: ViteDevServer | PreviewServer) {
   })
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const showcase = mode === 'showcase'
+  return {
   // 冻结 E2E 工作区通过符号链接复用 node_modules，但必须使用自己的
   // Vite optimizer 缓存，避免与作者正在运行的预览互相改写预构建依赖。
   cacheDir: process.env.STORYFORGE_E2E_SNAPSHOT === '1'
@@ -95,10 +97,23 @@ export default defineConfig({
     __STORYFORGE_BUILD_SHA__: JSON.stringify(resolveBuildSha()),
   },
   plugins: [
-    localCodexPlugin(),
+    ...(!showcase ? [localCodexPlugin()] : []),
+    ...(showcase ? [{
+      name: 'storyforge-showcase-html',
+      transformIndexHtml: {
+        order: 'pre' as const,
+        handler(html: string) {
+          return html.replace('/src/main.tsx', '/src/entry.ts').replace(/<script>([\s\S]*?)<\/script>/g, '')
+            .replace('</head>', '<script defer src="/site-metrics.js"></script></head>')
+            .replace('<title>StoryForge / 故事熔炉</title>', '<title>项目体验版｜StoryForge 故事熔炉</title>')
+            .replace('<div id="root"></div>', '<div id="root"><p>正在打开 StoryForge 项目体验版…</p></div><noscript><p>体验项目界面需要启用 JavaScript。<a href="/">返回官网</a></p></noscript><footer id="showcase-fallback-filing">北京悬象科技有限公司 · <a href="https://beian.miit.gov.cn/">京ICP备2026061833号-1</a> · <a href="https://beian.mps.gov.cn/#/query/webSearch?code=11011502040776">京公网安备11011502040776号</a></footer>')
+        },
+      },
+    }] : []),
     { name: 'storyforge-base-redirect', configureServer: installBaseRedirect, configurePreviewServer: installBaseRedirect },
     react(),
     VitePWA({
+      disable: showcase,
       injectRegister: null,
       registerType: 'autoUpdate',
       base: '/storyforge/',
@@ -161,7 +176,7 @@ export default defineConfig({
     // 实际打开的却是被旧进程占用的 1111（错误服务 / 重定向循环）。
     strictPort: true,
     open: '/storyforge/',
-    proxy: {
+    proxy: showcase ? {} : {
       '/deepseek-proxy': {
         target: 'https://api.deepseek.com',
         changeOrigin: true,
@@ -244,10 +259,10 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: showcase ? 'dist-showcase' : 'dist',
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
-      input: { main: 'index.html', 'ui-preview': 'ui-preview/index.html' },
+      input: showcase ? { main: 'index.html' } : { main: 'index.html', 'ui-preview': 'ui-preview/index.html' },
       output: {
         // 只把 react 固定成独立 vendor chunk（便于缓存）。
         // pdfjs / mammoth / three / jszip 均已通过「动态 import() 按需加载」自然分块，
@@ -261,4 +276,5 @@ export default defineConfig({
       },
     },
   },
+  }
 })

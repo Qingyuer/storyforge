@@ -12,9 +12,67 @@
 
 StoryForge ist ein quelloffenes, lokal orientiertes Werkzeug für KI-gestütztes Erzählen und interaktive Geschichten. Schreibe Romane und kürzere Erzählungen, adaptiere einen Roman als Drehbuch oder Comic, entwickle wiederverwendbare Welten und erprobe interaktive Erlebnisse. Du wählst den Arbeitsablauf und bestätigst KI-Vorschläge, bevor sie Teil deines Werks werden.
 
-> Stand von `main`, geprüft am 9. September 2026: Roman, Kurzroman, Drehbuch, Comic und Welt-Engine haben reguläre Produkteinstiege. Knotenmodus und interaktive Produkte sind Vorschauen. Dieses README ist übersetzt; das bedeutet keine vollständige deutsche Übersetzung der Oberfläche oder verlinkter Dokumente. Screenshots und viele Anleitungen sind chinesisch.
+> Stand von `main`, geprüft am 13. Oktober 2026: Roman, Kurzroman, Drehbuch, Comic, Motion-Drama-Vorproduktion und Welt-Engine haben reguläre Produkteinstiege. Knotenmodus und interaktive Produkte sind Vorschauen. Dieses README ist übersetzt; das bedeutet keine vollständige deutsche Übersetzung der Oberfläche oder verlinkter Dokumente. Screenshots und viele Anleitungen sind chinesisch.
 
 <a id="try-a-story"></a>
+
+## Offizielle Website, Vorschau und Wissensdatenbank
+
+Lernen Sie das Projekt auf der Website kennen, erkunden Sie die echte Oberfläche in der isolierten Vorschau und laden Sie für die vollständige Arbeit den Quellcode herunter.
+
+| Einstieg | Zweck |
+|---|---|
+| [Website](https://storyforge-lab.com/) | Projekt, Produkte, Community-Workshop und Kontakt |
+| [Projektvorschau](https://storyforge-lab.com/storyforge/) | Echte Oberfläche, Beispiele, Testkopien und manuelle Bearbeitung; API-Konfiguration, KI-Generierung und externe Dienste sind deaktiviert |
+| [Community-Workshop](https://storyforge-lab.com/workshop) | Plugins und Inhalte finden, Autoren und Abhängigkeiten prüfen, lokal importieren |
+| [Wissensdatenbank](https://docs.storyforge-lab.com/en/) | Installation, Einstieg, Produkte, Modelle, Sicherung, Prompt-Methoden, Plugins und Fehlerhilfe |
+| [Änderungen und Entwicklung](https://docs.storyforge-lab.com/en/updates/changelog) | Änderungen in main, noch nicht integrierte Arbeit und historische Nachweise |
+
+[Entwicklungsstand](https://docs.storyforge-lab.com/en/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+Die Dokumentation ist chinesisch und englisch verfügbar. Die Vorschau nutzt eigenen Browserspeicher; Manuskripte wechseln nicht automatisch zwischen Versionen, Domains oder Ports. Releases sind feste Stände; main, App-Bereitstellung und Dokumentation werden getrennt geprüft.
+
+## Neuere Funktionen und Nutzung
+
+Mit Remote-main am 13. Oktober 2026 abgeglichen. Roman, Kurzgeschichte, Drehbuch, Comic, Motion-Drama-Vorproduktion und Weltengine haben reguläre Einstiege. Knoten und interaktive Produkte bleiben Vorschauen; Plugin-API 1 / SDK 0.1 ist eine Entwicklervorschau.
+
+### Motion-Drama-Vorproduktion
+
+Aus Idee oder Roman entstehen Serienbibel, Episodenplan, Figuren/Kostüme/Orte/Requisiten/Tonmaterial, Skripte, Storyboards und Referenzbilder. Bild- und Bewegungsprompts bleiben getrennt. Nach Prüfung von Kontinuität, Rechten und Werkzeuggrenzen entstehen Seedance-, Runway-, LTX- oder allgemeine Übergabepakete. Materialien und Lieferungen behalten Versionen; Änderungen erfordern die Prüfung betroffener Einstellungen. Videogenerierung, Schnitt und Mischung erfolgen extern; nicht jede Plattform unterstützt jede Paketoption.
+
+[Anleitung](https://docs.storyforge-lab.com/en/features/motion-drama)
+
+### Plugins und kreativer Workshop
+
+Funktionsplugins, codefreie Inhaltspakete und Bündel mit festen Abhängigkeiten werden je Werk oder Welt aktiviert. Zwölf Beispiele zeigen Notizen, Karten, Kalender, Zeitlinien, Storyboards, Knoten, KI und Werkzeuge. Spezielle Austauschstellen sind Weltgeschichte und Handlungsfortschritt. Vorschau unter `/workshop/discover` bewusst aktivieren, separates Testwerk erstellen und Vertrauen bestätigen. Deaktivierung und Deinstallation erhalten Daten. Der SDK prüft und packt `.sfplugin`; dokumentierte KI-Anweisungen und Skill-Pakete helfen beim Entwickeln. Native Oberflächen laufen im selben Origin: Fähigkeitsdeklarationen sind keine Sandbox gegen Schadcode. Öffentlicher Workshop und lokale Verwaltung haben unterschiedliche Aufgaben.
+
+[Anleitung](https://docs.storyforge-lab.com/en/workshop/)
+
+### Knoten verbinden und wiederherstellen
+
+Knoten hinzufügen oder suchen, von Eingangs- oder Ausgangsports ziehen und kompatible Knoten verbinden. Prompt-Vorlagen, Variablen, Temperatur, Ausgabe-Tokens und Kandidatenzahl werden im Graph gespeichert, ohne die globale Vorlage zu ändern. Ausführung bis zu einem Knoten verarbeitet nur nötige Vorgänger. Gespeicherte Kandidaten nutzen, soweit zulässig, die Roman-Übernahme. Wiederherstellung nach Neuladen startet keine neue Generierung; vollständige Modusübergreifung bleibt in Prüfung.
+
+[Anleitung](https://docs.storyforge-lab.com/en/features/nodes)
+
+### Lokales Codex und Aufgabenmodelle
+
+Neben APIs und lokalen kompatiblen Diensten kann Codex app-server eine lokal angemeldete ChatGPT-Sitzung nutzen: Anmeldung erkennen, Modell wählen und Aufgabenprofile ohne API-Schlüssel für diesen Kanal zuweisen. Nur Text und strukturierte Ausgabe, nicht in rein statischem Hosting. Bilder, Audio und Embeddings brauchen eigene Konfiguration. Abo-Grenzen und Modellrechte gelten. Anfrageprotokolle helfen nach Trennung; unbekannte Ergebnisse werden nicht automatisch erneut angefordert oder an eine andere kostenpflichtige API umgeleitet.
+
+[Anleitung](https://docs.storyforge-lab.com/en/getting-started/model-config)
+
+## Technische Eigenschaften
+
+| Technik oder Design | Aufgabe und Nutzen |
+|---|---|
+| React + TypeScript + Vite | Oberflächen und Domänentypen; Zustand verwaltet Interaktion, TipTap Text, Three.js integrierte 3D-Szenen |
+| Dexie / IndexedDB | Lokaler Speicher; PROJECT_TABLES steuert Sicherung, Import, Löschen, Migration und Referenzumsetzung |
+| Nachvollziehbarer Kontext und Übernahme | CONTEXT_SOURCES + assembleContext() registrieren Lesequellen; Context Gateway findet Belege; FIELD_REGISTRY + AdoptionSchema + adopt() regeln Schreibzugriffe |
+| Dauerhafter Harness | Skills, Verträge, Ereignisse, Checkpoints, Kandidaten und Belege; Versions-/Bereichsprüfung sowie Wiederherstellung gespeicherter Ergebnisse |
+| Unabhängige Produkte und eingefrorene Welten | Work besitzt Inhalte; Produkte lesen eigene SourcePlans und besitzen Medien, Veröffentlichungen und Spielstände statt den Ursprungsroman umzuschreiben |
+
+Architektur und Nachweise unten erläutern die Grenzen. Literarische Qualität, Figurenverhalten und Provider-Fähigkeiten brauchen weiterhin menschliche Beurteilung.
+
+**Weiterlesen:** [Motion-Drama](https://docs.storyforge-lab.com/en/features/motion-drama) · [Plugins installieren und entwickeln](https://docs.storyforge-lab.com/en/workshop/) · [Knoten](https://docs.storyforge-lab.com/en/features/nodes) · [Modelle konfigurieren](https://docs.storyforge-lab.com/en/getting-started/model-config) · [Sichern und wiederherstellen](https://docs.storyforge-lab.com/en/guides/backup-restore) · [Prompt-Methoden](https://docs.storyforge-lab.com/en/prompts/) · [Feedback und Hilfe](https://docs.storyforge-lab.com/en/feedback/)
 
 ## Eine eigene Geschichte erleben
 
@@ -62,7 +120,7 @@ npm run dev
 
 Öffne die von Vite angezeigte Adresse mit dem Pfad `/storyforge/` und lass das Terminal laufen. Ein Quellcode-ZIP erfordert nach dem Entpacken dieselben Schritte und ist kein Desktop-Installationspaket.
 
-Öffne auf der Startseite oben rechts die Modelleinstellungen (`模型与本地设置`). Wähle einen Anbieter, trage API Key, Base URL und ein verfügbares Modell ein und teste Verbindung sowie eine kleine Generierung. Eine erfolgreiche Verbindung belegt weder Qualität noch Guthaben oder Kontextkapazität. Bei CORS-Fehlern folge der lokalen Proxy-Anleitung im Einstellungsbereich.
+Öffne auf der Startseite oben rechts die Modelleinstellungen (`模型与本地设置`). Für API-Anbieter: Wähle einen Anbieter, trage API Key, Base URL und ein verfügbares Modell ein und teste Verbindung sowie eine kleine Generierung. Eine erfolgreiche Verbindung belegt weder Qualität noch Guthaben oder Kontextkapazität. Bei CORS-Fehlern folge der lokalen Proxy-Anleitung im Einstellungsbereich.
 
 <a id="products"></a>
 
@@ -76,6 +134,7 @@ npm run dev
 | Kürzere Erzählung abschließen | Kurzroman | Entwurf, Kapitelkarten, Text, Prüfung, eingefrorene Ausgabe; Markdown/TXT/JSON |
 | Roman als Drehbuch adaptieren | Roman zu Drehbuch | Eingefrorene Quellen, Entscheidungen, strukturierte Szenen, Prüfung; Fountain/FDX/Druck |
 | Roman als Comic adaptieren | Roman zu Comic | Seiten, Panels, visuelle Referenzen, Lettering, Ausgaben; PNG/WebP/CBZ/PDF |
+| Eine animierte Serie vorbereiten | Motion-Drama-Materialien | Serienbibel, Episoden, Material, Storyboard und Werkzeugpakete; Video extern erstellen |
 | Eine Welt entwickeln | Welt-Engine | Semantische Inhalte, ausdrückliche Ableitung, eingefrorene Versionen und Lesezugriff |
 | Visuellen Ablauf zusammenstellen | Knotenmodus | Vorschau; gemeinsame Romanlogik und Werkdaten |
 | Spielen oder Erlebnisse erstellen | TTRPG / Figurenchat / KI-Stadt / Textspiele | Vorschauen mit eigenen Produktions- und Laufzeitzyklen |
