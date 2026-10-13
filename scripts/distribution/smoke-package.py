@@ -15,7 +15,7 @@ proc = subprocess.Popen([str(node), str(root / 'scripts/distribution/server.mjs'
 try:
     for attempt in range(80):
         if proc.poll() is not None:
-            raise RuntimeError(proc.stdout.read().decode())
+            raise RuntimeError(f'Bundled runtime exited with {proc.returncode}: ' + proc.stdout.read().decode())
         try:
             html = urllib.request.urlopen('http://localhost:1111/storyforge/', timeout=2).read().decode()
             break

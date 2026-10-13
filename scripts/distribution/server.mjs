@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { request as httpsRequest } from 'node:https'
-import { createReadStream } from 'node:fs'
+import { createReadStream, realpathSync } from 'node:fs'
 import { stat, realpath } from 'node:fs/promises'
 import { resolve, dirname, sep, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -70,7 +70,7 @@ export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(i
   return server
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const server = createPortableServer()
   server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? 'Port 1111 is already in use. Close the previous StoryForge window/service and try again. The port will not change, preserving browser storage.' : 'Unable to start the local service.'); process.exitCode = 1 })
   server.listen(1111, '127.0.0.1', () => {
