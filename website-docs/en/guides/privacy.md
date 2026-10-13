@@ -26,7 +26,7 @@ Manual editing, local checks of existing content, and backups need no cloud mode
 
 ## Aggregate website page views
 
-The official website, knowledge base, and hosted project preview share a page-view counter displayed only on the website homepage. It starts when enabled, represents page views rather than unique visitors or historical traffic, and counts refreshes and page navigation without recounting same-page anchors. Future pages using the shared website entry are included automatically.
+The official website, knowledge base, and hosted project preview share a page-view counter retained for backend review and not displayed on public pages. It starts when enabled, represents page views rather than unique visitors or historical traffic, and counts refreshes and page navigation without recounting same-page anchors. Future pages using the shared website entry are included automatically.
 
 The counter sets no tracking cookies or visitor identity and sends no page URLs, query parameters, manuscripts, or credentials. The server keeps only the total, start time, and random request receipts for about one day to deduplicate retries. Disabled scripts, blocked requests, or network failures can undercount. Local creation and previews do not participate.
 
