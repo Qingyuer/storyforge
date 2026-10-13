@@ -2,6 +2,13 @@
 
 本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本仍为 3.9.1，正式 Release 保持其发布时内容。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
+## 2026-10-13 · 文字开放世界产品化分支预览
+
+开发分支增加三线制作总览、缺件与费用定位、新版组装来源快照、逐图人工确认，以及玩家本地体验记录和分类反馈导出。详情见[功能说明](/features/interactive/open-world)和[待合并记录](/updates/development-status)。
+
+施工基线 `45c541e9`，W0 审计提交 `351bb52f`；实现提交 [614fe1ca](https://github.com/yuanbw2025/storyforge/commit/614fe1ca)、[3216158f](https://github.com/yuanbw2025/storyforge/commit/3216158f)、[ae1b3f3a](https://github.com/yuanbw2025/storyforge/commit/ae1b3f3a)、[2505ef9d](https://github.com/yuanbw2025/storyforge/commit/2505ef9d)、[404f5cf0](https://github.com/yuanbw2025/storyforge/commit/404f5cf0)。本条是分支开发记录，不代表已合并、上线或完成真实模型/真人验收。
+
+
 ## 2026-10-12 · 官网外观与知识库导航
 
 官网首屏沿用项目默认的青绿山水背景和配色；点击“进入项目体验”按钮，前往独立的[项目体验页](https://storyforge-lab.com/storyforge/)，浏览真实界面、阅读示例和尝试编辑。体验页不开放 API 配置或 AI 生成，正式创作请下载项目。

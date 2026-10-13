@@ -1,7 +1,7 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-10-06
+lastVerified: 2026-10-13
 ---
 # Text open world
 
@@ -45,6 +45,18 @@ The Player view provides scenes, maps, quests, characters, inventory, combat, cr
 New games and existing saves each bind to an immutable release. Existing saves are never silently upgraded; migration requires a compatible, validated path. Confirm the target before restoring, branching, or deleting a timeline. Deleting one timeline does not remove other saves or its frozen release.
 
 Runtime AI can assist with intent interpretation, character dialogue, and result expression, within gameplay state and permission boundaries. On service failure, inspect the error and recovery options instead of repeatedly resending an action whose result is unknown.
+
+## Productization branch preview (not merged or deployed)
+
+The `feat/text-open-world-productization-20261013` branch adds the following changes. Availability depends on the version you run; this is not a new released version. See [Development status](/en/updates/development-status).
+
+- The production workspace groups progress into **game content**, **product systems**, and **media**. Expand each group to inspect missing artifacts, dependencies, blocked tasks, usage, and the existing repair entry. These groups contribute to one game and retain the underlying execution lanes.
+- New builds freeze the three groups' input hashes during assembly. A repair creates a child build and reruns the affected dependencies; historical builds, releases, and saves stay pinned to their original versions. New-format records require an application version containing this update; older applications may reject them.
+- Image review requires opening each verified image, accepting or rejecting it, and explicitly confirming personal review. Character groups use declared identities only; automatic checks do not judge visual similarity. Rejected images require a media repair. New builds with images need this review before the final publication quality gate can pass. Existing image generation/import and declared silent audio fallback remain available.
+- In the player's **More (更多)** view, choose **Read local experience records (读取本地体验记录)** to inspect quest, combat, travel, free-input, and repetition counts. Mainline duration is the wall-clock span between recorded progress events, including idle/offline time. Same-source/fingerprint counts are not semantic similarity scores. Unverifiable AI records are reported separately.
+- Choose an issue category, describe the problem without source text or private information, and export a feedback file to your device. The form is not saved until exported; nothing is uploaded or automatically sent to the author. Feedback and telemetry do not sign a human playtest receipt.
+
+Historical Salt Ridge browser evidence was not obtained in this development environment. Engineering and mock-provider checks do not replace independent real-model calibration, two human-played endings, actual image-quality review, or a real successor release and old-save retest.
 
 ## Current limits
 

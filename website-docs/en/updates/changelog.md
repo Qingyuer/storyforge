@@ -2,6 +2,13 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version remains 3.9.1; tagged releases retain their original content. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## 2026-10-13 · Text open world productization branch preview
+
+The development branch adds three production responsibility summaries, missing-artifact and usage details, versioned assembly source snapshots, per-image human review, and local player experience records with categorized feedback exports. See the [feature guide](/en/features/interactive/open-world) and [pending work](/en/updates/development-status).
+
+Implementation baseline: `45c541e9`; W0 audit commit: `351bb52f`. Implementation: [614fe1ca](https://github.com/yuanbw2025/storyforge/commit/614fe1ca), [3216158f](https://github.com/yuanbw2025/storyforge/commit/3216158f), [ae1b3f3a](https://github.com/yuanbw2025/storyforge/commit/ae1b3f3a), [2505ef9d](https://github.com/yuanbw2025/storyforge/commit/2505ef9d), [404f5cf0](https://github.com/yuanbw2025/storyforge/commit/404f5cf0). This entry describes branch development, not a merge, deployment, real-model validation, or human acceptance.
+
+
 ## October 12, 2026 · Website appearance and knowledge-base navigation
 
 The website hero now shares the project's default teal mountain artwork and palette. The project experience button opens a [separate experience page](https://storyforge-lab.com/storyforge/) with the real interface, examples and manual editing. API configuration and AI generation are unavailable there; download the project for full authoring.

@@ -51,7 +51,7 @@
 | v3.runtime-package | integration | 系统，跨线组装 | runtime-package / integration-report；QA/Preview/Release |
 | qa.release | qa | 系统，跨线验收 | quality-report；发布门 |
 
-### 差距、兼容性和验证矩阵
+### W0 审计时的差距、兼容性和验证矩阵
 
 1. W1/W2：目前仅有 lane 和总任务进度，无三线合同/完成门。推导责任映射和 owner，完成须同时满足 task receipt、有效产物、上游闭合和产品允许的媒资降级。
 2. W3：`textOpenWorldProductionTaskDescendantsV1`、`creator-artifact-repair.ts` 已按冻结 Plan 下游闭包创建子 Build，`creator-media.ts` 已限定 media → V3 → QA。复用并补跨线证明，不扩大为全量重跑。
@@ -62,6 +62,20 @@
 7. W8：继续保留 partial。真实盐脊 Build/Release/回执存在浏览器，当前环境未取得；禁止依据测试夹具补造或替代。新功能不触碰作者浏览器。
 
 定向证据范围：`R-OPEN-WORLD3-production-contract/system-finalize/media-quality`、`R-OPEN-WORLD5-creator-artifact-repair/creator-media/governance-snapshot-cas/creator-quality`、`R-OPEN-WORLD7-release-lifecycle`；新三线合同、状态、UI 和统计反例另行补齐。隔离 E2E 复用 Creator artifact/lifecycle 与玩家旅程，不访问作者现用浏览器数据。
+
+### W1～W7 工程交付闭包
+
+- `614fe1ca`：责任合同、六态/完成门、调用/未知费用与只读工作台服务；原 lane、Plan Hash 和修复 DAG 保持。
+- `3216158f`：精确 V3 输入与 integration-report v2 三线快照，保留 v1。
+- `ae1b3f3a`：逐图人工回执、Blob/Build CAS 与发布质量 evidence v2；可移植发布校验和历史回执分版本读取。
+- `2505ef9d`：既有工作台总览、任务/Artifact 定位及逐图人工 UI；窄屏/键盘与失败不误签验证。
+- `404f5cf0`：本地体验统计与分类导出，只读事件/意图候选；初始通用启动事件、旧档和子分支均覆盖。
+- `1108e3f1`：v2 装配与质量证据共同进入可移植 Release；重算集合 Hash 仍不能掩盖 Artifact 版本错配，v1 双来源开局继续通过。
+- 定向 10 文件 45 项通过；V3 完整模拟 DAG 两项通过；Creator 两项和玩家存档/反馈/迁移一项隔离浏览器验证通过。全仓与最终交付状态以实施计划 W8 为准。
+
+### W8 文档与交付收口
+
+2026-10-13 完成架构、实施计划、能力基线、AI 手册生成来源及项目中英文知识库同步。串行全量 CI 退出码 0，792 文件 4296 项通过；隔离 Chromium 252 项通过、2 项按开发模式配置跳过；知识库构建、链接、中英文映射和四种宽度预览通过。命令、覆盖率、包体余量、验证快照与外部事实边界统一登记在[实施计划 §0.2](./TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)。W0～W8 工程完成不改变首版/G7 进度，也不代表主干合并、部署或真实作品验收。
 
 ## 1. 共同施工契约
 
