@@ -82,5 +82,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       const child = spawn(command, args, { stdio: 'ignore', detached: true }); child.on('error', () => console.log('Open the address above in your browser.')); child.unref()
     }
   })
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close())
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+    server.close()
+    server.closeAllConnections() // Closing an active stream must also cancel its provider request.
+  })
 }
