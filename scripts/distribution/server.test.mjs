@@ -16,7 +16,7 @@ function get(port, path, headers = {}, method = 'GET') {
 }
 test('portable package serves deep links/assets, preserves origin and rejects foreign hosts/origins/traversal', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sf-distribution-')); const web = join(dir, 'web'); mkdirSync(web)
-  writeFileSync(join(web, 'index.html'), '<html>current release</html>'); writeFileSync(join(web, 'app.js'), 'current app')
+  writeFileSync(join(web, 'index.html'), '<html>current release</html>'); writeFileSync(join(web, 'app.js'), 'current app'); writeFileSync(join(web, 'worker.mjs'), 'module worker')
   writeFileSync(join(dir, 'private.txt'), 'private')
   const server = createPortableServer({ webRoot: web }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = server.address().port
@@ -24,6 +24,7 @@ test('portable package serves deep links/assets, preserves origin and rejects fo
     assert.equal((await get(port, '/')).headers.location, '/storyforge/')
     assert.equal((await get(port, '/storyforge/home/settings')).body, '<html>current release</html>')
     assert.equal((await get(port, '/storyforge/app.js')).headers['content-type'], 'text/javascript; charset=utf-8')
+    assert.equal((await get(port, '/storyforge/worker.mjs')).headers['content-type'], 'text/javascript; charset=utf-8')
     assert.equal((await get(port, '/storyforge/missing.js')).status, 404)
     assert.equal((await get(port, '/storyforge/', { host: 'attacker.example' })).status, 403)
     assert.equal((await get(port, '/deepseek-proxy/v1/models', { origin: 'https://attacker.example' })).status, 403)
