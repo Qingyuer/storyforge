@@ -24,10 +24,10 @@ Official feedback creates GitHub Issues. Prepare descriptions and attachments as
 
 Manual editing, local checks of existing content, and backups need no cloud model. Whether the app itself loads offline depends on installation, cache, and browser state. Remote models require network access; local models require a running local service.
 
-## Aggregate website page views
+## Website PV and daily UV
 
-The official website, knowledge base, and hosted project preview share a page-view counter retained for backend review and not displayed on public pages. It starts when enabled, represents page views rather than unique visitors or historical traffic, and counts refreshes and page navigation without recounting same-page anchors. Future pages using the shared website entry are included automatically.
+The website, knowledge base, and hosted project preview share page views (PV) and daily browser visitors (UV). Reports are available only from the server backend; public pages show no counts. Days follow Beijing time (Asia/Shanghai). A browser counts once per day for UV; refreshes and page navigation add PV, while same-page anchors do not. Existing cumulative PV is retained. Daily reports start with this upgrade, making the first day partial; no historical data is invented. Future shared-entry pages participate, while local creation and previews do not.
 
-The counter sets no tracking cookies or visitor identity and sends no page URLs, query parameters, manuscripts, or credentials. The server keeps only the total, start time, and random request receipts for about one day to deduplicate retries. Disabled scripts, blocked requests, or network failures can undercount. Local creation and previews do not participate.
+UV uses a first-party random cookie valid for 30 days and renewed on visits, restricted to the metrics endpoint. It is not an account or login credential. The website and knowledge base share it. The server stores date-specific deduplication digests for about 31 days, not raw cookies. Aggregates are retained and random retry receipts expire after about a day. No account, IP, browser fingerprint, page URL, query parameters, manuscript, or API key is submitted. Different browsers/devices or cookie deletion create a new identity, so UV is not a count of real people. Blocked cookies still permit PV without inventing UV; disabled scripts, blocked requests, or network errors can undercount.
 
 Continue: [Backup and recovery](/en/guides/backup-restore) · [Model configuration](/en/getting-started/model-config).
