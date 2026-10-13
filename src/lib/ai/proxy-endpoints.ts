@@ -19,5 +19,7 @@ export const AI_PROXY_ENDPOINTS: Partial<Record<AIProvider, AIProxyEndpoint>> = 
 }
 
 /** Portable builds expose the existing proxy only on a loopback origin. */
-export const HAS_LOCAL_PROVIDER_PROXY = import.meta.env.DEV || (import.meta.env.MODE === 'portable'
-  && typeof location !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))
+export function hasLocalProviderProxy(): boolean {
+  return import.meta.env.DEV || (import.meta.env.MODE === 'portable'
+    && typeof location !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))
+}
