@@ -23,6 +23,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
+import { importsNarrativeGold, physicalWorldReleaseType, validateNarrativeBaselineFiles } from './narrative-world-baseline-contract.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -1793,9 +1794,7 @@ const WORLD_RELEASE_PHYSICAL_OWNERS = new Set([
 ])
 for (const file of walk('src')) {
   const source = read(file)
-  if ((source.includes('WorldReleaseManifestV3')
-      || source.includes('parsePureWorldReleaseManifestV3'))
-    && !WORLD_RELEASE_PHYSICAL_OWNERS.has(file)) {
+  if (physicalWorldReleaseType(source) && !WORLD_RELEASE_PHYSICAL_OWNERS.has(file)) {
     violations.push(`[㉝C世界物理边界] ${file}: 非世界基础设施不得解析物理 WorldRelease`)
   }
 }
@@ -1821,6 +1820,7 @@ for (const directory of [
   'src/lib/product-platform',
   'src/lib/ttrpg',
   'src/lib/character-interaction',
+  'src/lib/ai-town',
   'src/lib/adventure',
   'src/lib/avg',
   'src/lib/open-world',
@@ -2361,6 +2361,18 @@ if (registryValidationIndex < 0
   || /validateRegistry\s*\(\s*\{/.test(applicationBootstrapSource)
   || !applicationBootstrapSource.includes('void bootstrap().catch(')) {
   violations.push('[㊶当前架构启动硬门] 三注册表与 schema 校验必须先于 Store 初始化、不得被局部 catch 吞掉，启动失败必须进入显式终态')
+}
+
+// NW-0B: evaluation gold is test-owned. Keep source spans/splits frozen and
+// prevent importing synthetic stories/answer labels into production readers.
+try { validateNarrativeBaselineFiles() } catch (error) {
+  violations.push(`[NW-0B评测证据] ${error.message}`)
+}
+for (const file of walk('src')) {
+  const source = read(file)
+  if (importsNarrativeGold(source)) {
+    violations.push(`[NW-0B样本隔离] ${file}: 生产代码不得导入评测语料、答案或测试适配器`)
+  }
 }
 
 // ── 报告 ──

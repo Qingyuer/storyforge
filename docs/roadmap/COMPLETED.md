@@ -1,6 +1,6 @@
 # StoryForge 已完成能力索引
 
-> 版本：1.9.2 · 更新：2026-10-13
+> 版本：1.9.3 · 更新：2026-10-13
 > 只登记可长期成立且已进入当前治理交付树、并有当前代码/检查器证据的能力。完成表示声明范围已交付，不表示永无 Bug、具体产品已经完成或文学质量不再演进。
 
 ## 已完成基础能力
@@ -27,13 +27,14 @@
 | A-GOV-04 | LocalWorkspace / World / Work 当前结构硬切分 | Project 仅保留工作区身份、用途、活动指针与开关；作品元数据和活动叙事计划只在 Work；严格备份字段、单轨上下文和 `check:architecture` ㊴ 防止镜像恢复 |
 | D-WORLD-03 | 长/短篇显式派生与多世界关系 | `src/lib/world-engine/derivation.ts`、稳定 World/Work scope、跨世界关系导航和导入重映射回归；剧本/漫画确定性拒绝 |
 | D-WORLD-04 | 世界 release 纯语义边界 | `PROJECT_TABLES.worldSemantic` 唯一派生、owner/packaging/static checks、`R-WORLD2C`、`R-WORLD2D`、`R-OUTLET1`；排除产品媒资与运行状态 |
+| NW-0B | 原创评测基线、缺口反例和架构守门 | `tests/acceptance/narrative-world`、`R-NW-0B-evidence`、`check:narrative-world`；12 场景族/120 查询/48 修改/4 族留出，当前接口实测与优先级见 WORLD-ENGINE §22；不含生产缺口修复/模型/真人/规模验收 |
 | C-SHORT-01 | 短篇小说独立产品闭环 | `ShortNovelProductionV1`、六个专属 Skill/durable run、轻量工作台、证据审校/定向重写、不可变 `CreationReleaseV1`、三格式导出、`R-SHORT2-professional-production` 与短篇 UI E2E |
 | C-SCREENPLAY-01 | 小说转剧本独立产品闭环 | Product Hub 创建入口、十步专业 Skill/durable Pipeline、事实/因果/删改决定、Beat/Scene Card/场景 AST、来源与戏剧双审查、定点修订、不可变 `CreationReleaseV1`、Fountain/FDX/打印导出、`R-SCREEN2-professional-pipeline` 与剧本 UI E2E；旧一步式入口已拒绝 |
 | C-COMIC-01 | 小说转漫画独立产品闭环 | 十二阶段专业改编、页格/排字/视觉圣经、叙事与视觉审查、真实参考图与权利门、双层不可变 Release、图片/CBZ/PDF 导出、`R-COMIC2-professional-pipeline` 与漫画 UI E2E |
 | C-MOTION-DRAMA-01 | 漫剧前期生产独立产品闭环 | 三种来源入口、系列/物料圣经、八个专业 Skill、逐集剧本/分镜、图片与试听音频版本、Image/Video Prompt IR、Seedance/Runway/LTX/generic 适配包、质量门、不可变 Release、`R-MOTIONDRAMA1-preproduction` 与漫剧 UI E2E；产品终点在视频生成前 |
 | E-BUILTIN-3D | 三款内置 3D 叙事作品适配与源码分发 | `tidemark`、`aphelion`、`tidemark-echo`；文字开放世界入口、当前 Brief/发布链、全部结局、备份重映射和删除隔离、桌面/手机 E2E；范围见 `UPPER-PRODUCTS.md` §13 |
 
-叙事世界基座 IR/冻结索引/查询增强的设计见 [WORLD-ENGINE.md](../products/WORLD-ENGINE.md)；本次设计不向本完成表追加 Phase 1/2 实现，旧 D-WORLD 基础能力的完成范围保持不变。
+叙事世界基座 IR/冻结索引/查询增强的设计见 [WORLD-ENGINE.md](../products/WORLD-ENGINE.md)；NW-0B 只新增测试/守门能力，不向本完成表追加 Phase 1/2 实现，旧 D-WORLD 基础能力的完成范围保持不变。
 
 ## 当前权威基线
 

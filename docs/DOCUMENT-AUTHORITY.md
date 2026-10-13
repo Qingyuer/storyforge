@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.5.0 · 生效：2026-10-13
+> 版本：2.5.1 · 生效：2026-10-13
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -41,7 +41,7 @@
 - `docs/products/LONGFORM-AND-NODE.md`
 - `docs/products/INDEPENDENT-CREATION.md`
 - `docs/products/MOTION-DRAMA.md`
-- `docs/products/WORLD-ENGINE.md`：L2 世界引擎/叙事世界基座专项唯一最高权威，服从 L0/L1；集中包含 Narrative IR v1、冻结索引、中立查询/推演边界、产品 Requirement Compiler 接缝、Phase 0～2 工作包与验收矩阵。§10 是核验事实，§11～19 是目标设计，不声明代码已实现。
+- `docs/products/WORLD-ENGINE.md`：L2 世界引擎/叙事世界基座专项唯一最高权威，服从 L0/L1；集中包含 Narrative IR v1、冻结索引、中立查询/推演边界、产品 Requirement Compiler 接缝、Phase 0～2 工作包与验收矩阵。§10 是核验事实，§11～19 是目标设计；§22 登记 NW-0B 确定性评测回执，不声明 IR/增强查询代码已实现。
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
 - `docs/products/TEXT-ADVENTURE.md`：AI 主导文字冒险专项产品契约。

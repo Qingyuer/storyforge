@@ -34,6 +34,8 @@
     "check:ai-manual": "node scripts/generate-ai-manual.mjs --check",
     "check:ai-entry-registry": "node scripts/check-ai-entry-registry.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "check:narrative-world": "node scripts/check-narrative-world-baseline.mjs",
+    "test:narrative-world:baseline": "node scripts/run-narrative-world-baseline.mjs",
     "check:text-open-world-player-paths": "node scripts/check-text-open-world-player-paths.mjs",
     "check:text-open-world-invariants": "node scripts/check-text-open-world-invariants.mjs",
     "check:text-open-world-stress": "node scripts/check-text-open-world-stress.mjs",

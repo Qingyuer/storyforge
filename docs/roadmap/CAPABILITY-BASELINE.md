@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：2.3.0 · 本次增量核查：2026-10-13 世界引擎与数据基线 · 权威层级：L2
+> 版本：2.4.0 · 本次增量核查：2026-10-13 世界引擎与数据基线 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -59,12 +59,13 @@
 | D-WORLD-03 | implemented | 长篇/短篇可显式一键派生且保存来源 revision/range/hash；剧本/漫画被拒绝；多世界关系、通道式导航、导入重映射和 World/Work 隔离已有回归 | 产品是否使用跨世界资源由自己的 adapter 与 Brief 决定 |
 | D-WORLD-04 | implemented | `PROJECT_TABLES.worldSemantic` 是封存集合唯一来源；WorldRelease、导出和中立读取排除 product production、媒资、build、可执行蓝图、session 与 runtime | 产品媒资与运行状态继续由各产品生命周期测试守门 |
 
-### D-NW · 叙事世界基座增量（设计已形成，代码待实施）
+### D-NW · 叙事世界基座增量（设计/评测基线已形成，生产增强待实施）
 
-[专项权威](../products/WORLD-ENGINE.md) §10～21 统一事实、IR、索引、查询、推演边界和施工包，不重开已完成 D-WORLD 基础，也不降级长篇主链。
+[专项权威](../products/WORLD-ENGINE.md) §10～22 统一事实、IR、索引、查询、推演边界、施工包和 NW-0B 实测，不重开已完成 D-WORLD 基础，也不降级长篇主链。
 
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
+| D-NW-EVAL | implemented | NW-0B：12 原创场景族、120 查询、48 修改、4 族留出；真实当前接口结果与 10 项缺口冻结 | 只完成确定性评测基线/守门；独立人工、模型、规模与增强能力未验收 |
 | D-NW-IR | partial | temporalFacts、knowledgeLedger、事件/故事线、WorldRelease 语义快照、候选/采纳已有；本轮完成 IR v1 设计 | 标准化时态/视角/证据投影、类型字段、历史状态与生命周期待 NW-1A～1C |
 | D-NW-INDEX | missing | v3 有按行目录与部分关系；Work 的检索块/层级摘要为非导出缓存 | 冻结 Narrative Index、原子证据闭包、版本化便携包与无向量查询待 NW-2A/2B/2E |
 | D-NW-COMPILER | partial | 六 adapter/plan/manifest 与确定性编译依赖闭包存在 | 完整精确选择、产品级禁止、视角/能力声明接缝待 NW-2C，各产品完整 Compiler 另验 |

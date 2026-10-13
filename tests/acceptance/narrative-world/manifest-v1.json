@@ -1,0 +1,129 @@
+{
+  "schema": "storyforge.narrative-world-evaluation-manifest",
+  "version": 1,
+  "createdDate": "2026-10-13",
+  "workPackage": "NW-0B",
+  "implementationBaseCommit": "646beba1",
+  "designDependencyCommit": "4861441b",
+  "productionUse": false,
+  "humanReviewed": false,
+  "liveModelEvaluated": false,
+  "corpus": {
+    "path": "tests/acceptance/narrative-world/corpus-v1.json",
+    "sha256": "2273c9fcda68cb39a3892e2c4d86a47f3a0df77032dae073665c89ff8ab6e014",
+    "normalization": "raw UTF-8; byte spans are half-open"
+  },
+  "counts": {
+    "families": 12,
+    "developmentFamilies": 8,
+    "holdoutFamilies": 4,
+    "queries": 120,
+    "edits": 48
+  },
+  "baseline": {
+    "path": "tests/acceptance/narrative-world/baseline-20261013-v1.json",
+    "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt."
+  },
+  "sourceFingerprintPaths": [
+    "src/lib/context-gateway/world-release-provider.ts",
+    "src/lib/context-gateway/world-release-provider-contract.ts",
+    "src/lib/context-gateway/world-release-client.ts",
+    "src/lib/registry/types.ts",
+    "src/lib/registry/project-tables.ts",
+    "src/lib/registry/fact-predicate-registry.ts",
+    "src/lib/world-engine/releases.ts",
+    "src/lib/world-engine/release-codec.ts",
+    "src/lib/world-engine/release-hash.ts",
+    "src/lib/world-engine/world-reference.ts",
+    "src/lib/export/registry-export.ts",
+    "src/lib/product/source-contracts.ts",
+    "src/lib/product/world-requirement-adapters.ts",
+    "src/lib/product-production/world-source.ts",
+    "src/lib/consistency/impact-analysis.ts",
+    "src/lib/ai/chapter-memory/canonical-chapter-sequence.ts",
+    "src/lib/ai/chapter-memory/text-normalization.ts",
+    "src/lib/workspace/scope.ts",
+    "src/lib/workspace/create-workspace.ts",
+    "src/lib/db/schema.ts",
+    "tests/helpers/narrative-world-evaluation.ts",
+    "tests/regression/R-NW-0B-evidence.test.ts",
+    "scripts/narrative-world-baseline-contract.mjs",
+    "tests/setup.ts",
+    "vitest.config.ts",
+    "package-lock.json",
+    "scripts/check-narrative-world-baseline.mjs",
+    "scripts/run-narrative-world-baseline.mjs",
+    "src/lib/workspace/works.ts",
+    "tests/acceptance/narrative-world/manifest-v1.json"
+  ],
+  "splitPolicy": {
+    "unit": "complete scenario family",
+    "development": 8,
+    "holdout": 4,
+    "minimumHoldoutRatio": 0.3,
+    "caveat": "Held-out from later implementation tuning, not blinded from the corpus author. No independent research or model-quality claim."
+  },
+  "rubric": {
+    "retrieval": "Exact expected resource set; extra rows and omitted rows both fail. Body-search is a target capability, not a claim that v3 promised full-text search.",
+    "original": "Exact evidence quote in frozen original; does not assess generated answers.",
+    "characterScope": "Use existing FrozenResourceScopeV1.characterId to probe knowledge metadata. Not an end-user exploit or proof that a product leaked secrets.",
+    "unsupported": "Missing typed query/simulation operations are recorded, never stubbed as passing.",
+    "impact": "Exact downstream review set. Micro precision/recall report TP/FP/FN; an empty gold set has no per-case recall denominator. Current graph is conservative review, not auto-deletion.",
+    "lexical": "Literal full-text lookup over the same authored source units; 24 eligible queries only. No LLM, embeddings, or semantic answer scoring.",
+    "gold": "Explicit text/evidence and agent-reviewed closed-world inference; no human quality scores.",
+    "manualControls": "Supplemental fixture assertions explicitly place A at an old/new relay station to test superseded state retention, and confirm/lock B knowledge of a rule. These are controlled metadata, not story extraction or semantic QA gold.",
+    "sourcePlan": "Exact-key positive controls and count-only negative controls are separate. Empty prohibited selectors describe an unimplemented product policy, not proof of access to a forbidden resource."
+  },
+  "comparators": [
+    {
+      "id": "current-worldrelease-v3",
+      "state": "execute"
+    },
+    {
+      "id": "literal-fulltext",
+      "state": "execute-text-search-only"
+    },
+    {
+      "id": "ir-lexical",
+      "state": "not-implemented"
+    },
+    {
+      "id": "ir-vector-planner",
+      "state": "not-implemented"
+    },
+    {
+      "id": "fixed-reader-model",
+      "state": "not-authorized-not-run"
+    }
+  ],
+  "futureScale": {
+    "sizesUnicodeCharacters": [
+      100000,
+      300000,
+      1000000
+    ],
+    "stage": "NW-2E",
+    "status": "not-run",
+    "recipeRequirement": "Unique event/record identities and actual deduplicated content counts; do not present repeated paragraphs as literary scale.",
+    "referenceDevice": {
+      "cpu": "Apple M1 Pro",
+      "memoryBytes": 34359738368,
+      "architecture": "arm64",
+      "os": "macOS 26.6.2 (25G83)",
+      "browser": "Google Chrome for Testing 151.0.7922.34",
+      "node": "v24.16.0",
+      "verifiedDate": "2026-10-13",
+      "browserVersionSource": "Installed Playwright Chromium executable --version; no browser or product test run",
+      "policy": "Freeze this reference before NW-2E. Any replacement device/browser needs an explicit versioned benchmark profile; performance targets stay unchanged."
+    }
+  },
+  "annotationReview": {
+    "state": "agent-self-reviewed-before-v1-freeze",
+    "independentHumanReview": false,
+    "corrections": [
+      "空弦剧场的第二段改用当时已错误的替弦位置认知，避免把尚未修琴误标为错误信念。",
+      "七个场景的规则修改也影响第二段已引用该规则的行动判断，纳入mustReview；未按当前算法输出修改标签。",
+      "因果问题的依据补入规则原文；来源hash与UTF-8跨度随最终原文重新冻结。"
+    ]
+  }
+}
