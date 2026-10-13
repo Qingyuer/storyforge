@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "JSON.parse(require('fs').readFileSync('package.json')).version")
-          python scripts/distribution/smoke-package.py "release/StoryForge-v${version}-${{ matrix.target }}"
+          python scripts/distribution/smoke-package.py "release/StoryForge-v${version}-${{ matrix.target }}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: portable-${{ matrix.target }}

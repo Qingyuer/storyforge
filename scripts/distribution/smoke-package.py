@@ -1,7 +1,15 @@
 """Exercise the actual bundled runtime and built assets without author browser data."""
-import json, subprocess, sys, time, urllib.request
+import json, subprocess, sys, time, urllib.request, tempfile, zipfile
 from pathlib import Path
-root = Path(sys.argv[1]).resolve()
+archive = Path(sys.argv[1]).resolve()
+temporary = tempfile.TemporaryDirectory(prefix='storyforge-package-')
+with zipfile.ZipFile(archive) as bundle:
+    bundle.extractall(temporary.name)
+    for info in bundle.infolist():
+        path = Path(temporary.name) / info.filename
+        if path.is_file() and sys.platform != 'win32':
+            path.chmod((info.external_attr >> 16) & 0o777 or 0o644)
+root = next(Path(temporary.name).iterdir())
 node = root / 'runtime' / ('node.exe' if sys.platform == 'win32' else 'node')
 proc = subprocess.Popen([str(node), str(root / 'scripts/distribution/server.mjs'), '--no-open'], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 try:
@@ -21,4 +29,5 @@ try:
 finally:
     proc.terminate()
     try: proc.wait(timeout=8)
-    except subprocess.TimeoutExpired: proc.kill()
+    except subprocess.TimeoutExpired: proc.kill(); proc.wait()
+    temporary.cleanup()
