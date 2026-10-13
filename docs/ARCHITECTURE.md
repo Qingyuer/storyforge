@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.9.1 · 更新：2026-09-25 · 权威层级：L1
+> 版本：2.9.2 · 更新：2026-10-13 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -184,6 +184,8 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 上层产品先通过 `listWorldReferenceCatalogV1` 取得只读、中立的可选世界来源，不获取物理 `WorldRelease` 行、manifest 或 Provider。资源出口由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 构成；产品侧只依赖 `world-release-client` / Context Gateway 的中立接口。目录按稳定 resource UID、release/hash 和关系导航；有界缓存只缓存已校验 release 投影，千级资源规模回归阻止逐行 IndexedDB 游标退化。跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界分别拥有需求适配器，证明统一协议不等于统一 payload。
 
+当前搜索尚未执行 entityKeys/storyArcKeys/timeRange 过滤；temporalFacts/knowledgeLedger 的确认行已可封存，但没有完整冻结时态/人物视角叙事索引。现行 adapter 仍共用 helper；生产集成已有精确所选资源/依赖的 mandatory original 门。目标 IR、索引、查询与后续推演见 [世界引擎专项](./products/WORLD-ENGINE.md) §10～19，不属于当前已交付能力。
+
 ### 7.5 上层产品
 
 上层产品生产使用 consultation、brief、command、build、artifact、media、release 与质量证据。Production 和 Release 根记录都以索引化 `productType` 冻结产品身份；工作台、查询、Build、Release 和 Session 按该身份隔离。`ProductRuntimeSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储：发布媒资绑定 `ProductRelease`，运行中新生成的媒资绑定 `ProductRuntimeSession`，二者均不归 `WorldRelease`。
@@ -242,13 +244,12 @@ src/
 - Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
 - 世界 Release、中立资源协议、六类上层产品的需求适配器、五项逻辑契约校验、`S1 世界封存 → S2 产品定向 → S3 产品执行` runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
-- 当前 schema v10 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立创作产品、漫剧前期生产与 AVG 作者方案/媒资草稿与跑团、AI 小镇及角色聊天 S2 草稿；保留 v1→v2→v3→v4→v5→v6→v7→v8→v9→v10 的受支持加表与索引迁移（v8 允许不同 Brief revision 使用同一内容 hash，已有记录不改写；v9 新增小镇草稿表，v10 集成角色聊天草稿表）以保护作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本和非当前备份明确拒绝。
+- 当前 schema v11 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立创作产品、漫剧前期生产与 AVG 作者方案/媒资草稿与跑团、AI 小镇及角色聊天 S2 草稿；保留 v1→v2→v3→v4→v5→v6→v7→v8→v9→v10→v11 的受支持加表与索引迁移（v8 允许不同 Brief revision 使用同一内容 hash，已有记录不改写；v9 新增小镇草稿表，v10 集成角色聊天草稿表，v11 加入插件设施）以保护作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本明确拒绝；备份当前为 v15，严格校验的 v14 可显式转换，其余历史版本拒绝。
 - ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
 - 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。
 
-当前能力与缺口以 [`roadmap/CAPABILITY-BASELINE.md`](./roadmap/CAPABILITY-BASELINE.md) 和
-[`audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`](./audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md) 为准。
+当前能力与缺口以 [能力基线](./roadmap/CAPABILITY-BASELINE.md)、当前代码及本次验证为准；[2026-09-04 架构清场审计](./audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md) 是带日期的历史证据，不覆盖后续 schema/能力事实。
 
 ## 12. 交付门
 
