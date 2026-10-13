@@ -12,9 +12,67 @@
 
 StoryForge è uno strumento open source per creare e vivere storie con l’IA, progettato per conservare i dati in locale. Scrivi romanzi e narrativa breve, adatta un romanzo in sceneggiatura o fumetto, costruisci mondi riutilizzabili ed esplora esperienze interattive. Scegli il percorso e approvi le proposte dell’IA prima che entrino nella tua opera.
 
-> Stato verificato su `main` il 9 settembre 2026: romanzi, narrativa breve, sceneggiature, fumetti e motore dei mondi hanno accessi ufficiali. La modalità a nodi e i prodotti interattivi sono anteprime. Questo README è tradotto; non implica una traduzione completa dell’interfaccia o dei documenti collegati. Le schermate e molte guide sono in cinese.
+> Stato verificato su `main` il 13 ottobre 2026: romanzi, narrativa breve, sceneggiature, fumetti, preproduzione animata e motore dei mondi hanno accessi ufficiali. La modalità a nodi e i prodotti interattivi sono anteprime. Questo README è tradotto; non implica una traduzione completa dell’interfaccia o dei documenti collegati. Le schermate e molte guide sono in cinese.
 
 <a id="try-a-story"></a>
+
+## Sito ufficiale, anteprima e documentazione
+
+Scopri il progetto sul sito, esplora la vera interfaccia nell’anteprima isolata e scarica i sorgenti per lavorare con tutte le funzioni.
+
+| Accesso | Scopo |
+|---|---|
+| [Sito ufficiale](https://storyforge-lab.com/) | Progetto, prodotti, laboratorio della comunità e contatti |
+| [Anteprima](https://storyforge-lab.com/storyforge/) | Interfaccia reale, esempi, copie di prova e modifica manuale; configurazione API, generazione IA e servizi esterni disabilitati |
+| [Laboratorio della comunità](https://storyforge-lab.com/workshop) | Scoprire plugin e contenuti, verificare autori e dipendenze, scaricare e importare in locale |
+| [Documentazione](https://docs.storyforge-lab.com/en/) | Installazione, primi passi, prodotti, modelli, backup, metodi di prompt, plugin e problemi |
+| [Novità e sviluppo](https://docs.storyforge-lab.com/en/updates/changelog) | Modifiche in main, lavoro non integrato e verifiche storiche |
+
+[Stato di sviluppo](https://docs.storyforge-lab.com/en/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+La documentazione è in cinese e inglese. L’anteprima usa un archivio separato nel browser; i manoscritti non passano automaticamente tra versioni, domini o porte. Le Release sono fisse; main, pubblicazione dell’app e documentazione hanno stati distinti.
+
+## Funzioni recenti e utilizzo
+
+Verificato rispetto a main remoto il 13 ottobre 2026. Romanzi, racconti, sceneggiature, fumetti, materiali per serie animate e motore del mondo hanno accessi ufficiali. Nodi e prodotti interattivi restano anteprime; API plugin 1 / SDK 0.1 è una versione per sviluppatori.
+
+### Preproduzione di serie animate
+
+Da un’idea o un romanzo si preparano bibbia della serie, episodi, personaggi/costumi/ambienti/oggetti/suoni, copioni, storyboard e fotogrammi di riferimento. Prompt di immagine e movimento sono separati. Continuità, diritti e limiti vengono controllati prima dei pacchetti Seedance, Runway, LTX o generici. Materiali e consegne mantengono versioni; le revisioni richiedono di controllare le inquadrature interessate. Video, montaggio e missaggio avvengono all’esterno; ogni servizio decide quali opzioni supporta.
+
+[Guida pratica](https://docs.storyforge-lab.com/en/features/motion-drama)
+
+### Plugin e laboratorio creativo
+
+Plugin funzionali, contenuti senza codice e raccolte con dipendenze bloccate si attivano per opera o mondo. Dodici esempi coprono note, schede, calendari, cronologie, bacheche, nodi, IA e strumenti. Le sostituzioni dedicate riguardano storia del mondo e progresso narrativo. Attiva esplicitamente l’anteprima in `/workshop/discover`, crea un’opera di prova e conferma la fiducia. Disattivare o disinstallare conserva i dati. Il SDK verifica e crea `.sfplugin`; istruzioni IA e kit Skill aiutano lo sviluppo. Le interfacce native condividono l’origine: le capacità dichiarate non sono una sandbox contro codice malevolo. Catalogo pubblico e gestione locale hanno ruoli distinti.
+
+[Guida pratica](https://docs.storyforge-lab.com/en/workshop/)
+
+### Nodi: collegare, rivedere e riprendere
+
+Aggiungi o cerca nodi, trascina da ingressi o uscite e collega nodi compatibili. Modelli di prompt, variabili, temperatura, token e numero di candidati si salvano nel grafo senza cambiare il modello globale. Eseguire fino a un nodo tratta solo i prerequisiti. I candidati salvati seguono, dove consentito, l’adozione del romanzo. Riprendere dopo un aggiornamento non avvia una generazione; la verifica completa tra modalità continua.
+
+[Guida pratica](https://docs.storyforge-lab.com/en/features/nodes)
+
+### Codex locale e modelli per attività
+
+Oltre alle API e ai servizi locali compatibili, Codex app-server può riutilizzare un account ChatGPT autenticato in locale: rileva accesso, scegli modello e assegna preset senza chiave API per questo canale. Solo testo e output strutturato, non da un sito puramente statico. Immagini, audio ed embedding richiedono configurazioni separate. Si applicano limiti di abbonamento e autorizzazioni del modello. Le richieste recenti aiutano dopo disconnessioni; risultati ignoti non vengono reinviati né spostati automaticamente a un’altra API a pagamento.
+
+[Guida pratica](https://docs.storyforge-lab.com/en/getting-started/model-config)
+
+## Caratteristiche tecniche
+
+| Tecnologia o progetto | Ruolo e valore |
+|---|---|
+| React + TypeScript + Vite | Interfacce e tipi di dominio; Zustand per lo stato, TipTap per il testo, Three.js per scene 3D integrate |
+| Dexie / IndexedDB | Archivio locale; PROJECT_TABLES governa backup, importazione, eliminazione, migrazione e rimappatura dei riferimenti |
+| Contesto e adozione tracciabili | CONTEXT_SOURCES + assembleContext() registrano le letture; Context Gateway recupera fonti; FIELD_REGISTRY + AdoptionSchema + adopt() regolano le scritture ufficiali |
+| Harness persistente | Skill, contratti, eventi, checkpoint, candidati e ricevute; controlli di versione/ambito e ripresa dei risultati salvati |
+| Prodotti indipendenti e mondi congelati | Work possiede i contenuti; ogni prodotto legge il proprio SourcePlan e possiede media, pubblicazioni e salvataggi senza riscrivere il romanzo |
+
+Architettura e prove sotto precisano i limiti. Qualità letteraria, comportamento dei personaggi e capacità dei fornitori richiedono ancora il giudizio dell’autore.
+
+**Approfondimenti:** [Preproduzione animata](https://docs.storyforge-lab.com/en/features/motion-drama) · [Installare e sviluppare plugin](https://docs.storyforge-lab.com/en/workshop/) · [Nodi](https://docs.storyforge-lab.com/en/features/nodes) · [Configurare modelli](https://docs.storyforge-lab.com/en/getting-started/model-config) · [Backup e ripristino](https://docs.storyforge-lab.com/en/guides/backup-restore) · [Metodi di prompt](https://docs.storyforge-lab.com/en/prompts/) · [Feedback e assistenza](https://docs.storyforge-lab.com/en/feedback/)
 
 ## Prova una storia originale
 
@@ -76,6 +134,7 @@ Dalla home, apri le impostazioni del modello in alto a destra (`模型与本地�
 | Concludere un’opera breve | Narrativa breve | Progetto, schede dei capitoli, stesura, revisione, edizione immutabile; Markdown/TXT/JSON |
 | Adattare in sceneggiatura | Romanzo in sceneggiatura | Fonti fissate, decisioni, scene strutturate, verifiche; Fountain/FDX/stampa |
 | Adattare in fumetto | Romanzo in fumetto | Pagine, vignette, riferimenti visivi, lettering, edizioni; PNG/WebP/CBZ/PDF |
+| Preparare una serie animata | Materiali per serie animate | Bibbia, episodi, materiali, storyboard e pacchetti; video prodotto all’esterno |
 | Creare un mondo | Motore dei mondi | Contenuto semantico, derivazione esplicita, versioni immutabili e lettura |
 | Comporre un flusso visivo | Modalità a nodi | Anteprima; condivide logica e dati del romanzo |
 | Giocare o creare esperienze | TTRPG / Chat con personaggi / Città IA / Giochi testuali | Anteprime con cicli propri di produzione ed esecuzione |

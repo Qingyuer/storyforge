@@ -12,9 +12,67 @@
 
 StoryForge est un outil open source de création et d’expérience narrative assistées par IA, conçu pour conserver les données en local. Écrivez des romans ou des récits courts, adaptez un roman en scénario ou en bande dessinée, créez des mondes réutilisables et explorez des histoires interactives. Vous choisissez le parcours et validez les propositions de l’IA avant leur intégration à votre œuvre.
 
-> État vérifié sur `main` le 9 septembre 2026 : roman, récit court, scénario, bande dessinée et moteur de monde disposent d’entrées officielles. Le mode nœuds et les produits interactifs sont en préversion. Ce README est traduit ; cela ne signifie pas que toute l’interface ou les documents liés sont disponibles en français. Les captures et de nombreux guides sont en chinois.
+> État vérifié sur `main` le 13 octobre 2026 : roman, récit court, scénario, bande dessinée, préproduction animée et moteur de monde disposent d’entrées officielles. Le mode nœuds et les produits interactifs sont en préversion. Ce README est traduit ; cela ne signifie pas que toute l’interface ou les documents liés sont disponibles en français. Les captures et de nombreux guides sont en chinois.
 
 <a id="try-a-story"></a>
+
+## Site officiel, démonstration et base de connaissances
+
+Découvrez le projet sur le site, explorez son interface dans la démonstration isolée, puis téléchargez les sources pour créer vos œuvres.
+
+| Entrée | Utilité |
+|---|---|
+| [Site officiel](https://storyforge-lab.com/) | Présentation, produits, atelier communautaire et contacts |
+| [Démonstration](https://storyforge-lab.com/storyforge/) | Interface réelle, exemples, copies de démonstration et édition manuelle ; configuration API, génération IA et services externes désactivés |
+| [Atelier communautaire](https://storyforge-lab.com/workshop) | Découvrir plugins et contenus, vérifier auteurs et dépendances, télécharger pour l’application locale |
+| [Base de connaissances](https://docs.storyforge-lab.com/en/) | Installation, démarrage, produits, modèles, sauvegardes, méthodes de prompts, plugins et dépannage |
+| [Actualités et développement](https://docs.storyforge-lab.com/en/updates/changelog) | Changements du tronc principal, travaux non fusionnés et preuves historiques |
+
+[État du développement](https://docs.storyforge-lab.com/en/updates/development-status) · [GitHub Releases](https://github.com/yuanbw2025/storyforge/releases)
+
+La documentation existe en chinois et en anglais. Les données de démonstration sont isolées ; manuscrits et clés ne se partagent pas automatiquement entre adresses ou ports. Les Releases sont fixes ; code principal, déploiement de l’application et documentation ont des états distincts.
+
+## Nouvelles capacités et utilisation
+
+État vérifié sur main distant le 13 octobre 2026. Roman, récit court, scénario, bande dessinée, préparation de séries animées et moteur de monde disposent d’entrées officielles. Nœuds et produits interactifs restent en aperçu ; API plugins 1 / SDK 0.1 est une préversion.
+
+### Préproduction de séries animées
+
+Une idée ou un roman mène à une bible, un plan d’épisodes, des personnages/costumes/décors/accessoires/sons, des scripts, des storyboards et des images de référence. Les prompts d’image et de mouvement sont séparés. Après vérification de continuité, droits et contraintes, des paquets Seedance, Runway, LTX ou génériques préparent le travail externe. Les matériaux et livraisons sont versionnés ; une révision exige de vérifier les plans concernés. Génération vidéo, montage et mixage restent externes ; les options dépendent du service cible.
+
+[Guide pratique](https://docs.storyforge-lab.com/en/features/motion-drama)
+
+### Plugins et atelier créatif
+
+Installez des plugins fonctionnels, contenus sans code ou ensembles à dépendances verrouillées, activés par œuvre ou monde. Douze exemples couvrent notes, cartes, calendriers, chronologies, tableaux, nœuds, IA et outils. Les interfaces de remplacement dédiées concernent l’histoire du monde et la progression du récit. Activez explicitement la préversion via `/workshop/discover`, créez une œuvre de test et confirmez la confiance. Désactivation et désinstallation conservent les données. Le SDK produit des fichiers `.sfplugin` ; instructions IA et kit Skill sont documentés. Les interfaces natives partagent l’origine : les déclarations de capacités ne constituent pas un bac à sable contre du code malveillant. Atelier public et gestion locale ont des rôles distincts.
+
+[Guide pratique](https://docs.storyforge-lab.com/en/workshop/)
+
+### Nœuds : relier, réviser, reprendre
+
+Ajoutez ou recherchez des nœuds, tirez une liaison depuis un port d’entrée ou de sortie, choisissez un nœud compatible et reconnectez les liens. Modèles de prompts, variables, température, tokens et nombre de propositions se configurent dans le graphe sans modifier le modèle global. Exécuter jusqu’à un nœud ne traite que ses prérequis. Les propositions sauvegardées utilisent la même adoption du roman lorsque permise. Une reprise après actualisation n’effectue pas une nouvelle génération ; l’interopérabilité complète reste en validation.
+
+[Guide pratique](https://docs.storyforge-lab.com/en/features/nodes)
+
+### Codex local et modèles par tâche
+
+En plus des API et services locaux compatibles, Codex app-server peut réutiliser un compte ChatGPT connecté en local : détection, choix de modèle et préréglages sans clé API pour ce canal. Texte et sortie structurée uniquement ; une application statique hébergée ne peut pas l’utiliser. Images, audio et embeddings demandent une configuration séparée. Limites d’abonnement et droits du modèle s’appliquent. Les requêtes récentes aident après déconnexion ; un résultat inconnu n’est pas renvoyé automatiquement ni transféré à une autre API payante.
+
+[Guide pratique](https://docs.storyforge-lab.com/en/getting-started/model-config)
+
+## Caractéristiques techniques
+
+| Technologie ou conception | Rôle et intérêt |
+|---|---|
+| React + TypeScript + Vite | Interfaces et types métier ; Zustand pour l’état, TipTap pour le texte, Three.js pour les scènes 3D intégrées |
+| Dexie / IndexedDB | Stockage local ; PROJECT_TABLES gouverne sauvegarde, import, suppression, migration et remappage des références |
+| Contexte et adoption traçables | CONTEXT_SOURCES + assembleContext() déclarent les lectures ; Context Gateway retrouve les sources ; FIELD_REGISTRY + AdoptionSchema + adopt() encadrent l’écriture |
+| Harness persistant | Skills, contrats, événements, checkpoints, propositions et reçus ; contrôles de version/périmètre et reprise de résultats sauvegardés |
+| Produits indépendants et mondes figés | Work possède le contenu ; chaque produit lit son SourcePlan et possède médias, publications et sauvegardes sans réécrire le roman source |
+
+L’architecture et les preuves ci-dessous précisent les limites. Qualité littéraire, interprétation des personnages et capacités des fournisseurs demandent toujours un jugement humain.
+
+**Pour approfondir :** [Préproduction animée](https://docs.storyforge-lab.com/en/features/motion-drama) · [Installation et développement de plugins](https://docs.storyforge-lab.com/en/workshop/) · [Nœuds](https://docs.storyforge-lab.com/en/features/nodes) · [Configuration des modèles](https://docs.storyforge-lab.com/en/getting-started/model-config) · [Sauvegarde et restauration](https://docs.storyforge-lab.com/en/guides/backup-restore) · [Méthodes de prompts](https://docs.storyforge-lab.com/en/prompts/) · [Retours et assistance](https://docs.storyforge-lab.com/en/feedback/)
 
 ## Découvrez une histoire originale
 
@@ -62,7 +120,7 @@ npm run dev
 
 Ouvrez l’adresse affichée par Vite avec le chemin `/storyforge/` et gardez le terminal ouvert. Une archive ZIP du code nécessite les mêmes commandes après extraction : ce n’est pas un installateur.
 
-Sur l’accueil, ouvrez le bouton de réglages en haut à droite (`模型与本地设置`). Choisissez un fournisseur, renseignez API Key, Base URL et un modèle accessible, puis testez la connexion et une petite génération. Une connexion réussie ne garantit ni qualité, ni solde, ni capacité de contexte. En cas d’erreur CORS du navigateur, suivez les instructions de proxy local du panneau.
+Sur l’accueil, ouvrez le bouton de réglages en haut à droite (`模型与本地设置`). Pour une API, choisissez un fournisseur, renseignez API Key, Base URL et un modèle accessible, puis testez la connexion et une petite génération. Une connexion réussie ne garantit ni qualité, ni solde, ni capacité de contexte. En cas d’erreur CORS du navigateur, suivez les instructions de proxy local du panneau.
 
 <a id="products"></a>
 
@@ -76,6 +134,7 @@ Sur l’accueil, ouvrez le bouton de réglages en haut à droite (`模型与本�
 | Terminer un récit court | Récit court | Conception, fiches de chapitres, rédaction, revue, édition figée ; Markdown/TXT/JSON |
 | Adapter en scénario | Roman vers scénario | Sources figées, décisions, scènes structurées, revues ; Fountain/FDX/impression |
 | Adapter en BD | Roman vers BD | Pages, cases, références visuelles, lettrage, éditions ; PNG/WebP/CBZ/PDF |
+| Préparer une série animée | Matériaux de série animée | Bible, épisodes, matériaux, storyboard, références et paquets ; vidéo produite à l’extérieur |
 | Créer un monde | Moteur de monde | Contenu sémantique, dérivation explicite, versions figées et lecture |
 | Composer un parcours visuel | Mode nœuds | Préversion ; même moteur et mêmes données que le roman |
 | Jouer ou créer des expériences | TTRPG / Personnages / Ville IA / Jeux textuels | Préversions avec leurs propres cycles de production et d’exécution |
