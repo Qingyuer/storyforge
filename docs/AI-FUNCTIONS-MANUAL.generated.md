@@ -358,8 +358,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 43 个 category。
-未分类调用: 0 个。动态 category 调用: 38 个。
+共 41 个 category。
+未分类调用: 0 个。动态 category 调用: 40 个。
 
 | category | 触发文件 |
 |---|---|
@@ -368,12 +368,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
-| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:25` |
-| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:28` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1682` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1660` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1650` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1706` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1684` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1674` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:606` |
@@ -397,7 +395,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1710` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1734` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
@@ -422,8 +420,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
 - `src/lib/agent/outline-copilot.ts:771 · chat`
-- `src/lib/agent/prose-copilot.ts:692 · chat`
-- `src/lib/agent/prose-copilot.ts:960 · chat`
+- `src/lib/agent/prose-copilot.ts:702 · chat`
+- `src/lib/agent/prose-copilot.ts:969 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
@@ -437,6 +435,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/comic/durable-production.ts:270 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
+- `src/lib/generation/chapter-generation-node.ts:42 · ai.start`
+- `src/lib/generation/chapter-generation-node.ts:43 · ai.start`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
 - `src/lib/node-authoring/executor.ts:431 · chat`
@@ -505,4 +505,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `493693fb`
+生成时间基准:commit `744d84b9`

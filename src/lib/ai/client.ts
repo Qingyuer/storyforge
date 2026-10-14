@@ -44,6 +44,40 @@ export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
 
 export type AIRequestConfigResolution = ReturnType<typeof resolveRequestConfig>
 
+export interface AIRequestSettingsV1 {
+  version: 'ai-request-settings-v1'
+  provider: AIConfig['provider']
+  model: string
+  transport: 'openai-compatible' | 'codex-bridge'
+  stream: boolean
+  /** Configured values are distinct from provider-specific transmitted values. */
+  requested: { temperature: number | null; maxTokens: number | null }
+  parameters: Record<string, unknown>
+}
+
+/** Describe the same request builder used for dispatch, without credentials,
+ * endpoint, headers, prompts or user data. The resolution is already frozen. */
+export function describeResolvedAIRequestSettingsV1(
+  resolution: AIRequestConfigResolution,
+  stream: boolean,
+  options?: ChatRequestOptions,
+): AIRequestSettingsV1 {
+  const config = resolution.config
+  const parameters: Record<string, unknown> = {}
+  if (config.provider !== 'codex') {
+    const body = JSON.parse(buildRequest(config, [], stream, options).body) as Record<string, unknown>
+    for (const key of ['temperature', 'max_tokens', 'reasoning_effort', 'thinking']) {
+      if (body[key] !== undefined) parameters[key] = body[key]
+    }
+  }
+  return {
+    version: 'ai-request-settings-v1', provider: config.provider, model: config.model,
+    transport: config.provider === 'codex' ? 'codex-bridge' : 'openai-compatible', stream,
+    requested: { temperature: config.temperature ?? null, maxTokens: config.maxTokens ?? null },
+    parameters,
+  }
+}
+
 function warnRouteFallback(resolved: ReturnType<typeof resolveRequestConfig>, meta?: AICallMeta): void {
   if (resolved.fallbackReason) {
     console.warn(`[AI] task route fallback (${resolved.fallbackReason}): ${meta?.category ?? 'uncategorized'}`)
@@ -71,6 +105,8 @@ function usageEntry(
 /** 可变容器，streamChat 写入 usage，调用方读取 */
 export interface StreamResult {
   usage?: TokenUsage
+  finishReason?: string
+  completion?: 'complete' | 'cancelled' | 'failed' | 'unknown'
 }
 
 /** 可变容器，chat 写入非流式调用返回的真实 token 用量。 */
@@ -318,9 +354,10 @@ export async function* streamChat(
   signal?: AbortSignal,
   result?: StreamResult,
   meta?: AICallMeta,
+  frozenResolution?: AIRequestConfigResolution,
 ): AsyncGenerator<string> {
   assertGenerationAvailable()
-  const resolved = resolveRequestConfig(config, meta)
+  const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = resolved.config
   const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens, config.contextWindow)
@@ -337,6 +374,7 @@ export async function* streamChat(
   }
   if (config.provider === 'codex') {
     yield* loggedCodex(trimmed.messages, config, resolved.taskKind, meta, signal, result)
+    if (result) result.completion = signal?.aborted ? 'cancelled' : 'complete'
     return
   }
   const req = buildRequest(config, trimmed.messages, true)
@@ -403,6 +441,7 @@ export async function* streamChat(
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim()
           if (data === '[DONE]') {
+            if (result) result.completion = 'complete'
             const logUpdate: Record<string, unknown> = { status: 'success', statusCode: response!.status, duration: Date.now() - startTime }
             if (usage) logUpdate.usage = usage
             if (result && usage) result.usage = usage
@@ -412,6 +451,7 @@ export async function* streamChat(
           }
           try {
             const json = JSON.parse(data)
+            if (result && typeof json.choices?.[0]?.finish_reason === 'string') result.finishReason = json.choices[0].finish_reason
             const content = json.choices?.[0]?.delta?.content
             if (content) yield content
             // 提取 token 用量（通常在最后一个 chunk 中）
@@ -429,7 +469,8 @@ export async function* streamChat(
       }
     }
 
-    const logUpdate: Record<string, unknown> = { status: 'success', statusCode: response!.status, duration: Date.now() - startTime }
+    if (result) result.completion = result.finishReason ? 'complete' : 'unknown'
+    const logUpdate: Record<string, unknown> = { status: result?.completion === 'unknown' ? 'error' : 'success', statusCode: response!.status, duration: Date.now() - startTime }
     if (usage) logUpdate.usage = usage
     if (result && usage) result.usage = usage
     updateLog(log.id, logUpdate)

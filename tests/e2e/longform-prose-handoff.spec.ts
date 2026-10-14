@@ -60,13 +60,81 @@ test('分步骤实际请求完整交付长备注、元素和作者文风；自�
   expect(requests[0].temperature).toBe(0.2)
   expect(requests[0].max_tokens).toBe(1700)
   expect(wire).not.toContain('前 40%')
+  await expect(page.getByText(/生成时：.*篇幅不足/)).toBeVisible()
+  const requestEvidence = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const artifacts = await db.agentRunArtifacts.toArray()
+    return artifacts.filter((row: any) => row.artifactKind === 'rendered-request').map((row: any) => JSON.parse(row.content)).find((row: any) => row.version === 'prose-rendered-request-v1')
+  })
+  expect(requestEvidence.settings).toMatchObject({ provider: 'ollama', model: 'handoff-test', stream: true, parameters: { temperature: 0.2, max_tokens: 1700 } })
+  expect(requestEvidence.messages).toEqual(requests[0].messages)
+  expect(JSON.stringify(requestEvidence.settings)).not.toContain('prose-handoff.invalid')
   await page.reload()
   await expect(draft).toHaveValue(generated)
+  await expect(page.getByText(/生成时：.*篇幅不足/)).toBeVisible()
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(draft).toHaveCount(0)
   await expect(page.locator('.tiptap-editor')).toContainText('约定明天的分工')
   await page.reload()
   await expect(page.locator('.tiptap-editor')).toContainText('最后签收并关灯')
+})
+
+test('输出上限停止留下明确提示，刷新保留原候选，不自动重发', async ({ page }) => {
+  let calls = 0
+  await page.route('https://prose-handoff.invalid/**', route => {
+    calls++
+    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated }, finish_reason: 'length' }] })}\n\ndata: [DONE]\n\n` })
+  })
+  await prepare(page)
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(generated)
+  await expect(page.getByText(/生成时：模型因输出上限停止/)).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/生成时：模型因输出上限停止/)).toBeVisible()
+  expect(calls).toBe(1)
+  await expect(page.locator('.tiptap-editor')).toBeEmpty()
+})
+
+test('连接结束缺少完成确认时保留片段及证据，刷新恢复只读结果，不能采纳或自动重发', async ({ page }) => {
+  let calls = 0
+  const fragment = '他收好第一把工具，正要转身。'
+  await page.route('https://prose-handoff.invalid/**', route => {
+    calls++
+    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: fragment } }] })}\n\n` })
+  })
+  await prepare(page)
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await expect(page.getByText('⚠️ 生成结果未确认', { exact: true })).toBeVisible()
+  await expect(page.getByText(fragment, { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '采纳', exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText('⚠️ 生成结果未确认', { exact: true })).toBeVisible()
+  await expect(page.getByText(fragment, { exact: true })).toBeVisible()
+  expect(calls).toBe(1)
+  await expect(page.locator('.tiptap-editor')).toBeEmpty()
+})
+
+test('作者在响应到达前停止，刷新保留停止状态，不出现可采纳候选或自动重发', async ({ page }) => {
+  let calls = 0
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  await page.route('https://prose-handoff.invalid/**', async route => {
+    calls++
+    await waiting
+    await route.fulfill({ contentType: 'text/event-stream', body: 'data: [DONE]\n\n' }).catch(() => {})
+  })
+  await prepare(page)
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await expect.poll(() => calls).toBe(1)
+  await page.getByRole('button', { name: '停止', exact: true }).click()
+  release()
+  await expect(page.getByText('⚠️ 生成已停止', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('⚠️ 生成已停止', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '采纳', exact: true })).toHaveCount(0)
+  expect(calls).toBe(1)
+  await expect(page.locator('.tiptap-editor')).toBeEmpty()
 })
 
 test('等待采纳期间改规则拒绝旧候选，保留原稿', async ({ page }) => {

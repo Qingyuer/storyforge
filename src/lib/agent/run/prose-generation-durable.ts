@@ -51,6 +51,7 @@ import type {
   AgentRunContractV2,
   AgentRunContractV3,
   AgentRunStepExecutionBindingV2,
+  AgentRunRecord,
   AgentSkillExecutionBindingV1,
   AgentSkillExecutionBindingV2,
 } from '../../types/agent-run'
@@ -71,6 +72,10 @@ import {
 import type { ContextGatewayExecutionV1 } from '../../context-gateway/execution'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { proseGatewayExecutionFromAssemblyV1 } from '../../prose/gateway-context'
+import { proseRenderedRequestV1 } from '../../prose/request-evidence'
+import type { AIRequestSettingsV1 } from '../../ai/client'
+import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
+import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 
 export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
 export const PROSE_SEMANTIC_REVIEW_STEP_ID_V1 = 'prose-semantic-review'
@@ -120,6 +125,7 @@ export interface ProseGenerationSemanticReviewEvidenceV1 {
 }
 
 export interface ProseGenerationCandidateV1 {
+  lengthObservation?: ProseLengthObservationV1
   version: 1
   type: typeof PROSE_GENERATION_CANDIDATE_TYPE_V1
   projectId: number
@@ -502,6 +508,7 @@ export async function beginProseGenerationGatewayStepV1(input: {
   outlineNodeId: number
   assembled: AssembleContextResult
   messages: ChatMessage[]
+  requestSettings?: AIRequestSettingsV1
   binding: {
     operation: ProseGenerationOperationV1
     sourceTextHash: string
@@ -548,7 +555,7 @@ export async function beginProseGenerationGatewayStepV1(input: {
     attempt: 1,
     contextPacket: execution.contextPacket,
     selector: execution.selector,
-    renderedRequest: input.messages,
+    renderedRequest: input.requestSettings ? proseRenderedRequestV1(input.messages, input.requestSettings) : input.messages,
     sourceSnapshots: execution.sourceSnapshots,
     toolTranscript: execution.toolTranscript,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -575,6 +582,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
   snapshot: AgentRunSnapshotV1
   attempt: ProseGatewayAttemptV1
   output: string
+  lengthObservation?: ProseLengthObservationV1
   usedTokens?: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; manifest: ContextManifestV3 }> {
   const outputHash = await hashCanonicalValue(input.output)
@@ -603,7 +611,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
     retrievalTrace: input.attempt.execution.retrievalTrace,
     gatewayVersionHash: input.attempt.execution.contextPacket.gatewayVersionHash,
     policyHash: input.attempt.execution.contextPacket.policyHash,
-    rawResponse: input.output,
+    rawResponse: input.lengthObservation ? { version: 'prose-observed-response-v1', text: input.output, length: parseProseLengthObservationV1(input.lengthObservation) } : input.output,
     candidateHash: outputHash,
     expectedLastSequence: snapshot.projection.lastSequence,
   })
@@ -744,6 +752,7 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
   if (!valid) return false
   try {
     candidate.contentRevision = parseWorkspaceContentRevisionV1(candidate.contentRevision)
+    if (candidate.lengthObservation !== undefined) candidate.lengthObservation = parseProseLengthObservationV1(candidate.lengthObservation)
   } catch {
     return false
   }
@@ -875,6 +884,63 @@ export async function readLatestProseGenerationCandidateV1(input: {
     ))
     .sort((left, right) => right.event.createdAt - left.event.createdAt)
   return matches[0]?.value ?? null
+}
+
+export interface InterruptedProseGenerationV1 {
+  version: 'prose-interrupted-response-v1'
+  outputText: string
+  completion: 'cancelled' | 'failed' | 'unknown'
+  message: string
+}
+
+/** Keep the received bytes as run evidence. This is never a candidate or an adoption. */
+export async function recordInterruptedProseGenerationV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  response: InterruptedProseGenerationV1
+}): Promise<AgentRunSnapshotV1> {
+  const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+  if (!step || step.status !== 'running') throw new Error('中断片段缺少正在执行的正文步骤。')
+  const recorded = await recordAgentRunArtifactV1({
+    scope: input.scope,
+    runId: input.snapshot.run.id,
+    stepId: PROSE_GENERATION_STEP_ID_V1,
+    attempt: step.attempt,
+    artifactKind: 'raw-response',
+    content: JSON.stringify(input.response),
+    expectedLastSequence: input.snapshot.projection.lastSequence,
+  })
+  return recorded.snapshot
+}
+
+/** A historical fragment may be read after refresh, with no write authority. */
+export async function readLatestInterruptedProseGenerationV1(input: {
+  scope: WorkspaceScope
+  chapterId: number
+}): Promise<(InterruptedProseGenerationV1 & { operation: ProseGenerationOperationV1 }) | null> {
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return null
+  const runs = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
+  const matching = runs.filter(run => {
+    try {
+      const contract = JSON.parse(run.contractJson)
+      return contract.scope?.chapterIds?.length === 1 && contract.scope.chapterIds[0] === input.chapterId
+        && contract.executionBindings?.some((binding: { stepId: string }) => binding.stepId === PROSE_GENERATION_STEP_ID_V1)
+    } catch { return false }
+  }).sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
+  const latest = matching[0]
+  if (!latest?.id) return null
+  const snapshot = await readAgentRunV1(input.scope, latest.id)
+  if (snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.status !== 'failed') return null
+  const evidence = [...snapshot.events].reverse().find(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1)
+  if (!evidence || evidence.type !== 'evidence.artifact.recorded') return null
+  const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: evidence.payload.contentHash })
+  let row: InterruptedProseGenerationV1
+  try { row = JSON.parse(content) } catch { return null }
+  if (!row || row.version !== 'prose-interrupted-response-v1' || typeof row.outputText !== 'string'
+    || !['cancelled', 'failed', 'unknown'].includes(row.completion) || typeof row.message !== 'string') return null
+  return { ...row, operation: snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate' }
 }
 
 /** Preserve the generation receipt and append an explicit author revision before adoption. */

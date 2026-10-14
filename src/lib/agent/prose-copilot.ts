@@ -3,7 +3,9 @@ import { readWorkPostAdoptionSettingsV1 } from '../prose/post-adoption-policy'
 import { affirmativeAuthorActionsV1, parseAuthorOrdinalV1 } from './author-intent'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildChapterContentRequestV1, buildContinueRequestV1, type ChapterPromptRequestV1 } from '../ai/adapters/chapter-adapter'
-import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1, type ChatResult, type AIRequestSettingsV1 } from '../ai/client'
+import { proseRenderedRequestV1, type ProseRenderedRequestV1 } from '../prose/request-evidence'
+import { observeProseLengthV1, proseLengthExpectationV1 } from '../prose/length-observation'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
 import { verifyWorkspaceContentRevisionV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
@@ -82,6 +84,7 @@ export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
 export type ProseCopilotOperation = 'generate' | 'continue'
 
 export interface ProseCopilotSnapshot {
+  requestSettings?: AIRequestSettingsV1
   /** 新候选冻结原注册表内容向量，缺失保留旧恢复协议的兼容性。 */
   contentRevision?: WorkspaceContentRevisionVectorV1
   outlineNodeId: number
@@ -125,6 +128,8 @@ export interface ProseCopilotInput {
 }
 
 export interface PreparedProseCopilot {
+  renderedRequest: ProseRenderedRequestV1
+  lastFinishReason: () => string | null
   node: GenerationNode<ProseCopilotInput, string, { chapterId: number }>
   prepared: PreparedGenerationNode
   contextSources: string[]
@@ -684,22 +689,18 @@ export async function prepareProseCopilot(input: {
   }
   const promptRequest = buildProseRequest(nodeInput)
   nodeInput.generationOverrides = proseRequestOverridesV1(promptRequest, input.generationOverrides)
+  const requestMeta = { category: routingCategory, projectId: input.projectId, configOverrides: nodeInput.generationOverrides, contextOverflowPolicy: 'reject' as const }
+  const frozenResolution = resolveRequestConfig(config, requestMeta)
+  const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, false)
+  snapshot.requestSettings = requestSettings
+  let finishReason: string | null = null
   const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
     const startedAt = Date.now()
     const result: ChatResult = {}
     const output = dependencies.runAI
       ? await dependencies.runAI(messages)
-      : await chat(messages, config, {
-          category: routingCategory,
-          projectId: input.projectId,
-          configOverrides: {
-            maxTokens: nodeInput.generationOverrides?.maxTokens ?? 16_000,
-            ...(nodeInput.generationOverrides?.temperature != null
-              ? { temperature: nodeInput.generationOverrides.temperature }
-              : {}),
-          },
-          contextOverflowPolicy: 'reject',
-        }, input.signal, result)
+      : await chat(messages, config, { ...requestMeta, category: routingCategory }, input.signal, result, undefined, frozenResolution)
+    finishReason = result.finishReason ?? null
     return {
       output,
       ...(result.usage ? { usage: result.usage } : {}),
@@ -710,9 +711,12 @@ export async function prepareProseCopilot(input: {
     ...dependencies,
     runAI: async messages => (await runRaw(messages)).output,
   }, promptRequest)
+  const preparedNode = prepareGenerationNode(node, nodeInput)
   return {
+    get renderedRequest() { return proseRenderedRequestV1(preparedNode.messages, requestSettings) },
+    lastFinishReason: () => finishReason,
     node,
-    prepared: prepareGenerationNode(node, nodeInput),
+    prepared: preparedNode,
     contextSources: assembled.included,
     snapshot,
     operation,
@@ -722,7 +726,7 @@ export async function prepareProseCopilot(input: {
     informationBoundary,
     contextGatewayExecution: assembled.contextGatewayExecution,
     input: nodeInput,
-    modelIdentity: { provider: config.provider, model: config.model },
+    modelIdentity: { provider: frozenResolution.config.provider, model: frozenResolution.config.model },
     runRaw,
     label: operation === 'continue'
       ? `续写《${target.outline.title}》`
@@ -770,6 +774,11 @@ function parseProseCreativeOutcomeV1(
       message: item.message,
       disposition: 'blocking',
       action: 'repair-once',
+    }))
+    const length = observeProseLengthV1(output, proseLengthExpectationV1(prepared.input.authorRequest, prepared.input.parameterValues?.wordCount), prepared.lastFinishReason())
+    if (length.message) issues.push(createCreativeIssueV1({
+      code: `prose-length-${length.status}`, path: '$', message: length.message,
+      severity: 'warning', disposition: 'advisory', action: 'none', deterministic: true,
     }))
     if (!PROSE_MOTION_SIGNAL.test(output)) {
       issues.push(createCreativeIssueV1({

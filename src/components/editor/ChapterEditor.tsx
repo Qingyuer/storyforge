@@ -26,7 +26,8 @@ import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-me
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
-import { resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
+import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
@@ -60,6 +61,7 @@ import {
 } from '../../lib/generation/generation-node'
 import {
   createChapterGenerationNode,
+  InterruptedChapterGenerationErrorV1,
   type ChapterGenerationCategory,
   type ChapterGenerationOperation,
 } from '../../lib/generation/chapter-generation-node'
@@ -206,6 +208,8 @@ import {
   recordProseGenerationCandidateV1,
   rejectProseGenerationCandidateV1,
   recoverProseGenerationCandidateV1,
+  recordInterruptedProseGenerationV1,
+  readLatestInterruptedProseGenerationV1,
   resolveProseGenerationExecutionBindingV2,
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
@@ -609,13 +613,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         scope,
         chapterId,
       })
-      if (!active || !candidate) return
-      const recovered = await recoverProseGenerationCandidateV1({ scope, candidate })
-      if (!active || !recovered || recovered.projection.state !== 'awaiting_confirmation') return
-      setProseCandidate(candidate)
-      proseCandidateRef.current = candidate
-      restoreAI({ output: candidate.outputText, operation: candidate.operation })
-      proseSnapshotRef.current = recovered
+      if (!active) return
+      const recovered = candidate ? await recoverProseGenerationCandidateV1({ scope, candidate }) : null
+      if (!active) return
+      if (candidate && recovered?.projection.state === 'awaiting_confirmation') {
+        setProseCandidate(candidate)
+        proseCandidateRef.current = candidate
+        restoreAI({ output: candidate.outputText, operation: candidate.operation })
+        proseSnapshotRef.current = recovered
+        return
+      }
+      const interrupted = await readLatestInterruptedProseGenerationV1({ scope, chapterId })
+      if (active && interrupted) restoreAI({ output: interrupted.outputText, operation: interrupted.operation, error: interrupted.message })
     })().catch(error => {
       if (active) console.warn('[ProseGeneration] durable candidate 恢复失败:', error)
     })
@@ -1236,12 +1245,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     category: ChapterGenerationCategory,
     informationBoundary: InformationBoundaryManifestV1,
     generationOverrides?: { temperature?: number; maxTokens?: number },
+    frozenResolution?: AIRequestConfigResolution,
+    streamResult?: StreamResult,
   ) => createChapterGenerationNode({
     operation,
     category,
     projectId: project.id!,
     chapterIdentity: currentChapter?.id ?? outlineNodeId ?? 'unselected',
-    ai, generationOverrides,
+    ai, generationOverrides, frozenResolution, streamResult,
     gate: output => {
       const issues = validateProseInformationBoundaryV1(output, informationBoundary)
       return { status: issues.length ? 'blocked' : 'pass', issues }
@@ -1251,7 +1262,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const runDurableChapterGeneration = async (input: {
     operation: ChapterGenerationOperation
     category: ChapterGenerationCategory
-    node: ReturnType<typeof createChapterGenerationNode>
     prepared: PreparedGenerationNode
     messages?: ChatMessage[]
     assembled?: Awaited<ReturnType<typeof assembleContext>>
@@ -1275,6 +1285,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!sourceChapter) throw new Error('正文生成开始前找不到章节。')
     const sourceTextHash = await hashChapterText(sourceChapter.content ?? '')
     const actualMessages = input.messages ?? input.prepared.messages
+    const frozenResolution = resolveRequestConfig(aiConfig, { category: input.category, projectId: project.id!, configOverrides: input.generationOverrides })
+    const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, true)
+    const streamResult: StreamResult = {}
+    const frozenNode = chapterGenerationNode(input.operation, input.category, input.informationBoundary, input.generationOverrides, frozenResolution, streamResult)
     const budget = new AgentTeamBudgetTracker(
       useAIConfigStore.getState().agentTeamBudgetProfile,
     )
@@ -1313,6 +1327,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       outlineNodeId: sourceChapter.outlineNodeId,
       assembled: input.assembled,
       messages: actualMessages,
+      requestSettings,
       binding: {
         operation: input.operation,
         sourceTextHash,
@@ -1331,7 +1346,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     let persistedCandidate: ProseGenerationCandidateV1 | null = null
     let result
     try {
-      result = await runGenerationNode(input.node, input.prepared, {
+      result = await runGenerationNode(frozenNode, input.prepared, {
         messages: input.messages,
         deferStepSucceeded: true,
         shadowTrace: {
@@ -1344,6 +1359,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             snapshot,
             attempt: gatewayAttempt,
             output: String(output ?? ''),
+            lengthObservation: observeProseLengthV1(String(output ?? ''), proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
             usedTokens: generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
           })
           snapshot = finalized.snapshot
@@ -1354,6 +1370,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           const outputText = String(output ?? '')
           if (!outputText.trim()) throw new Error('模型没有返回可采纳的正文候选。')
           const baseCandidate = {
+            lengthObservation: observeProseLengthV1(outputText, proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
             version: 1 as const,
             type: 'prose-generation-candidate' as const,
             projectId: project.id!,
@@ -1406,13 +1423,22 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         },
         stepSucceeded: async () => {},
         stepFailed: async failure => {
+          if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
+            snapshot = await recordInterruptedProseGenerationV1({
+              scope, snapshot,
+              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion, message: failure.error.message },
+            })
+          }
           snapshot = await failProseGenerationStepV1({
             scope,
             snapshot,
             code: failure.error instanceof Error ? failure.error.message : `${failure.phase}_failed`,
-            retryable: true,
+            retryable: !(failure.error instanceof InterruptedChapterGenerationErrorV1),
           })
           proseSnapshotRef.current = snapshot
+          if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
+            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message })
+          }
         },
         onTraceError: error => { traceError = error },
         },
@@ -1456,11 +1482,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     ai.setOperation(operation)
-    const node = chapterGenerationNode(operation, category, informationBoundary, generationOverrides)
     void runDurableChapterGeneration({
       operation,
       category,
-      node,
       prepared,
       messages,
       assembled,
@@ -3246,6 +3270,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
+          {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
             editable={!!proseCandidate && !proseCandidate.semanticReview}
             onStop={ai.stop}
