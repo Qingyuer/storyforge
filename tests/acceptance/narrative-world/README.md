@@ -117,3 +117,9 @@ NW_IR_REPORT=/tmp/nw1a-candidate.json npx vitest run tests/regression/R-NW-1A-ir
 ```
 
 以上是确定性合同与隔离数据库证据；未做文学质量、真实模型、独立人工或规模性能验收。
+
+### 2026-10-14 主干整合对照
+
+在 NW-1A `bfc68581` 上整合 `origin/main` 的 `e40fadce`（应用 v4.0.0）。[整合回执](./baseline-20261014-integration-v1.json) 保留新的输入指纹；原两份基线和 IR golden 不变。120 查询、48 修改及全部边界控制的逐项结果与 NW-1A 相同，仍为 24 通过 / 60 缺口 / 36 不支持，影响分析 precision 41.67%。主干便携交付和文字冒险更新没有被计作 NW 能力提升。
+
+整合检查：97 项 NW 定向测试、architecture/required-tables/AI manual、其余静态门、lint、TypeScript、生产依赖审计和 build 通过。整合阶段的全量 CI 在 coverage 执行中为共享机器串行协调主动停止（exit 143，日志 `/tmp/nw-integration-20261014-ci.log`），未取得全量完成回执；后续 NW-1B 交付仍须通过串行完整 CI。

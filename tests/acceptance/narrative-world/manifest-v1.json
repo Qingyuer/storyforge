@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261013-nw1a-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261014-integration-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -29,9 +29,15 @@
         "workPackage": "NW-0B",
         "implementationCommit": "0656c584",
         "note": "Original measured v3 baseline retained unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261013-nw1a-v1.json",
+        "workPackage": "NW-1A",
+        "implementationCommit": "bfc68581",
+        "note": "Identity/time/codec delivery receipt retained unchanged before origin/main integration."
       }
     ],
-    "comparison": "NW-1A adds identity metadata and a headless IR codec. Re-measure the same v3 provider and edits; contract validation is reported separately and must not be counted as query improvement."
+    "comparison": "Integrate origin/main e40fadce into NW-1A bfc68581. Re-measure unchanged v3 queries and edit gold after schema entry and package metadata updates; no new narrative semantic capability is claimed."
   },
   "sourceFingerprintPaths": [
     "src/lib/context-gateway/world-release-provider.ts",
