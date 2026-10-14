@@ -91,6 +91,8 @@ export interface ExecuteContextGatewayInputV1 {
   accessPolicyOverride?: ContextAccessPolicyV1
   /** Exact resource permission derived from ProductSourcePlan selectors. */
   allowedResourceKeys?: readonly string[]
+  /** Deterministic adapter boundary; excludes a record and all field/aggregate resources. */
+  excludedRecordResourceKeys?: readonly string[]
   /** Omit to disable extra planning calls while preserving deterministic selection. */
   additionalReadModel?: AgentModelAdapter
   additionalReadsEnabled?: boolean
@@ -177,9 +179,11 @@ function hardFailure(report: ContextSufficiencyReportV1): ContextSufficiencyObli
 
 async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
   descriptors: ContextResourceDescriptorV1[]
+  omitted: Array<{ resourceKey: string; sourceKey: string; reasonCode: string; tokenEstimate: number }>
   pages: number
 }> {
   const descriptors: ContextResourceDescriptorV1[] = []
+  const omitted: Array<{ resourceKey: string; sourceKey: string; reasonCode: string; tokenEstimate: number }> = []
   const keys = new Set<string>()
   let pages = 0
   for (const binding of session.providers) {
@@ -204,7 +208,10 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
         policy: session.policy,
       })
       for (const descriptor of page.items) {
-        if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) continue
+        if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) {
+          omitted.push({ resourceKey: descriptor.resourceKey, sourceKey: descriptor.sourceKey, reasonCode: 'adapter-resource-boundary', tokenEstimate: descriptor.tokenEstimate.index ?? 0 })
+          continue
+        }
         if (keys.has(descriptor.resourceKey)) fail('duplicate-resource', `目录重复 ${descriptor.resourceKey}`)
         keys.add(descriptor.resourceKey)
         descriptors.push(descriptor)
@@ -214,6 +221,7 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
   }
   return {
     descriptors: descriptors.sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
+    omitted: omitted.sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
     pages,
   }
 }
@@ -384,6 +392,7 @@ export async function executeContextGatewayV1(
     scope: frozenScope(input),
     policy: accessPolicy,
     allowedResourceKeys: input.allowedResourceKeys,
+    excludedRecordResourceKeys: input.excludedRecordResourceKeys,
   })
   const catalog = await collectCatalog(session)
   const readsAllowed = input.additionalReadsEnabled !== false
@@ -486,6 +495,9 @@ export async function executeContextGatewayV1(
       depth: decision.depth,
       maxTokens: Math.max(1, Math.min(remaining, decision.estimatedTokens || remaining)),
     })
+    if (input.mandatoryFullResourceKeys?.includes(decision.resourceKey) && read.contentHash !== descriptor.contentHash) {
+      fail('mandatory-full-incomplete', `${decision.resourceKey} 完整资料超出检索或模型预算，拒绝静默截断`)
+    }
     if (descriptor.contentHash !== decision.contentHash
       || descriptor.policyHash !== decision.policyHash
       || read.descriptor.contentHash !== decision.contentHash
@@ -623,12 +635,12 @@ export async function executeContextGatewayV1(
     mandatory: deterministicReads.filter(item => mandatoryKeys.has(item.resourceKey)),
     autoSelected: deterministicReads.filter(item => !mandatoryKeys.has(item.resourceKey)),
     agentReads: [...agentReads.values()].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
-    omitted: selector.omitted.map(item => ({
+    omitted: [...catalog.omitted, ...selector.omitted.map(item => ({
       resourceKey: item.resourceKey,
       sourceKey: item.sourceKey,
       reasonCode: item.reasonCode,
       tokenEstimate: item.estimatedTokens,
-    })),
+    }))],
     queries: queryTrace,
     fallbackUsed: path === 'deterministic-fallback',
   })

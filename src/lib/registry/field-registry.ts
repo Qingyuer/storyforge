@@ -499,7 +499,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   json('creativeRules', 'prohibitions', ['禁止事项']),
   json('creativeRules', 'consistencyRules', ['一致性规则']),
   longtext('creativeRules', 'specialRequirements', ['特殊要求']),
-  { ...object('creativeRules', 'systemFictionElements', ['系统文元素']), sanitize: parseSystemFictionElementsV1 },
+  { ...object('creativeRules', 'systemFictionElements', ['系统文元素']), sanitize: parseSystemFictionElementsV1,
+    contextEnabled: value => parseSystemFictionElementsV1(value).enabled },
   json('creativeRules', 'citedReferenceIds'),
   json('creativeRules', 'citedInsightIds'),
 

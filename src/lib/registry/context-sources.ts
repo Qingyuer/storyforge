@@ -2962,6 +2962,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       await buildLongTermConsistencyDossierV1({
         scope: input.scope!,
         boundaryChapterId: input.chapterId!,
+        perspectiveCharacterId: input.characterId,
         query: input.stateReferenceText,
         maxTokens: 5_500,
       }),
