@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { makeQuestionnairePackets, renderQuestionnaire, validateChoiceReview } from '../../scripts/quality-evals/longform-choice-questionnaire.mjs'
+import { makeQuestionnairePackets, readChoiceReviewHtml, renderQuestionnaire, validateChoiceReview } from '../../scripts/quality-evals/longform-choice-questionnaire.mjs'
 
 const input = () => ({ studyId: 'Q10-preview', mode: 'preview', sourceVersions: { baseline: 'old-private-version', improved: 'new-private-version' }, participants: ['R01', 'R02', 'R03'], samples: [1, 2].map(chapter => ({ pairId: `urban-${chapter}`, workId: 'urban', chapter, genre: '都市系统文', baseline: '第一段\n第二段', improved: '另一版第一段\n另一版第二段' })) })
 function blank(packet: any) {
@@ -63,5 +63,22 @@ describe('LFQ10 · 无需打字的独立选择问卷', () => {
     value = blank(packet); value.answers[1] = value.answers[0]
     expect(() => validateChoiceReview(packet, value)).toThrow('样稿版本不匹配')
     expect(() => makeQuestionnairePackets({ ...input(), participants: ['R01', 'R01'] })).toThrow('参与者代号')
+  })
+
+  it('答案随 HTML 保存，可直接读回；读取回传文件不执行脚本，并拒绝跨人、改稿或重复数据块', () => {
+    const { packets } = makeQuestionnairePackets(input(), 'seed')
+    const packet = packets[0]
+    const value = blank(packet)
+    value.answers[0].preference = 'B'
+    value.answers[0].reasons = ['prose']
+    const html = renderQuestionnaire(packet, value)
+    const parsed = readChoiceReviewHtml(packet, html + '<script>throw new Error("never execute this")</script>')
+    expect(parsed.review).toEqual(value)
+    expect(parsed.validation).toEqual({ completedPairs: 0, complete: false })
+    expect(() => readChoiceReviewHtml(packets[1], html)).toThrow('参与者或样稿已变化')
+    expect(() => readChoiceReviewHtml(packet, html.replace('第一段', '被改写的正文'))).toThrow('参与者或样稿已变化')
+    expect(() => readChoiceReviewHtml(packet, html + '<script id="saved-review" type="application/json">{}</script>')).toThrow('唯一')
+    expect(() => readChoiceReviewHtml(packet, renderQuestionnaire(packet))).toThrow('saved-review')
+    expect(() => renderQuestionnaire(packet, { ...value, participantCode: 'someone-else' })).toThrow('不属于这份问卷')
   })
 })

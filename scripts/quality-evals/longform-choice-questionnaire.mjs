@@ -64,23 +64,61 @@ export function validateChoiceReview(packet, value) {
   return { completedPairs, complete: completedPairs === packet.samples.length && ['role', 'familiarity', 'independence'].every(key => value[key] !== null) }
 }
 
-function questionnaireClient(packet, validate) {
+function scriptJson(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+}
+
+/** Read answer data without executing a returned participant HTML. */
+export function readChoiceReviewHtml(packet, html) {
+  if (typeof html !== 'string' || html.length > JSON.stringify(packet).length * 2 + 2_000_000) throw new Error('返回问卷缺失或过大')
+  const read = id => {
+    const tags = [...html.matchAll(new RegExp('<script id="' + id + '" type="application/json">([\\s\\S]*?)</script>', 'g'))]
+    if (tags.length !== 1) throw new Error('返回问卷缺少唯一的 ' + id + ' 数据')
+    return JSON.parse(tags[0][1])
+  }
+  if (JSON.stringify(read('packet')) !== JSON.stringify(packet)) throw new Error('返回问卷的参与者或样稿已变化')
+  const review = read('saved-review')
+  return { review, validation: validateChoiceReview(packet, review) }
+}
+
+function questionnaireClient(packet, validate, toScriptJson) {
   const $ = id => document.getElementById(id)
-  const key = 'storyforge-choice-review:' + packet.packetId
+  let key = 'storyforge-choice-review:' + packet.packetId
   const blankSide = () => ({ readTo: null, continuation: null, scores: Object.fromEntries(packet.dimensions.map(([id]) => [id, null])) })
   let review = { schema: 'storyforge.longform-choice-review', version: 1, studyId: packet.studyId, packetId: packet.packetId, participantCode: packet.participantCode, mode: packet.mode, role: null, familiarity: null, independence: null, openedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), answers: packet.samples.map(sample => ({ pairId: sample.pairId, hashA: sample.a.hash, hashB: sample.b.hash, a: blankSide(), b: blankSide(), preference: null, reasons: [] })) }
-  let index = 0
+  const restoredIndex = Number($('chapter').dataset.index ?? 0)
+  let index = Number.isSafeInteger(restoredIndex) && restoredIndex >= 0 && restoredIndex < packet.samples.length ? restoredIndex : 0
   function notice(message) { $('notice').textContent = message }
-  function progress() { const result = validate(packet, review); $('progress').textContent = result.completedPairs + ' / ' + packet.samples.length + ' 组已填完' + (result.complete ? ' · 可交回完整结果' : ' · 可随时导出未完成进度') }
-  function save() { review.updatedAt = new Date().toISOString(); progress(); try { localStorage.setItem(key, JSON.stringify(review)); notice('已保存到当前浏览器；换设备或交回结果，请导出文件。') } catch { notice('浏览器无法保存。请导出进度文件，下次用“恢复进度”继续。') } }
+  function progress() { const result = validate(packet, review); $('progress').textContent = result.completedPairs + ' / ' + packet.samples.length + ' 组已填完' + (result.complete ? ' · 可交回完整结果' : ' · 可随时保存已填写 HTML') }
+  function save() { review.updatedAt = new Date().toISOString(); progress(); try { localStorage.setItem(key, JSON.stringify(review)); notice('已保存到当前浏览器；交回或换设备，请点击“保存已填写 HTML”。') } catch { notice('浏览器无法自动保存。请点击“保存已填写 HTML”，下次直接打开保存的文件继续。') } }
   function node(tag, text, parent) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (parent) parent.append(element); return element }
+  function downloadFile(content, name, type) {
+    const url = URL.createObjectURL(new Blob([content], { type }))
+    const link = node('a', undefined, document.body); link.href = url; link.download = name; link.click(); link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+  }
+  function questionnaireHtml(savedReview = null) {
+    const copy = document.documentElement.cloneNode(true)
+    for (const id of ['profile', 'samples', 'questions', 'chapter', 'progress', 'notice', 'participant']) copy.querySelector('#' + id).replaceChildren()
+    for (const detail of copy.querySelectorAll('details')) detail.removeAttribute('open')
+    if (!savedReview) copy.querySelector('#chapter').removeAttribute('data-index')
+    for (const saved of copy.querySelectorAll('#saved-review')) saved.remove()
+    if (savedReview) {
+      validate(packet, savedReview)
+      const saved = document.createElement('script'); saved.id = 'saved-review'; saved.type = 'application/json'; saved.textContent = toScriptJson(savedReview)
+      copy.querySelector('#packet').after(saved)
+    }
+    return '<!doctype html>\n' + copy.outerHTML
+  }
   function choices(parent, title, name, options, selected, update, multiple = false) {
     const field = node('fieldset', undefined, parent); node('legend', title, field)
     options.forEach(([id, text]) => { const label = node('label', undefined, field); const input = node('input', undefined, label); input.type = multiple ? 'checkbox' : 'radio'; input.name = name; input.value = String(id); input.checked = multiple ? selected.includes(id) : selected === id; label.append(document.createTextNode(text)); input.addEventListener('change', () => { update(id, input.checked); save(); if (multiple) render() }) })
   }
   function render() {
     const sample = packet.samples[index]; const answer = review.answers.find(row => row.pairId === sample.pairId)
+    $('participant').textContent = '问卷代号：' + packet.participantCode + ' · 请由同一个人填写此份问卷'
     $('chapter').textContent = sample.genre + ' · 第 ' + sample.chapter + ' 章 · ' + (index + 1) + '/' + packet.samples.length
+    $('chapter').dataset.index = String(index)
     $('previous').disabled = index === 0; $('next').disabled = index === packet.samples.length - 1
     $('profile').replaceChildren()
     choices($('profile'), '你的身份', 'role', [['reader', '读者'], ['editor', '编辑'], ['author', '作者'], ['developer', '参与实现者']], review.role, id => { review.role = id })
@@ -109,19 +147,40 @@ function questionnaireClient(packet, validate) {
     }, true)
     progress()
   }
-  try { const stored = localStorage.getItem(key); if (stored) { const parsed = JSON.parse(stored); validate(packet, parsed); review = parsed; notice('已恢复当前浏览器的进度。') } } catch { notice('未读取到有效的本地进度；可从之前导出的文件恢复。') }
+  try {
+    const saved = $('saved-review')
+    if (saved) {
+      const parsed = JSON.parse(saved.textContent); validate(packet, parsed); review = parsed
+      key += ':' + review.updatedAt
+      notice('已自动恢复这份 HTML 中的答案，可继续填写或直接交回。')
+    }
+  } catch { notice('这份 HTML 中的答案无效，请保留原文件并交给组织者检查。') }
+  try { const stored = localStorage.getItem(key); if (stored) { const parsed = JSON.parse(stored); validate(packet, parsed); review = parsed; notice('已恢复当前浏览器的进度。') } } catch { if (!$('saved-review')) notice('浏览器自动保存不可用；请点击“保存已填写 HTML”保留答案。') }
   $('previous').addEventListener('click', () => { save(); index--; render(); window.scrollTo(0, 0) })
   $('next').addEventListener('click', () => { save(); index++; render(); window.scrollTo(0, 0) })
   $('save').addEventListener('click', save)
-  $('export').addEventListener('click', () => { save(); const url = URL.createObjectURL(new Blob([JSON.stringify(review, null, 2)], { type: 'application/json' })); const link = node('a'); link.href = url; link.download = packet.studyId + '-' + packet.participantCode + '-result.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 5000) })
+  $('save-html').addEventListener('click', () => {
+    save(); downloadFile(questionnaireHtml(review), packet.studyId + '-' + packet.participantCode + '-result.html', 'text/html;charset=utf-8')
+    notice('已发起已填写 HTML 下载，请在下载列表确认。把带 result 的 HTML 文件交回；再次打开即可自动续填。')
+  })
+  $('download-questionnaire').addEventListener('click', () => {
+    downloadFile(questionnaireHtml(), 'StoryForge-' + packet.studyId + '-' + packet.participantCode + '.html', 'text/html;charset=utf-8')
+    notice('已发起空白 HTML 下载。此文件不包含本次答案；交回答案请点击“保存已填写 HTML”。')
+  })
+  $('export').addEventListener('click', () => {
+    save(); downloadFile(JSON.stringify(review, null, 2), packet.studyId + '-' + packet.participantCode + '-result.json', 'application/json')
+    notice('已发起 JSON 备用数据下载。日常交回请使用“保存已填写 HTML”，直接交回这份 HTML 即可。')
+  })
   $('restore').addEventListener('click', () => $('file').click())
   $('file').addEventListener('change', async event => { try { const file = event.target.files[0]; if (!file || file.size > 2_000_000) throw new Error('进度文件缺失或过大'); const parsed = JSON.parse(await file.text()); validate(packet, parsed); review = parsed; save(); render(); notice('已恢复所选进度文件。') } catch (error) { notice('恢复失败：' + error.message + '。当前填写保留。') } finally { event.target.value = '' } })
   render()
 }
 
-export function renderQuestionnaire(packet) {
-  const data = JSON.stringify(packet).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>系统文阅读选择问卷</title><style>body{margin:0;background:#f7f5f0;color:#252825;font:16px/1.65 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:24px}h1{font-size:25px}h2{font-size:19px}section,details{background:white;border:1px solid #dddcd3;border-radius:12px;padding:18px;margin:16px 0}#samples{display:grid;grid-template-columns:1fr 1fr;gap:18px}#samples section{min-width:0}.prose p{white-space:pre-wrap;overflow-wrap:anywhere}.prose small{color:#647265;padding-right:12px;user-select:none}fieldset{border:0;border-bottom:1px solid #ebe9df;padding:12px 0;margin:0}legend{font-weight:600}label{display:inline-flex;align-items:center;gap:8px;margin:5px 16px 5px 0}input{width:18px;height:18px}select,button{font:inherit;border:1px solid #bfc9bf;border-radius:8px;background:white;padding:10px;cursor:pointer}button:disabled{opacity:.45;cursor:default}input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #31684c;outline-offset:3px}nav{position:sticky;bottom:0;background:#f7f5f0ed;border-top:1px solid #ddd;padding:12px;display:flex;flex-wrap:wrap;gap:10px}.notice{color:#38664a;font-size:14px}#progress{font-weight:600}#file{display:none}.preview{padding:12px;border:1px solid #b68320;border-radius:8px;background:#fff6de}@media(max-width:720px){main{padding:14px}#samples{grid-template-columns:1fr}section{padding:14px}label{margin-right:12px}nav{position:static}}</style></head><body><main><h1>系统文阅读选择问卷</h1>${packet.mode === 'preview' ? '<p class="preview">流程预览：使用原创演示文字。本次填写不进入正式质量结论。</p>' : ''}<p>只需选择，无需打字。可随时停下、保存，下次继续。每份问卷有独立代号，请由同一个人填写；不要讨论答案。无法判断可以直接选择。</p><p id="progress" aria-live="polite"></p><details><summary>参与情况（首次填写即可）</summary><div id="profile"></div></details><h2 id="chapter"></h2><div id="samples"></div><div id="questions"></div><p id="notice" role="status" class="notice"></p><nav><button id="previous">上一组</button><button id="next">下一组</button><button id="save">保存进度</button><button id="export">导出结果 / 进度</button><button id="restore">恢复进度</button><input id="file" type="file" accept="application/json,.json" aria-label="选择进度文件"></nav><p>保存仅在当前浏览器；导出的文件才可交回或换设备恢复。问卷不联网，也不自动上传。填写时间不是修稿耗时。</p></main><script id="packet" type="application/json">${data}</script><script>(${questionnaireClient.toString()})(JSON.parse(document.getElementById('packet').textContent),${validateChoiceReview.toString()});</script></body></html>`
+export function renderQuestionnaire(packet, savedReview = null) {
+  const data = scriptJson(packet)
+  if (savedReview) validateChoiceReview(packet, savedReview)
+  const savedData = savedReview ? '<script id="saved-review" type="application/json">' + scriptJson(savedReview) + '</script>' : ''
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>系统文阅读选择问卷</title><style>body{margin:0;background:#f7f5f0;color:#252825;font:16px/1.65 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:24px}h1{font-size:25px}h2{font-size:19px}section,details{background:white;border:1px solid #dddcd3;border-radius:12px;padding:18px;margin:16px 0}#samples{display:grid;grid-template-columns:1fr 1fr;gap:18px}#samples section{min-width:0}.prose p{white-space:pre-wrap;overflow-wrap:anywhere}.prose small{color:#647265;padding-right:12px;user-select:none}fieldset{border:0;border-bottom:1px solid #ebe9df;padding:12px 0;margin:0}legend{font-weight:600}label{display:inline-flex;align-items:center;gap:8px;margin:5px 16px 5px 0}input{width:18px;height:18px}select,button{font:inherit;border:1px solid #bfc9bf;border-radius:8px;background:white;padding:10px;cursor:pointer}button:disabled{opacity:.45;cursor:default}input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #31684c;outline-offset:3px}nav{position:sticky;bottom:0;background:#f7f5f0ed;border-top:1px solid #ddd;padding:12px;display:flex;flex-wrap:wrap;gap:10px}.notice{color:#38664a;font-size:14px}#progress{font-weight:600}#file{display:none}.preview{padding:12px;border:1px solid #b68320;border-radius:8px;background:#fff6de}@media(max-width:720px){main{padding:14px}#samples{grid-template-columns:1fr}section{padding:14px}label{margin-right:12px}nav{padding:10px 0}}</style></head><body><main><h1>系统文阅读选择问卷</h1>${packet.mode === 'preview' ? '<p class="preview">流程预览：使用原创演示文字。本次填写不进入正式质量结论。</p>' : ''}<p>只需选择，无需打字。可随时停下、保存，下次继续。每份问卷有独立代号，请由同一个人填写；不要讨论答案。无法判断可以直接选择。</p><p id="participant"></p><p id="progress" aria-live="polite"></p><details><summary>填写、保存与交回方法</summary><ol><li>下载问卷 HTML 后，用浏览器打开。所有问题只需点选，无需打字。</li><li>中途停下或填完，都点击“保存已填写 HTML”。下载的新文件名带有 result，里面包含你的答案。</li><li>把这份带 result 的 HTML 文件传回群文件即可。</li><li>继续填写时，直接打开已保存的 HTML，答案自动恢复，无需导入。</li></ol><p>浏览器通常会下载一份新的文件，请交回带 result 的已填写文件。手机请用浏览器打开；若群内文件预览不能操作或下载，请使用组织者提供的网页链接。</p></details><details><summary>参与情况（首次填写即可）</summary><div id="profile"></div></details><h2 id="chapter"></h2><div id="samples"></div><div id="questions"></div><p id="notice" role="status" class="notice"></p><details><summary>其它工具（备用）</summary><button id="export">下载结果 / 进度文件</button><button id="save">保存到浏览器</button><button id="restore">恢复进度</button><button id="download-questionnaire">下载问卷 HTML</button><input id="file" type="file" accept="application/json,.json" aria-label="选择进度文件"></details><nav><button id="previous">上一组</button><button id="next">下一组</button><button id="save-html">保存已填写 HTML</button></nav><p>交回或继续填写只需保存这份 HTML，答案包含在文件里。问卷不联网，也不自动上传。填写时间不是修稿耗时。</p></main><script id="packet" type="application/json">${data}</script>${savedData}<script>(${questionnaireClient.toString()})(JSON.parse(document.getElementById('packet').textContent),${validateChoiceReview.toString()},${scriptJson.toString()});</script></body></html>`
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
