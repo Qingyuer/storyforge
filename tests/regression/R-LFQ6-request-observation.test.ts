@@ -56,6 +56,24 @@ describe('LFQ6 · 实际请求参数与正文完成情况', () => {
     expect(bodies.map(body => [body.model, body.temperature, body.max_tokens])).toEqual([['deepseek-chat', 0, 3000], ['deepseek-chat', 0, 3000]])
   })
 
+  it('JSON评审的实际模式进入安全参数证据，不能伪造任意schema或密钥', async () => {
+    const options = { responseFormat: 'json_object' as const }
+    const resolution = resolveRequestConfig(config)
+    const settings = describeResolvedAIRequestSettingsV1(resolution, false, options)
+    expect(settings.parameters.response_format).toEqual({ type: 'json_object' })
+    expect(parseProseRequestSettingsV1(settings)).toEqual(settings)
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      expect(body.stream).toBe(false)
+      expect(body.response_format).toEqual(settings.parameters.response_format)
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"只读报告"}' }, finish_reason: 'stop' }] }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    await chat([{ role: 'user', content: '完整章节' }], config, { contextOverflowPolicy: 'reject' }, undefined, {}, options, resolution)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(() => parseProseRequestSettingsV1({ ...settings, parameters: { response_format: { type: 'json_object', apiKey: 'leak' } } })).toThrow('JSON')
+  })
+
   it('显式范围、单个目标、只设上限、留白及截断区别提示，未自动重发或强制文学结论', () => {
     const range = proseLengthExpectationV1('只写600～900字，签收处停笔', 2500)!
     expect(range).toMatchObject({ min: 600, max: 900, source: 'author' })

@@ -71,6 +71,10 @@ export function describeResolvedAIRequestSettingsV1(
     for (const key of ['temperature', 'max_tokens', 'reasoning_effort', 'thinking']) {
       if (body[key] !== undefined) parameters[key] = body[key]
     }
+    if (body.response_format && typeof body.response_format === 'object'
+      && (body.response_format as { type?: unknown }).type === 'json_object') {
+      parameters.response_format = { type: 'json_object' }
+    }
   }
   return {
     version: 'ai-request-settings-v1', provider: config.provider, model: config.model,

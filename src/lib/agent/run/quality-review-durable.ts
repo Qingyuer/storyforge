@@ -47,7 +47,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   const revision = await captureWorkspaceContentRevisionV1({ scope: input.scope, worldGroupId: input.worldGroupId })
   const config = useAIConfigStore.getState().config
   const resolution = resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId })
-  const settings = describeResolvedAIRequestSettingsV1(resolution, true)
+  const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
   const assembled = await prepareProseGatewayAssemblyV1({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: input.worldGroupId, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, operation: 'review', qualityReview: true, authorRequest: '评审当前完整章节，保留作者场景任务和停笔要求。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
   const request = await buildWholeChapterQualityReviewRequestV1({ mode: input.mode, chapterTitle: chapter.title, chapterText, registeredContext: assembled.text })
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })

@@ -358,7 +358,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 43 个 category。
+共 40 个 category。
 未分类调用: 0 个。动态 category 调用: 38 个。
 
 | category | 触发文件 |
@@ -393,10 +393,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
-| `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:142` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
-| `review.quality` | `src/components/editor/ReviewPanel.tsx:140` |
-| `review.readability` | `src/components/editor/ReviewPanel.tsx:143` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1736` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
@@ -409,7 +406,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ReviewPanel.tsx:170 · ai.start`
+- `src/components/editor/ReviewPanel.tsx:185 · ai.start`
 - `src/lib/adventure/harness.ts:383 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
@@ -505,4 +502,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `119c7e0a`
+生成时间基准:commit `9968f610`

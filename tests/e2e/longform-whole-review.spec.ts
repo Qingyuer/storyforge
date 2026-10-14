@@ -27,7 +27,7 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
   await page.route('https://whole-review.invalid/**', route => {
     requests.push(route.request().postDataJSON())
     const json = { summary: '付款过程需要核对，安静章节可以保留。', strengths: ['保留必要缓冲'], issues: [{ dimension: 'causality', confidence: 'uncertain', quote, start: null, end: null, reason: '没描写付款却记录已收款。', suggestion: '核对收款过程，保留金额和签字人。' }] }
-    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(json) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
   })
   const target = await setup(page)
   for (const mode of ['审校', '表达与重复', '追读力']) {
@@ -37,6 +37,8 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
     await expect(report).toContainText('付款过程需要核对')
     await expect(report).toContainText('第 2 段')
     await expect(report).toContainText(quote)
+    expect(requests[requests.length - 1].stream).toBe(false)
+    expect(requests[requests.length - 1].response_format).toEqual({ type: 'json_object' })
     expect(requests[requests.length - 1].messages[1].content).toContain(original)
     expect(requests[requests.length - 1].messages[1].content).toContain('【正文结束】')
   }
@@ -71,7 +73,7 @@ test('假引文拒绝报告，保存原响应且不自动重发；原稿不改',
   await page.route('https://whole-review.invalid/**', route => {
     calls++
     const json = { summary: '虚构意见', strengths: [], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '不存在的台词', start: null, end: null, reason: '猜测', suggestion: '不应采用' }] }
-    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(json) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
   })
   await setup(page)
   await page.getByRole('button', { name: '审校', exact: true }).click()
@@ -91,4 +93,36 @@ test('小窗口不能装入全章时零请求，不拿前段充当全文报告',
   await expect(page.getByText(/上下文窗口不足|评审响应未完成/)).toBeVisible()
   expect(calls).toBe(0)
   await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
+})
+
+test('提供商503只发送一次，失败不能生成有效报告', async ({ page }) => {
+  let calls = 0
+  await page.route('https://whole-review.invalid/**', route => { calls++; return route.fulfill({ status: 503, body: '暂时不可用' }) })
+  await setup(page)
+  await page.getByRole('button', { name: '审校', exact: true }).click()
+  await page.getByRole('button', { name: '开始检测', exact: true }).click()
+  await expect(page.getByText(/暂时不可用|503/)).toBeVisible()
+  expect(calls).toBe(1)
+  await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
+  await expect(page.locator('.tiptap-editor')).toContainText(quote)
+})
+
+test('评审中关闭面板停止请求，刷新无有效报告也不自动重发', async ({ page }) => {
+  let calls = 0
+  await page.route('https://whole-review.invalid/**', async route => {
+    calls++
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: '晚到结果', strengths: [], issues: [] }) }, finish_reason: 'stop' }] }) }).catch(() => undefined)
+  })
+  await setup(page)
+  await page.getByRole('button', { name: '审校', exact: true }).click()
+  await page.getByRole('button', { name: '开始检测', exact: true }).click()
+  await expect.poll(() => calls).toBe(1)
+  await page.getByRole('button', { name: '关闭质量审校', exact: true }).click()
+  await page.reload()
+  await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await page.getByRole('button', { name: '审校', exact: true }).click()
+  await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
+  await expect(page.locator('.tiptap-editor')).toContainText(quote)
+  expect(calls).toBe(1)
 })

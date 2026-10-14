@@ -110,7 +110,9 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const received = input.raw.trim()
   const fence = /^```(?:json)?[\t ]*\r?\n([\s\S]*)\r?\n```$/.exec(received)
   const raw = fence ? fence[1].trim() : received
-  const root = record(JSON.parse(raw), '评审结果')
+  let decoded: unknown
+  try { decoded = JSON.parse(raw) } catch { throw new Error('评审响应格式不完整或无效，不能形成报告。') }
+  const root = record(decoded, '评审结果')
   keys(root, ['summary', 'strengths', 'issues'], '评审结果')
   const summary = text(root.summary, 'summary', 3000)
   if (!Array.isArray(root.strengths) || root.strengths.length > 20 || !Array.isArray(root.issues) || root.issues.length > 40) throw new Error('评审列表超出范围或格式无效。')

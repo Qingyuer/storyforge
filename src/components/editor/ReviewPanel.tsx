@@ -26,6 +26,8 @@ import { runWholeChapterQualityReviewV1, readLatestWholeChapterQualityReviewV1, 
 import type { QualityReviewModeV1 } from '../../lib/prose/quality-review'
 import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-revision'
 import { db } from '../../lib/db/schema'
+import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
+import type { ChatResult } from '../../lib/ai/client'
 
 interface Props {
   projectId: number
@@ -93,6 +95,8 @@ export default function ReviewPanel(props: Props) {
   const [qualityError, setQualityError] = useState('')
   const qualityGeneration = useRef(0)
   const qualityTarget = useRef('')
+  const qualityAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => qualityAbort.current?.abort(), [projectId, chapterId])
   qualityTarget.current = `${projectId}:${chapterId}`
   const [revisionHash, setRevisionHash] = useState('')
   useEffect(() => {
@@ -127,24 +131,35 @@ export default function ReviewPanel(props: Props) {
   }, [projectId, chapterId, chapterContent, qualityRunning, revisionHash])
 
   const handleRunQuality = async () => {
+    if (qualityAbort.current) return
+    const controller = new AbortController()
+    qualityAbort.current = controller
     const generation = ++qualityGeneration.current
     const target = qualityTarget.current
     setQualityError(''); setQualityRunning(true)
     try {
       if (outlineNodeId == null) throw new Error('全文评审缺少目标章纲。')
       await props.onBeforeConsistencyRun?.()
-      if (qualityTarget.current !== target) return
+      if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
       const result = await runWholeChapterQualityReviewV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode,
-        call: (messages, resolution, streamResult) => mode === 'quality'
-          ? ai.start(messages, undefined, { formalEntryId: 'prose.review.quality', category: 'review.quality', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' }, resolution, streamResult)
-          : mode === 'style'
-            ? ai.start(messages, undefined, { formalEntryId: 'prose.review.anti-ai', category: 'review.anti-ai', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' }, resolution, streamResult)
-            : ai.start(messages, undefined, { formalEntryId: 'prose.review.readability', category: 'review.readability', projectId, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none' }, resolution, streamResult),
+        call: async (messages, resolution, streamResult) => {
+          const result: ChatResult = {}
+          const options = { responseFormat: 'json_object' as const }
+          const raw = mode === 'quality'
+            ? await executeRegisteredAIEntryV1('prose.review.quality', messages, resolution.config, { category: 'review.quality', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
+            : mode === 'style'
+              ? await executeRegisteredAIEntryV1('prose.review.anti-ai', messages, resolution.config, { category: 'review.anti-ai', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
+              : await executeRegisteredAIEntryV1('prose.review.readability', messages, resolution.config, { category: 'review.readability', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
+          streamResult.usage = result.usage
+          streamResult.finishReason = result.finishReason
+          streamResult.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'
+          return raw
+        },
       })
       if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityReports(value => ({ ...value, [mode]: result }))
-    } catch (error) { if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityError(error instanceof Error ? error.message : '全文评审未完成。') }
-    finally { setQualityRunning(false) }
+    } catch (error) { if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityError(controller.signal.aborted ? '评审已停止，未自动重发。' : error instanceof Error ? error.message : '全文评审未完成。') }
+    finally { if (qualityAbort.current === controller) qualityAbort.current = null; setQualityRunning(false) }
   }
 
   const handleRunConsistency = async () => {
@@ -222,7 +237,7 @@ export default function ReviewPanel(props: Props) {
             {ai.isStreaming || consistencyRunning || qualityRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
             {ai.isStreaming || consistencyRunning || qualityRunning ? '检测中...' : '开始检测'}
           </button>
-          <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary rounded">
+          <button aria-label="关闭质量审校" onClick={() => { qualityAbort.current?.abort(); onClose() }} className="p-1 text-text-muted hover:text-text-primary rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -268,7 +283,7 @@ export default function ReviewPanel(props: Props) {
             )}
           </div>
         )}
-        {(ai.error || consistencyError || qualityError) && (
+        {((activeTab === 'consistency' && ai.error) || consistencyError || qualityError) && (
           <div className="text-xs text-error bg-error/10 px-3 py-2 rounded-lg mb-3">
             {qualityError || consistencyError || ai.error}
           </div>
@@ -280,7 +295,7 @@ export default function ReviewPanel(props: Props) {
           </div>
         )}
 
-        {ai.isStreaming && (
+        {(ai.isStreaming || qualityRunning) && (
           <div className="flex items-center justify-center py-8 gap-2 text-text-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
             AI 正在分析...

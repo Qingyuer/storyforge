@@ -28,6 +28,8 @@ export function parseProseRequestSettingsV1(value: unknown): AIRequestSettingsV1
       if (!['minimal', 'low', 'medium', 'high'].includes(String(value))) throw new Error('正文推理参数无效。')
     } else if (key === 'thinking') {
       if (!exact(value, ['type']) || !['enabled', 'disabled'].includes(String((value as { type: string }).type))) throw new Error('正文推理模式无效。')
+    } else if (key === 'response_format') {
+      if (!exact(value, ['type']) || (value as { type: unknown }).type !== 'json_object') throw new Error('正文JSON输出模式无效。')
     } else throw new Error(`正文参数证据禁止保存 ${key}。`)
   }
   if (row.transport === 'codex-bridge' && Object.keys(row.parameters).length) throw new Error('Codex 连接不能冒充 HTTP 参数。')
