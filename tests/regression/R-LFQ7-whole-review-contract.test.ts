@@ -52,4 +52,19 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     expect(await verifyWholeChapterQualityReviewV1(report, text, [{ role: 'user', content: text }])).toBe(false)
     expect(await verifyWholeChapterQualityReviewV1({ ...report, coverage: { ...report.coverage, end: 8 } }, text, request.messages)).toBe(false)
   })
+
+  it('只归一化完整JSON围栏，缺引文或夹带解释仍拒绝；历史v1报告继续验签', async () => {
+    const chapterText = '陈禾接过一百二十元，数好后把收条交还。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '交清', chapterText, registeredContext: '' })
+    const raw = JSON.stringify({ summary: '已描写实际收款过程', strengths: ['行动具体'], issues: [] })
+    const base = { raw, mode: 'quality' as const, chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete' as const, settings }
+    const fenced = await parseWholeChapterQualityReviewV1({ ...base, raw: '```json\n' + raw + '\n```' })
+    expect(await verifyWholeChapterQualityReviewV1(fenced, chapterText, request.messages)).toBe(true)
+    await expect(parseWholeChapterQualityReviewV1({ ...base, raw: '说明\n```json\n' + raw + '\n```' })).rejects.toThrow()
+    await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify({ summary: '猜测', strengths: [], issues: [{ ...issue('', null, null), quote: null }] }) })).rejects.toThrow('quote')
+    const historical = await parseWholeChapterQualityReviewV1({ ...base, promptVersion: 'whole-chapter-quality-review-v1' })
+    expect(await verifyWholeChapterQualityReviewV1(historical, chapterText, request.messages)).toBe(true)
+    expect(request.messages[0].content).toContain('只有start/end允许同时为null')
+    expect(request.messages[0].content).toContain('章纲、细纲与作者要求是计划')
+  })
 })

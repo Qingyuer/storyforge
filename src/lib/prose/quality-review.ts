@@ -3,7 +3,8 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v1'
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v2'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 export type QualityReviewModeV1 = 'quality' | 'style' | 'readability'
 export const QUALITY_REVIEW_DIMENSIONS_V1 = ['expectation', 'agency', 'causality', 'system-payoff', 'voice', 'repetition', 'pace', 'continuity'] as const
 export type QualityReviewDimensionV1 = typeof QUALITY_REVIEW_DIMENSIONS_V1[number]
@@ -27,7 +28,7 @@ export interface QualityReviewArtifactV1 {
   targetTextHash: string
   /** Coverage establishes full input delivery, not human or model attention. */
   coverage: { kind: 'whole-input'; start: 0; end: number; utf16Length: number; paragraphs: number; requestHash: string }
-  reviewer: { provider: string; model: string; promptVersion: typeof QUALITY_REVIEW_PROMPT_VERSION_V1; correlatedJudge: boolean; generatorIdentity: { provider: string; model: string } | null; settings: AIRequestSettingsV1 }
+  reviewer: { provider: string; model: string; promptVersion: typeof REVIEW_PROMPT_VERSIONS[number]; correlatedJudge: boolean; generatorIdentity: { provider: string; model: string } | null; settings: AIRequestSettingsV1 }
   issues: QualityReviewIssueV1[]
   summary: string
   strengths: string[]
@@ -65,6 +66,8 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
 维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
 缓冲、安静、留白、角色有意隐瞒和舒缓叙述不自动构成问题。不强制每章高潮、冲突或悬念，不将高频词等同于机器写作，不输出AI概率、平台合格结论或未校准的质量分。
 每个问题必须引用正文中的逐字片段。唯一引文的start/end填写null，由系统定位；重复引文才需给出从0开始的精确UTF16 start/end。代码会检查引文与位置，不能猜测。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
+quote必须是从正文复制的一段连续、非空字符串，绝不能填写null或改写/拼接引文。涉及多处时选一个唯一片段作定位锚点，其它依据与不确定性写在reason中；只有start/end允许同时为null。不能找到锚点的猜测不要加入issues。
+章纲、细纲与作者要求是计划，不能据此认定正文已经完成动作或兑现。以正文实际描写为准；记账、总结或系统提示不能自动替代应有的关键过程。
 输出一个JSON对象，不要围栏或解释：
 {"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","quote":"正文逐字片段","start":null,"end":null,"reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`
@@ -85,12 +88,19 @@ export async function parseWholeChapterQualityReviewV1(input: {
   settings: AIRequestSettingsV1
   generatorIdentity?: { provider: string; model: string }
   createdAt?: number
+  promptVersion?: typeof REVIEW_PROMPT_VERSIONS[number]
 }): Promise<QualityReviewArtifactV1> {
   if (!Object.prototype.hasOwnProperty.call(labels, input.mode)) throw new Error('评审模式无效。')
   if (input.responseCompletion !== 'complete') throw new Error('评审响应未完成，不能显示全文报告。')
   if (!input.messages.some(message => message.content.includes(input.chapterText))) throw new Error('实际评审请求缺少完整正文。')
   if (!HASH.test(input.targetTextHash) || input.targetTextHash !== await hashCanonicalValue(input.chapterText)) throw new Error('报告目标正文已变化。')
-  const raw = input.raw.trim()
+  const promptVersion = input.promptVersion ?? QUALITY_REVIEW_PROMPT_VERSION_V1
+  if (!REVIEW_PROMPT_VERSIONS.includes(promptVersion)) throw new Error('评审请求版本无效。')
+  // Only strip a complete enclosing JSON fence. Never extract guessed fields,
+  // repair quotations, remove prose, or dispatch another model request.
+  const received = input.raw.trim()
+  const fence = /^```(?:json)?[\t ]*\r?\n([\s\S]*)\r?\n```$/.exec(received)
+  const raw = fence ? fence[1].trim() : received
   const root = record(JSON.parse(raw), '评审结果')
   keys(root, ['summary', 'strengths', 'issues'], '评审结果')
   const summary = text(root.summary, 'summary', 3000)
@@ -125,7 +135,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const body: Omit<QualityReviewArtifactV1, 'artifactHash'> = {
     version: 1, type: 'whole-chapter-quality-review', mode: input.mode, targetTextHash: input.targetTextHash,
     coverage: { kind: 'whole-input', start: 0, end: input.chapterText.length, utf16Length: input.chapterText.length, paragraphs: input.chapterText.split(/\n\s*\n/).filter(value => value.trim()).length, requestHash: await hashCanonicalValue(input.messages) },
-    reviewer: { provider: settings.provider, model: settings.model, promptVersion: QUALITY_REVIEW_PROMPT_VERSION_V1,
+    reviewer: { provider: settings.provider, model: settings.model, promptVersion,
       correlatedJudge: !input.generatorIdentity || (input.generatorIdentity.provider === settings.provider && input.generatorIdentity.model === settings.model), generatorIdentity: input.generatorIdentity ? { ...input.generatorIdentity } : null, settings },
     issues, summary, strengths, createdAt,
   }
@@ -138,7 +148,7 @@ export async function verifyWholeChapterQualityReviewV1(artifact: QualityReviewA
     if (artifact.version !== 1 || artifact.type !== 'whole-chapter-quality-review' || artifactHash !== await hashCanonicalValue(body)
       || artifact.targetTextHash !== await hashCanonicalValue(chapterText) || artifact.coverage.start !== 0 || artifact.coverage.end !== chapterText.length || artifact.coverage.utf16Length !== chapterText.length) return false
     const raw = JSON.stringify({ summary: artifact.summary, strengths: artifact.strengths, issues: artifact.issues.map(({ dimension, confidence, quote, start, end, reason, suggestion }) => ({ dimension, confidence, quote, start, end, reason, suggestion })) })
-    const reparsed = await parseWholeChapterQualityReviewV1({ raw, mode: artifact.mode, chapterText, targetTextHash: artifact.targetTextHash, messages, responseCompletion: 'complete', settings: artifact.reviewer.settings, ...(artifact.reviewer.generatorIdentity ? { generatorIdentity: artifact.reviewer.generatorIdentity } : {}), createdAt: artifact.createdAt })
+    const reparsed = await parseWholeChapterQualityReviewV1({ raw, mode: artifact.mode, chapterText, targetTextHash: artifact.targetTextHash, messages, responseCompletion: 'complete', settings: artifact.reviewer.settings, promptVersion: artifact.reviewer.promptVersion, ...(artifact.reviewer.generatorIdentity ? { generatorIdentity: artifact.reviewer.generatorIdentity } : {}), createdAt: artifact.createdAt })
     return reparsed.artifactHash === artifact.artifactHash
   } catch { return false }
 }

@@ -3029,7 +3029,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '全章阅读质量建议',
     owner: 'prose-agent',
-    promptVersion: 'whole-chapter-quality-review-v1',
+    promptVersion: 'whole-chapter-quality-review-v2',
     executionMode: 'review',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
