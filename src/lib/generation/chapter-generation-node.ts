@@ -37,10 +37,9 @@ export function createChapterGenerationNode(input: {
     editableInput: true,
     assembleInput: messages => messages.map(message => ({ ...message })),
     run: async messages => {
-      const meta = { formalEntryId: operation === 'generate' ? 'prose.chapter.generate' : 'prose.chapter.continue', category, projectId, contextOverflowPolicy: 'reject' as const, ...modelOptions }
-      const output = await (input.frozenResolution
-        ? ai.start(messages, undefined, { ...meta, category: category }, input.frozenResolution, input.streamResult)
-        : ai.start(messages, undefined, { ...meta, category: category }))
+      const output = category === 'chapter.content'
+        ? await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject', ...modelOptions }, input.frozenResolution, input.streamResult)
+        : await ai.start(messages, undefined, { formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject', ...modelOptions }, input.frozenResolution, input.streamResult)
       const completion = input.streamResult?.completion
       if (completion && completion !== 'complete') throw new InterruptedChapterGenerationErrorV1(output, completion)
       return output

@@ -18,7 +18,7 @@
 | `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
 | `outline.chapter` | 1 | 内置-章节大纲展开 | 将单卷展开为 15-25 章的章节大纲。 | `volumeTitle` `volumeSummary` `worldContext` `prevVolumeSummary` `characterContext` `worldRulesContext` `userHint` |
 | `chapter.content` | 22 | 内置-长篇连载（默认） | 通用男频网文风格的章节正文生成，支持基调/节奏/字数三个可调参数。 | `chapterTitle` `chapterSummary` `worldContext` `characters` `previousChapterEnding` `worldRulesContext` `userHint` |
-| `chapter.continue` | 6 | 内置-章节续写 | 从已有正文末尾继续往下写约 1000-2000 字。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
+| `chapter.continue` | 6 | 内置-章节续写 | 从已有正文末尾继续写，按作者指定篇幅与停笔点收尾。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
 | `chapter.memory` | 1 | 内置-章节连续性记忆 | 一次调用同时提取章节摘要、下一章承接 handoff 与计划正文对账；引文 offset 由系统回查，不信任模型位置。 | `chapterTitle` `chapterPlan` `nextChapterPlan` `chapterText` |
 | `chapter.polish` | 1 | 内置-文本润色 | 按用户指令润色文本，保持原意不变。 | `instruction` `text` |
 | `chapter.expand` | 1 | 内置-文本扩写 | 将文本扩展丰富，增加细节、心理与环境，情节走向不变。 | `userHint` `text` |
@@ -358,8 +358,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 41 个 category。
-未分类调用: 0 个。动态 category 调用: 40 个。
+共 43 个 category。
+未分类调用: 0 个。动态 category 调用: 38 个。
 
 | category | 触发文件 |
 |---|---|
@@ -368,6 +368,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
+| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
+| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1706` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1684` |
@@ -435,8 +437,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/comic/durable-production.ts:270 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
-- `src/lib/generation/chapter-generation-node.ts:42 · ai.start`
-- `src/lib/generation/chapter-generation-node.ts:43 · ai.start`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
 - `src/lib/node-authoring/executor.ts:431 · chat`
@@ -505,4 +505,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `744d84b9`
+生成时间基准:commit `4af3ad95`

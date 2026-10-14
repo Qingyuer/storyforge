@@ -105,7 +105,7 @@ test('streamed scene details survive a burst of chunks and reload before adoptio
 
 test('step prose honors the author request in the wire prompt and adopts edited text before refresh', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-prose.invalid/v1', model: 'step-test', maxTokens: 4000, temperature: 0 }))
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-prose.invalid/v1', model: 'step-test', contextWindow: 64000, maxTokens: 4000, temperature: 0 }))
   })
   const generated = '沈砚取出铜箔，核对上面的日期，藏好维修本。'.repeat(12)
     + '\n门牌写着 <海关钟楼>，旁注保留字面 &lt;潮汐&gt;。'
@@ -211,7 +211,7 @@ test('step prose honors the author request in the wire prompt and adopts edited 
 
 test('older chapter memory settles before prose freezes its context and remains adoptable', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-memory.invalid/v1', model: 'step-test', maxTokens: 4000, temperature: 0 }))
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-memory.invalid/v1', model: 'step-test', contextWindow: 64000, maxTokens: 4000, temperature: 0 }))
   })
   const memory = JSON.stringify({ summary: '沈砚将铜箔藏进维修本。', handoff: {
     finalScene: { location: '钟楼', activeCharacters: ['沈砚'], lastAction: '藏好铜箔' },

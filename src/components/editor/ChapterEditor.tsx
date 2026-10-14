@@ -1436,7 +1436,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             retryable: !(failure.error instanceof InterruptedChapterGenerationErrorV1),
           })
           proseSnapshotRef.current = snapshot
-          if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
+          if (failure.error instanceof InterruptedChapterGenerationErrorV1 && failure.error.completion !== 'failed') {
             restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message })
           }
         },

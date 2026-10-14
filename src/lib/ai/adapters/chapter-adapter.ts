@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../../types'
+import type { ChatMessage, PromptTemplate } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import {
@@ -6,6 +6,7 @@ import {
   CONTINUITY_CORE_START,
 } from '../chapter-memory/continuity-envelope'
 import { appendSimplifiedChineseOutputConstraint } from './prompt-guards'
+import { proseLengthExpectationV1 } from '../../prose/length-observation'
 
 export interface RunOptions {
   parameterValues?: Record<string, unknown>
@@ -116,6 +117,22 @@ function injectContinuityEnvelope(
   ))
 }
 
+/** Align the managed length variable with this request, without changing the
+ * stored template, literal prose, or the author's optional-parameter choices. */
+function authorLengthOptionsV1(template: PromptTemplate, userHint: string | undefined, options: RunOptions | undefined): RunOptions | undefined {
+  const length = proseLengthExpectationV1(userHint ?? '')
+  const parameterKey = template.moduleKey === 'chapter.continue' ? 'continueLength' : 'chapterLength'
+  const parameter = template.parameters?.find(item => item.key === parameterKey)
+  if (!length || !parameter) return options
+  const current = options?.parameterValues ? options.parameterValues[parameterKey] : parameter.default
+  if (parameter.optional && (current === undefined || current === null || current === '' || current === false || current === 0)) return options
+  const value = length.target ?? (length.min !== null && length.max !== null
+    ? `${length.min}～${length.max}` : length.min !== null ? `≥${length.min}` : `≤${length.max}`)
+  const parameterValues = options?.parameterValues ? { ...options.parameterValues }
+    : Object.fromEntries((template.parameters ?? []).map(item => [item.key, item.default]))
+  return { ...options, parameterValues: { ...parameterValues, [parameterKey]: value } }
+}
+
 export function buildChapterContentRequestV1(
   chapterTitle: string,
   chapterSummary: string,
@@ -138,7 +155,7 @@ export function buildChapterContentRequestV1(
     previousChapterEnding: options?.continuity ? '（见文末连续性保护块）' : (previousChapterEnding || '（这是第一章）'),
     worldRulesContext: worldRulesContext || '',
     userHint,
-  }, options)
+  }, authorLengthOptionsV1(tpl, userHint, options))
   const envelope = buildContinuityEnvelope({
     task: `${chapterTitle}\n${chapterSummary}`,
     continuity: options?.continuity,
@@ -173,7 +190,7 @@ export function buildContinueRequestV1(
     worldContext: safeWorldContext || '（暂无）',
     existingContent: existingContent.slice(-3000),
     userHint,
-  }, options)
+  }, authorLengthOptionsV1(tpl, userHint, options))
   const envelope = buildContinuityEnvelope({
     task: chapterSummary,
     continuity: options?.continuity,

@@ -96,6 +96,35 @@ test('输出上限停止留下明确提示，刷新保留原候选，不自动�
   await expect(page.locator('.tiptap-editor')).toBeEmpty()
 })
 
+test('默认模板实际请求按本轮600～900字渲染，不再并存2500字，候选仍按原链刷新采纳', async ({ page }) => {
+  const requests: Array<{ messages: Array<{ content: string }> }> = []
+  const output = generated.repeat(2)
+  await page.route('https://prose-handoff.invalid/**', route => {
+    requests.push(route.request().postDataJSON())
+    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: output }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
+  })
+  await prepare(page)
+  await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { usePromptStore } = await importer('/storyforge/src/stores/prompt.ts')
+    const template = usePromptStore.getState().templates.find((item: any) => item.moduleKey === 'chapter.content' && item.scope === 'system')
+    await usePromptStore.getState().setActive(template.id)
+  })
+  await page.getByPlaceholder('自定义指令...', { exact: true }).fill('写600至900字。签收后停笔。')
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
+  await expect(draft).toHaveValue(output)
+  const system = requests[0].messages[0].content.replace(/\s/g, '')
+  expect(system).toContain('字数约600～900字/章')
+  expect(system).not.toContain('字数约2500字/章')
+  expect(requests).toHaveLength(1)
+  await page.reload()
+  await expect(draft).toHaveValue(output)
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  await expect(draft).toHaveCount(0)
+  await expect(page.locator('.tiptap-editor')).toContainText('最后签收并关灯')
+})
+
 test('连接结束缺少完成确认时保留片段及证据，刷新恢复只读结果，不能采纳或自动重发', async ({ page }) => {
   let calls = 0
   const fragment = '他收好第一把工具，正要转身。'

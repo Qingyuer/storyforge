@@ -76,6 +76,11 @@ describe('LFQ6 · 共用正文任务与文风控制', () => {
     await explicit.runRaw(explicit.prepared.messages)
     expect(bodies[1].temperature).toBe(0.2)
     expect(bodies[1].max_tokens).toBe(4000)
+    await db.chapters.update(f.chapterId, { content: '<p>两人开始清点工具，店里还亮着灯。</p>', wordCount: 18 })
+    const continuation = await prepareProseCopilot({ ...input, skillId: 'prose.continue', authorRequest: '续写收店，在关灯处停笔' })
+    const continuationWire = continuation.prepared.messages.map(item => item.content).join('\n').replace(/\s/g, '')
+    expect(continuationWire).toContain('续写篇幅501字')
+    expect(continuationWire).not.toContain('1000-2000')
   })
 
   it('默认章法允许缓冲和明确停笔；自有模板与显式关闭可选参数仍保留', () => {

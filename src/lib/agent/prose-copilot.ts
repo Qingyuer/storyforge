@@ -374,7 +374,7 @@ function buildProseRequest(input: ProseCopilotInput): ChapterPromptRequestV1 {
   const targetWordCount = Number(input.parameterValues?.wordCount)
   const parameterValues = input.parameterValues ? { ...input.parameterValues } : undefined
   if (parameterValues && Object.prototype.hasOwnProperty.call(parameterValues, 'wordCount')) {
-    parameterValues.chapterLength = Number.isFinite(targetWordCount) && targetWordCount > 0 ? Math.floor(targetWordCount) : ''
+    parameterValues[input.operation === 'continue' ? 'continueLength' : 'chapterLength'] = Number.isFinite(targetWordCount) && targetWordCount > 0 ? Math.floor(targetWordCount) : ''
   }
   const wordCountHint = Number.isFinite(targetWordCount) && targetWordCount > 0
     ? `\n\n【节点字数目标】正文候选尽量接近 ${Math.floor(targetWordCount)} 字。`

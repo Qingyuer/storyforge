@@ -21,24 +21,25 @@ export interface ProseLengthObservationV1 {
  * tolerance; literary quality and acceptance remain author decisions. */
 export function proseLengthExpectationV1(authorRequest: string, parameter?: unknown): ProseLengthExpectationV1 | null {
   const valid = (number: number) => Number.isSafeInteger(number) && number > 0 && number <= 200_000
+  // Only explicit request clauses are length controls. A character's letter,
+  // a quotation or a report about a previous chapter is narrative input.
+  const leading = '(?:^|[。！？\\n，,；;])\\s*(?:请\\s*)?(?:(?:本轮|本章|正文|这章|章节)\\s*(?:请\\s*)?)?'
+  const declaration = '(?:(?:字数|篇幅|目标字数|目标篇幅|目标|长度)(?:\\s|[:：]|请|为|是|要求|控制在|约|大约){0,6}|(?:只写|续写|写|生成)(?:\\s|约|大约|大概|一段|一章|正文|本章|总计|一共){0,6})'
+  const expression = (body: string, required = false) => new RegExp(leading + (required ? declaration : `(?:${declaration})?`) + '\\s*' + body, 'g')
   const lastMatch = (expression: RegExp) => {
-    const matches = [...authorRequest.matchAll(expression)].filter(match => {
-      const preceding = authorRequest.slice(Math.max(0, (match.index ?? 0) - 8), match.index)
-      return !/(?:不要|不准|不能|别|上章|上一章|原稿|之前|昨天)\s*$/.test(preceding)
-        && !/^(?:写|生成)(?:了|过)/.test(match[0])
-    })
+    const matches = [...authorRequest.matchAll(expression)]
     return matches[matches.length - 1]
   }
-  const range = lastMatch(/(\d+)\s*(?:[-~～—]|到|至)\s*(\d+)\s*字/g)
+  const range = lastMatch(expression('(\\d+)\\s*(?:[-~～—]|到|至)\\s*(\\d+)\\s*字'))
   if (range) {
     const min = Number(range[1]); const max = Number(range[2])
     if (valid(min) && valid(max) && min <= max) return { version: 1, source: 'author', min, max, target: null }
   }
-  const cap = lastMatch(/(?:不超过|不要超过|不得超过|最多|至多)\s*(\d+)\s*字/g)
+  const cap = lastMatch(expression('(?:不超过|不要超过|不得超过|最多|至多)\\s*(\\d+)\\s*字'))
   if (cap && valid(Number(cap[1]))) return { version: 1, source: 'author', min: null, max: Number(cap[1]), target: null }
-  const floor = lastMatch(/(?:不少于|至少|最低)\s*(\d+)\s*字/g)
+  const floor = lastMatch(expression('(?:不少于|至少|最低)\\s*(\\d+)\\s*字'))
   if (floor && valid(Number(floor[1]))) return { version: 1, source: 'author', min: Number(floor[1]), max: null, target: null }
-  const targetMatch = lastMatch(/(?:只写|续写|写|生成|字数|篇幅|目标)[^。！？\n\d]{0,8}(\d+)\s*字/g)
+  const targetMatch = lastMatch(expression('(\\d+)\\s*字(?!\\s*的(?:信|纸条|短信|标语))', true))
   const number = targetMatch ? Number(targetMatch[1]) : Number(parameter)
   if (!valid(number)) return null
   return { version: 1, source: targetMatch ? 'author' : 'parameter', min: Math.max(1, Math.floor(number * 0.8)), max: Math.ceil(number * 1.2), target: number }

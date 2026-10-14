@@ -432,7 +432,7 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
     moduleKey: 'chapter.continue',
     promptType: 'continue',
     name: '内置-章节续写',
-    description: '从已有正文末尾继续往下写约 1000-2000 字。',
+    description: '从已有正文末尾继续写，按作者指定篇幅与停笔点收尾。',
     systemPrompt: CHAPTER_SYSTEM,
     userPromptTemplate: `请续写以下小说正文，保持风格和情节连贯：
 
@@ -441,7 +441,7 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
 世界观摘要：
 {{worldContext}}
 
-已有正文（请从最后继续写，约 1000-2000 字）：
+已有正文（请从最后继续写{{#if usesContinueLength}}，续写篇幅 {{continueLength}} 字{{/if}}）：
 ---
 {{existingContent}}
 ---{{#if userHint}}
