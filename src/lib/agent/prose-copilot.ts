@@ -6,7 +6,7 @@ import { buildChapterContentPrompt, buildContinuePrompt } from '../ai/adapters/c
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
-import { assertWorkspaceContentRevisionFreshV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
+import { verifyWorkspaceContentRevisionV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
 import type {
   GenerationGateIssue,
   GenerationNode,
@@ -151,9 +151,20 @@ const MIN_PROSE_CHARS = 80
 const MAX_PROSE_CHARS = 200_000
 
 export class ProseCopilotStaleError extends Error {
-  constructor() {
-    super('目标章节或正文已在候选生成后发生变化。为保护作者手稿，请重新生成候选。')
+  constructor(message = '目标章节或正文已在候选生成后发生变化。为保护作者手稿，请重新生成候选。') {
+    super(message)
     this.name = 'ProseCopilotStaleError'
+  }
+}
+
+async function assertProseContentRevisionFreshV1(
+  frozen: WorkspaceContentRevisionVectorV1 | undefined,
+  input: { scope: WorkspaceScope; worldGroupId: number | null },
+): Promise<void> {
+  if (!frozen) return
+  const result = await verifyWorkspaceContentRevisionV1(frozen, input)
+  if (!result.fresh) {
+    throw new ProseCopilotStaleError(`候选生成后项目内容已变化，必须重新生成。变化表：${result.changedTables.join('、') || '未知'}`)
   }
 }
 
@@ -424,7 +435,7 @@ async function adoptCandidate(input: {
       ...(input.snapshot.contentRevision ? contentRevisionTableSpecsV1().map(spec => spec.table) : []),
     ),
     async () => {
-      if (input.snapshot.contentRevision) await assertWorkspaceContentRevisionFreshV1(input.snapshot.contentRevision, { scope: workspaceScope, worldGroupId: input.worldGroupId })
+      await assertProseContentRevisionFreshV1(input.snapshot.contentRevision, { scope: workspaceScope, worldGroupId: input.worldGroupId })
       const current = await readSnapshot(
         workspaceScope,
         input.snapshot,
@@ -615,7 +626,7 @@ export async function prepareProseCopilot(input: {
     signal: input.signal,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
-  await assertWorkspaceContentRevisionFreshV1(snapshot.contentRevision, { scope, worldGroupId })
+  await assertProseContentRevisionFreshV1(snapshot.contentRevision, { scope, worldGroupId })
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
   const inputState = projectContextGatewayInputStateV1(
     skill,
@@ -952,7 +963,7 @@ export function createProseCopilotNode(
       return { status: issues.length ? 'blocked' : 'pass', issues }
     },
     adopt: async output => {
-      if (input.snapshot.contentRevision) await assertWorkspaceContentRevisionFreshV1(input.snapshot.contentRevision, { scope: input.scope, worldGroupId: input.worldGroupId })
+      await assertProseContentRevisionFreshV1(input.snapshot.contentRevision, { scope: input.scope, worldGroupId: input.worldGroupId })
       const current = await readCurrent()
       if (!sameSnapshot(current, input.snapshot)) throw new ProseCopilotStaleError()
       return save(parseProseCandidateDraft(output))
