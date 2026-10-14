@@ -27,7 +27,7 @@ import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-re
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
-import { observeDuplicatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
+import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
@@ -3249,10 +3249,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
-          {!ai.isStreaming && proseCandidate && (ai.operation === 'generate' || ai.operation === 'continue') && observeDuplicatedProseFrameV1(ai.output) && <div role="alert" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">
-            <p>{observeDuplicatedProseFrameV1(ai.output)!.message}</p>
+          {!ai.isStreaming && proseCandidate && (ai.operation === 'generate' || ai.operation === 'continue') && observeSeparatedProseFrameV1(ai.output) && <div role="alert" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">
+            <p>{observeSeparatedProseFrameV1(ai.output)!.message}</p>
             <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => {
-              const frame = observeDuplicatedProseFrameV1(ai.output)
+              const frame = observeSeparatedProseFrameV1(ai.output)
               if (frame) restoreAI({ output: ai.output.slice(frame.afterSeparator).trim(), operation: ai.operation })
             }}>保留分隔后的正文供核对</button>
           </div>}

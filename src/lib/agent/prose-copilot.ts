@@ -6,7 +6,7 @@ import { buildChapterContentRequestV1, buildContinueRequestV1, type ChapterPromp
 import { chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1, type ChatResult, type AIRequestSettingsV1 } from '../ai/client'
 import { proseRenderedRequestV1, type ProseRenderedRequestV1 } from '../prose/request-evidence'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../prose/length-observation'
-import { observeDuplicatedProseFrameV1 } from '../prose/provider-frame-observation'
+import { observeDuplicatedProseFrameV1, observeSeparatedProseFrameV1 } from '../prose/provider-frame-observation'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
 import { verifyWorkspaceContentRevisionV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
@@ -783,6 +783,11 @@ function parseProseCreativeOutcomeV1(
       code: `prose-length-${length.status}`, path: '$', message: length.message,
       severity: 'warning', disposition: 'advisory', action: 'none', deterministic: true,
     }))
+    const frame = observeSeparatedProseFrameV1(output)
+    if (frame?.kind === 'separated-answer-frame') issues.push(createCreativeIssueV1({
+      code: 'prose-separated-provider-frame', path: '$', message: frame.message,
+      severity: 'warning', disposition: 'advisory', action: 'edit', deterministic: true,
+    }))
     if (!PROSE_MOTION_SIGNAL.test(output)) {
       issues.push(createCreativeIssueV1({
         code: 'prose-narrative-motion-weak',
@@ -902,6 +907,11 @@ export function revalidateProseCreativeDraftV1(input: {
       message: item.message,
       disposition: 'blocking',
       action: 'edit',
+    }))
+    const frame = observeSeparatedProseFrameV1(output)
+    if (frame?.kind === 'separated-answer-frame') issues.push(createCreativeIssueV1({
+      code: 'prose-separated-provider-frame', path: '$', message: frame.message,
+      severity: 'warning', disposition: 'advisory', action: 'edit', deterministic: true,
     }))
     if (!PROSE_MOTION_SIGNAL.test(output)) {
       issues.push(createCreativeIssueV1({
