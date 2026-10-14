@@ -3,8 +3,8 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v3'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v4'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 export type QualityReviewModeV1 = 'quality' | 'style' | 'readability'
 export const QUALITY_REVIEW_DIMENSIONS_V1 = ['expectation', 'agency', 'causality', 'system-payoff', 'voice', 'repetition', 'pace', 'continuity'] as const
 export type QualityReviewDimensionV1 = typeof QUALITY_REVIEW_DIMENSIONS_V1[number]
@@ -71,13 +71,15 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
   if (!input.chapterText.trim()) throw new Error('正文为空，不能进行全文评审。')
   if (input.authorRequest && input.authorRequest.length > 16000) throw new Error('本次评审要求过长，请精简后再开始。')
   const targetTextHash = await hashCanonicalValue(input.chapterText)
-  const system = `你提供${labels[input.mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
+  const system = `全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。
+你提供${labels[input.mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
 维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
 优先核对关键过程与结果：交付、验收、付款、调整、试验、签字是否跳过必要行动；前态—动作—后态的数量、时间、资源和状态是否相互吻合；结尾是否混入写作要求、停笔说明或任务自评。必须区分角色的有意隐瞒、推测与叙述事实，无法确定则标为uncertain。
 先处理会改变读者对事件理解的问题，再考虑表达细节。表达建议需要说明具体影响，不为求变化修改有效动作或强行填满留白。
 缓冲、安静、留白、角色有意隐瞒和舒缓叙述不自动构成问题。不强制每章高潮、冲突或悬念，不将高频词等同于机器写作，不输出AI概率、平台合格结论或未校准的质量分。
 每个问题必须引用正文中的逐字片段。唯一引文的start/end填写null，由系统定位；重复引文才需给出从0开始的精确UTF16 start/end。代码会检查引文与位置，不能猜测。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
 quote必须是从正文复制的一段连续、非空字符串，绝不能填写null或改写/拼接引文。涉及多处时选一个唯一片段作定位锚点，其它依据与不确定性写在reason中；只有start/end允许同时为null。不能找到锚点的猜测不要加入issues。
+优先选单个段落内的短引文，建议6～80字；跨段问题仅引用其中一处，其余对照写在reason中。保留原标点、引号和换行，不把双引号换成单引号，不把两段合成一条quote，不用省略号代替原文。可以只引用对话前后的动作短句来定位，不必引用整段对话。
 章纲、细纲与作者要求是计划，不能据此认定正文已经完成动作或兑现。以正文实际描写为准；记账、总结或系统提示不能自动替代应有的关键过程。
 输出一个JSON对象，不要围栏或解释：
 {"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","quote":"正文逐字片段","start":null,"end":null,"reason":"问题及影响","suggestion":"只针对该问题的建议"}]}

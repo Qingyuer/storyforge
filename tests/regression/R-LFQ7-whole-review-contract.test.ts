@@ -7,6 +7,20 @@ const settings = describeResolvedAIRequestSettingsV1(resolveRequestConfig({ ...u
 const issue = (quote: string, start: number | null, end: number | null) => ({ dimension: 'causality', confidence: 'uncertain', quote, start, end, reason: '付款过程没有写出，却直接记为已收款。', suggestion: '核对付款过程，保持金额和签字人。' })
 
 describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
+  it('真实探针中的跨段拼接引文仍拒绝；单段定位有效，旧v3记录按原版本验签', async () => {
+    const chapterText = '账本初始余额三点，操作消耗两点。\n陈禾扣除两点，余额变成八点。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '账本', chapterText, registeredContext: '初始三点，消耗两点，不凭空奖励。' })
+    const base = { mode: 'quality' as const, chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete' as const, settings }
+    const root = { summary: '核对扣点后的数量', strengths: [], issues: [issue('账本初始余额三点，操作消耗两点。陈禾扣除两点，余额变成八点', null, null)] }
+    await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify(root) })).rejects.toThrow('引文')
+    const raw = JSON.stringify({ ...root, issues: [issue('余额变成八点。', null, null)] })
+    const current = await parseWholeChapterQualityReviewV1({ ...base, raw })
+    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v4')
+    expect(current.issues[0].paragraph).toBe(2)
+    const old = await parseWholeChapterQualityReviewV1({ ...base, raw, promptVersion: 'whole-chapter-quality-review-v3' })
+    expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)
+  })
+
   it('末尾4500字之后的问题、长章和登记资料尾部完整进入三个评审请求', async () => {
     const text = '前段叙述。'.repeat(1000) + '\n\n未付款却记为已收款。'
     for (const mode of ['quality', 'style', 'readability'] as const) {

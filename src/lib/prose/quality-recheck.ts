@@ -1,7 +1,7 @@
 import type { ChatMessage } from '../types'
 import type { AIRequestSettingsV1 } from '../ai/client'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, type QualityReviewArtifactV1 } from './quality-review'
+import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, QUALITY_REVIEW_PROMPT_VERSION_V1, type QualityReviewArtifactV1 } from './quality-review'
 import type { QualityRevisionPlanV1 } from './quality-revision'
 
 export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v2'
@@ -53,7 +53,8 @@ export async function parseQualityRecheckV1(input: {
   try { root = JSON.parse(fence ? fence[1] : received) } catch { throw new Error('复核响应格式无效，未自动重发。') }
   if (!root || typeof root !== 'object' || Array.isArray(root) || Object.keys(root).sort().join('|') !== 'outcomes|review'
     || !Array.isArray(root.outcomes) || root.outcomes.length !== input.plan.issueIds.length) throw new Error('复核必须逐项覆盖本轮所选问题。')
-  const review = await parseWholeChapterQualityReviewV1({ raw: JSON.stringify(root.review), mode: 'quality', chapterText: input.candidateText, targetTextHash: await hashCanonicalValue(input.candidateText), messages: input.messages, settings: input.settings, responseCompletion: input.completion, createdAt: input.createdAt })
+  const reviewPromptVersion = input.messages[0]?.content.includes(`全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。`) ? QUALITY_REVIEW_PROMPT_VERSION_V1 : 'whole-chapter-quality-review-v3'
+  const review = await parseWholeChapterQualityReviewV1({ raw: JSON.stringify(root.review), mode: 'quality', chapterText: input.candidateText, targetTextHash: await hashCanonicalValue(input.candidateText), messages: input.messages, settings: input.settings, responseCompletion: input.completion, createdAt: input.createdAt, promptVersion: reviewPromptVersion })
   const seen = new Set<string>()
   const outcomes = root.outcomes.map((row: any) => {
     if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).sort().join('|') !== 'issueId|quote|reason|status'

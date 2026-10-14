@@ -3030,7 +3030,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '全章阅读质量建议',
     owner: 'prose-agent',
-    promptVersion: 'whole-chapter-quality-review-v3',
+    promptVersion: 'whole-chapter-quality-review-v4',
     executionMode: 'review',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -3041,7 +3041,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 16_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-10-14',
+    lastVerifiedAt: '2026-10-15',
     regressionTests: ['R-LFQ7-whole-review-contract', 'R-LFQ7-durable-review'],
   },
   {
