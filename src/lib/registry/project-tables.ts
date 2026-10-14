@@ -1132,7 +1132,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   // ───────────────────── 文风学习（FB-5） ─────────────────────
   { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
-    resourceIdentity: RESOURCE_IDENTITY('user-style', 'reference', '作者文风'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('user-style', 'reference', '作者文风'), enabledField: 'enabled' },
     domainOwner: WORK_DOMAIN_OWNER,
     note: '每个 Work 一份作者文风画像；由 projectId/worldId/workId 共同证明当前作用域' },
 

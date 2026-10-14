@@ -347,6 +347,8 @@ export interface TableSpec<T = any> {
     label: string
     /** registered-fields follows FIELD_REGISTRY; semantic-fields derives safe row fields. */
     descriptorMode: 'registered-fields' | 'semantic-fields'
+    /** An explicit author switch controls every resource derived from this row. */
+    enabledField?: string
   }
   /** MEMORY-10: every table receives one registry-derived disk-memory policy. */
   memoryClassification: WorkspaceMemoryClassificationV1
