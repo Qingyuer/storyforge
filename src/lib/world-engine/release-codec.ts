@@ -1,14 +1,13 @@
-import { PROJECT_TABLES } from '../registry/project-tables'
-import { WORLD_CAPABILITY_AREAS, type WorldCapabilityArea } from '../registry/types'
+import type { WorldCapabilityArea } from '../registry/types'
+import { WORLD_CAPABILITY_AREAS_V3 as WORLD_CAPABILITY_AREAS, WORLD_SEMANTIC_REGISTRY_V3 as WORLD_SEMANTIC_SPECS } from './semantic-registry-v3'
 import type { WorldRelease, WorldReleaseManifestV3 } from '../types'
 import { hashWorldReleaseValueV1 } from './release-hash'
 import { assertWorldSemanticSnapshotV1 } from './semantic-snapshot'
 
 const HASH = /^[a-f0-9]{64}$/
 const WORLD_SEMANTIC_TABLES = new Set(
-  PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => spec.name),
+  WORLD_SEMANTIC_SPECS.map(spec => spec.name),
 )
-const WORLD_SEMANTIC_SPECS = PROJECT_TABLES.filter(spec => spec.worldSemantic)
 const WORLD_SEMANTIC_BY_TABLE = new Map(WORLD_SEMANTIC_SPECS.map(spec => [spec.name, spec] as const))
 const WORLD_RELEASE_MANIFEST_KEYS = new Set([
   'schema', 'version', 'semanticContract', 'worldCode', 'worldName', 'workTitle',

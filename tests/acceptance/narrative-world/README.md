@@ -123,3 +123,13 @@ NW_IR_REPORT=/tmp/nw1a-candidate.json npx vitest run tests/regression/R-NW-1A-ir
 在 NW-1A `bfc68581` 上整合 `origin/main` 的 `e40fadce`（应用 v4.0.0）。[整合回执](./baseline-20261014-integration-v1.json) 保留新的输入指纹；原两份基线和 IR golden 不变。120 查询、48 修改及全部边界控制的逐项结果与 NW-1A 相同，仍为 24 通过 / 60 缺口 / 36 不支持，影响分析 precision 41.67%。主干便携交付和文字冒险更新没有被计作 NW 能力提升。
 
 整合检查：97 项 NW 定向测试、architecture/required-tables/AI manual、其余静态门、lint、TypeScript、生产依赖审计和 build 通过。整合阶段的全量 CI 在 coverage 执行中为共享机器串行协调主动停止（exit 143，日志 `/tmp/nw-integration-20261014-ci.log`），未取得全量完成回执；后续 NW-1B 交付仍须通过串行完整 CI。
+
+### NW-1B · 领域投影（2026-10-14）
+
+[领域投影回执](./domain-projection-20261014-v1.json)在原 12 场景上通过实际确认/CAS 入口写入显式测试作者注释，再运行八类确定性 projector。事实、误信、计划、历史和揭示保持区分；Coverage 同时统计未注释正文。这是工程合同证据，不是模型抽取准确率。测试作者注释不写入原语料或 provider。
+
+[IR 复验](./ir-contract-20261014-nw1b-v1.json)保留旧 golden，新增共享 JSON 模块指纹并验证通用采纳仍不能直接写新注释。[v3 对照](./baseline-20261014-nw1b-v1.json)保持 24 pass / 60 gap / 36 unsupported、影响 precision 41.67% / recall 100%；原 10 类 findings 不变。
+
+新增回归覆盖精确 typed FK、v16 往返/回滚/墓碑、作者确认、八类投影、时间及隐私依赖、缺少来源、子记录原文和 v3 历史 registry。浏览器测试 `narrative-domain-lifecycle.spec.ts` 使用全新浏览器上下文核验确认→刷新→隔离恢复→删除；它不证明尚未交付的作者审阅 UI。最终 CI/E2E 证据记于 WORLD-ENGINE §24。
+
+再次变更实现时保存新的回执文件，不覆盖这里及之前的日期版本。现有查询接口、真实模型、人工质量与规模验收仍分别由 NW-2B、NW-1C/2E 等后续卡完成。

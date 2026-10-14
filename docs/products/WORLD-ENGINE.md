@@ -163,7 +163,7 @@
 | 下游 | `product/world-requirement-adapters.ts`、`product/source-contracts.ts`、`product-production/world-source.ts`、`product-production/source-contracts.ts` | 六产品已有 adapter/plan/manifest；编译资源与 Gateway 使用同一关系/分类依赖闭包 |
 | 测试 | `R-ARCH05-world-protocol`、`R-WORLD-D-phase-d-closure`、`R-ARCH01-world-derivation`、`R-GATE-P2-world-engine-contract`、`R-ARCH03-stage-gate`、`R-PRODUCTPROD1A1-source-plan-portability` | 本轮重跑 6 文件/24 项；此组选择不同于附件 6 文件/28 项，不能沿用旧计数 |
 
-数据库版本、备份版本、世界内容版本是三个维度：当前 DB v11；`CURRENT_BACKUP_VERSION/CURRENT_EXPORT_VERSION=15`，v14 仅经严格校验可转 v15；WorldRelease manifest v3。新 IR v1 不等于 DB v1，也不授权猜测下一个 DB 版本。
+数据库版本、备份版本、世界内容版本是三个维度：当前 DB v11；`CURRENT_BACKUP_VERSION/CURRENT_EXPORT_VERSION=16`，v14/v15 仅经严格校验和显式转换链可转 v16；WorldRelease manifest v3。新 IR v1 不等于 DB v1，也不授权猜测下一个 DB 版本。
 
 ### 10.2 七项旧发现的重新裁决
 
@@ -181,7 +181,7 @@
 
 另外，temporalFacts 当前封存只选 confirmed，已 superseded 的历史状态不完整；knowledgeLedger 的 confirmed 只表示作者确认角色持有该认知，不证明该 belief 为真。上述是时态索引必须解决的输入条件，不准由新查询器凭空补历史。
 
-版本兼容还存在一个必须提前守住的接缝：当前 `release-codec.ts` 从最新 PROJECT_TABLES 生成 `WORLD_SEMANTIC_SPECS`，再校验 v3 的 selected/omitted 分区和 capability 数量。将来增加语义域或修改发布策略时，仅保留旧函数名不能保证旧包可读；NW-1B/2A 必须固定对应封存版本的注册规则快照。
+初始审计发现版本兼容接缝：当时 `release-codec.ts` 从最新 PROJECT_TABLES 生成 `WORLD_SEMANTIC_SPECS`，再校验 v3 的 selected/omitted 分区和 capability 数量。将来增加语义域或修改发布策略时，仅保留旧函数名不能保证旧包可读；NW-1B 已固定 v3 的历史规则快照（§24）；NW-2A 仍须为 v4 独立分派。
 
 ### 10.3 一手研究及本地化选择
 
@@ -1129,3 +1129,41 @@ PR状态来自本轮 `gh pr list --state open`。这些PR仅作背景，未在�
 | 依赖与输入 | 生产依赖 0 vulnerabilities；15 个合同输入指纹与最终代码匹配；原 0B 语料、旧基线与 findings 字节保持不变 |
 
 无新增 UID 准备 UI、生产存储/恢复流程或产品 API，故未启动产品 E2E；既有恢复与世界包路径在隔离 fake-indexeddb 中回归。真实模型、独立人工、规模性能和上层产品体验均未验收。
+
+## 24. NW-1B 领域投影实施记录（2026-10-14，工程验证中）
+
+本卡是产品能力研发，服务独立长篇与 S1 世界封存的共同语义基础。已有 World/Work 领域记录继续拥有内容；投影交接物是 `NarrativeDomainProjectionV1`，无媒资、产品 runtime 或第二份 Canon 表。当前无新增 AI 调用或作者操作面板，候选审阅和 durable 采纳由 NW-1C 接入。
+
+### 24.1 注册字段与确认边界
+
+`PROJECT_TABLES.worldSemantic.projector/publishPolicy` 在 13 个既有领域登记来源字段、原文入口和有限注释：人物、地点、词条、子世界、故事事件、历史事件、事实、关系、认知、故事线、进度、伏笔及章节。元数据包括独立时间轴、原始证据、可见范围、模态、依赖，以及系统确认回执；发展和揭示子记录使用持久 sub UID。新增 typed FK 由同一声明派生 refs/exportRefRemap；FIELD_REGISTRY 和 Adoption 扩展由注册声明收口，投影结果不是模型写目标。
+
+`confirmNarrativeDomainAnnotationsV1` 接受显式作者注释和预期来源 hash，事务内验证 owner、实际 UID/FK、原文字节和 CAS，才签发确认凭据。通用 `adopt()` 拒绝整份含注释的写入，模型不能注入顶层或嵌套确认凭据。旧记录没有注释时保留 `review-required`，不从标题、年份、录入时间或 planned 状态猜测已发生事实。World 不带 sourceWorkCode 时只读取 World-owned 内容；来源作品必须显式指定。
+
+### 24.2 确定性闭包与真实覆盖
+
+八类 projector 区分事实、角色误信、历史 superseded 状态、作者计划、关系原因、交流/观察和读者揭示。规则仅为 advisory；未登记谓词、任意 JSON 值、无证据兑现、计划事件充当已发生原因、失效原文和缺失依赖均留下诊断。显式因果/支持边须绑定 supports 证据；时制、子世界和事件锚点属于结构性 requires，不被冒充为因果证据。
+
+原文保留 raw UTF-8 字节。发展 statement 的逻辑字段路径为 `/narrativeDevelopmentsV1/<persistent-subKey>/statement`：由注册字段的 keyed resolver 提取原始字符串，不以数组序号寻址；数组重排不改变身份或 hash。它与冻结的 `NarrativeEvidenceSourceV1.fieldPointer` 一一对应，不把整理后的摘要当原文。
+
+投影范围为一个明确 owner/branch 的合集，所有 IR record 使用相同的 `scope.worldGroupKey=null`；每条来源的子世界 UID 单独放在 `sourceGroups`，所属子世界和时制同时形成稳定依赖。不同世界时制仍需显式有界映射，未授权反向/链式转换保持不支持；不以合集范围抹平时制差异。可见范围取父来源、原文子记录、typed 引用及依赖的保守交集，循环引用也不能把私有内容变成公开。
+
+Coverage 显式满足 eligibleSelected = projectedSourceKeys ∪ explicitlyUnsupportedSourceKeys，二者不重叠；同时列出排除项、缺口、注册字段及原文字节已覆盖/未覆盖区间。字段计数表示参与版本绑定的字段，不能当作语义召回率。未确认章节也保留在正文覆盖分母中；精确选择缺少依赖时不自动扩选。读者权限过滤及计数、explain、原文出口的完整隔离仍属 NW-2B。
+
+### 24.3 生命周期与兼容
+
+DB 保持 v11/128 表；备份独立升级 v16。严格校验的 v14 先转换插件表到 v15，v15 再转换到 v16；不会补造注释或作者确认。多目标 FK 先导出为来源表内便携坐标，再在全部表导入后重映射；UID 不符、跨 World/Work 或缺失非空目标会回滚整个导入。正常同身份恢复重验内容 hash；另建 owner namespace 后旧确认需要复核。
+
+完整八类已确认闭包的备份往返反例发现并修复了空 FK 的规范化问题：导入把缺省 FK 恢复为 `null`，两者现在按同一“无引用”语义参与来源 hash 和字段覆盖，避免合法恢复使事实及其依赖误失效。新增回归验证原子、证据、依赖、IR root、coverage 保持一致；实际事实内容修改仍触发 stale，原作品和旧 release 保持。
+
+角色、章节、事件、关系、伏笔、故事线、地点、词条、力量系统与子世界的注册删除路径将注释 FK 变成保留原 UID/证据的空引用。确认回执保留用于审计，失效来源不再投影。自动合并若涉及已确认身份或已确认注释引用会整笔拒绝，保留旧来源；当前没有声称提供已审阅身份合并 UI，后续必须携带 explicit alias 和作者回执才可开放该路径。
+
+v3 使用 `semantic-registry-v3.ts` 固定 31 域/10 区域的历史合同；旧包按原始字段、策略和 hash 验证，新注册表扩域不能重写旧字节。注释来源需要 v4，当前 v3 封存明确拒绝包含这些新字段的选择，避免悄悄丢弃证据或暴露私有注释。旧无注释 v3 生产和消费仍走原路径。
+
+### 24.4 证据与剩余闸门
+
+- [NW-1B 原考卷投影回执](../../tests/acceptance/narrative-world/domain-projection-20261014-v1.json)：12 场景采用固定规则显式设置测试作者注释，验证八类输出及事实/误信/历史/计划分离。它不是真实模型抽取、独立人工标注或自然语言问答验收。
+- [NW-1A 再验证回执](../../tests/acceptance/narrative-world/ir-contract-20261014-nw1b-v1.json)：原 72 项合同与 249 个证据跨度复验，IR golden 不变；新共享 JSON 实现加入实际输入指纹。
+- [v3 对照回执](../../tests/acceptance/narrative-world/baseline-20261014-nw1b-v1.json)：原查询仍为 24/120 通过、60 缺口、36 不支持；影响分析 precision 41.67%、recall 100%。旧语料、findings 和全部历史回执保留，不把领域投影当作旧 provider 改善。
+
+定向回归与静态门已运行；完整串行 CI、原生浏览器刷新/隔离恢复验证正在收尾，取得最终回执前不标记本卡交付完成。无真实模型、独立人工或规模性能证据。NW-1C/2A～2E 继续按 §18 工作卡实施。

@@ -35,6 +35,10 @@ const entrypoints = [
   // NW-1A is a headless identity/time/codec contract. Domain projection and
   // release/Gateway activation follow in NW-1B/2A/2B; no author UI is exposed.
   'src/lib/world-engine/narrative-ir.ts',
+  // NW-1B: reviewed domain projection/confirmation are headless, with author UI
+  // and durable candidate integration reserved for NW-1C.
+  'src/lib/world-engine/narrative-domain-authoring.ts',
+  'src/lib/world-engine/narrative-domain-projection.ts',
   // Text-open-world owns this headless durable expression Harness. It is an
   // internal capability boundary, never a product route or session identity.
   'src/lib/open-world/evolution-harness.ts',

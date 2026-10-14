@@ -18,6 +18,7 @@ import { transactionTablesFor } from '../registry/lifecycle'
 import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { CURRENT_BACKUP_VERSION, normalizeProjectBackup } from './backup-trust'
+import { remapNarrativeDomainFieldV1 } from '../narrative-domain/references'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
 import {
   finalizeImportedAgentRunLedgersV1,
@@ -1432,8 +1433,8 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
         // JSON locators are restored in a second pass when their target table
         // is a forward reference. This is required for legitimate proof cycles
         // such as ProductBuild ledger -> AgentRun -> ProductBuild.
-        .filter(ref => ref.kind !== 'json-id-paths' && ref.remapVia !== spec.name)
-        .map(ref => ref.remapVia)
+        .flatMap(ref => ref.kind === 'json-id-paths' || ref.kind === 'narrative-source-refs-v1' || ref.remapVia === spec.name
+          ? [] : [ref.remapVia])
       const ownerDeps = spec.domainOwner?.locator?.kind === 'field'
         ? [spec.domainOwner.locator.owner === 'world' ? 'worlds' : spec.domainOwner.locator.owner === 'work' ? 'works' : null]
         : spec.domainOwner?.locator?.kind === 'exclusive-fields' ? ['worlds', 'works']
@@ -1573,6 +1574,11 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
 
     const newIdMaps = new Map<string, Map<number, number>>()
     const deferredForeignKeys: Array<{ table: any; id: number; field: string; target: string; exportId: number }> = []
+    const deferredNarrativeRefs: Array<{
+      table: TableSpec['table']; id: number
+      remap: Extract<ExportRefRemap, { kind: 'narrative-source-refs-v1' }>
+      value: unknown
+    }> = []
     const deferredJsonIdPaths: Array<{
       table: any
       tableName: string
@@ -1726,7 +1732,14 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
 
       // 两阶段:JSON 引用重映射(portals 自引用,需本表 newIdMap 已全)
       for (const rr of spec.exportRefRemap ?? []) {
-        if (rr.kind === 'portals') {
+        if (rr.kind === 'narrative-source-refs-v1') {
+          // Always wait for every table. An event may reference several target
+          // kinds, including a forward event or a chapter referring back to it.
+          for (const pending of pendingRefRemap) {
+            const value = pending.stashed[rr.exportAs]
+            if (value !== undefined) deferredNarrativeRefs.push({ table: spec.table, id: pending.newId, remap: rr, value })
+          }
+        } else if (rr.kind === 'portals') {
           const refMap = rr.remapVia === spec.name ? newIdMap : (newIdMaps.get(rr.remapVia) ?? newIdMap)
           for (const p of pendingRefRemap) {
             const remapped = remapWorldPortalTargets(p.stashed[rr.field], (exportId: number) => refMap.get(exportId))
@@ -1793,6 +1806,10 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       newIdMaps.set(spec.name, newIdMap)
     }
 
+    for (const deferred of deferredNarrativeRefs) {
+      const value = remapNarrativeDomainFieldV1(deferred.remap.field, deferred.value, 'import', newIdMaps)
+      await deferred.table.update(deferred.id, { [deferred.remap.field]: value })
+    }
     for (const deferred of deferredForeignKeys) {
       const mapped = newIdMaps.get(deferred.target)?.get(deferred.exportId)
       if (mapped != null) await deferred.table.update(deferred.id, { [deferred.field]: mapped })

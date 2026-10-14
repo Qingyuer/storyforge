@@ -402,12 +402,20 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
     const f = await seedNarrativeFamily(corpus.families[0])
     const recordId = f.localIds.get(`${corpus.families[0].id}:character-a`)!
     const before = await db.characters.get(recordId)
-    const keys = ['ragDocumentId', 'semanticSubKey', 'semanticId', 'revisionHash', 'narrativeTimeV1']
+    const keys = ['ragDocumentId', 'semanticSubKey', 'semanticId', 'revisionHash']
     expect(FIELD_REGISTRY.filter(field => keys.includes(field.field))).toEqual([])
     const result = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'merge',
       data: Object.fromEntries(keys.map(key => [key, 'model-forged'])) })
     expect(result.written).toEqual([])
     expect(result.unknown.sort()).toEqual([...keys].sort())
+    // NW-1B registers typed time proposals, but only its confirmation/CAS
+    // extension may adopt them. This is not permission for a generic write.
+    expect(FIELD_REGISTRY.find(field => field.target === 'characters' && field.field === 'narrativeTimeV1')?.adoptionPolicy)
+      .toBe('narrative-annotation-v1')
+    const proposal = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'characters', recordId, mode: 'merge',
+      data: { narrativeTimeV1: 'model-forged' } })
+    expect(proposal.written).toEqual([])
+    expect(proposal.skipped[0]?.reason).toContain('确认与来源 CAS')
     expect(await db.characters.get(recordId)).toEqual(before)
     expect(PROJECT_TABLES.filter(s => s.resourceIdentity?.narrativeEntityType).map(s => s.name).sort()).toEqual(['characters', 'codexEntries', 'importantLocations', 'worldGroups'])
   })
@@ -415,7 +423,7 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
     expect(corpusResults).toHaveLength(12)
     const paths = ['src/lib/types/narrative-ir.ts', 'src/lib/types/narrative-time.ts',
       'src/lib/world-engine/narrative-ir.ts', 'src/lib/world-engine/narrative-ir-codec.ts', 'src/lib/world-engine/narrative-identity.ts',
-      'src/lib/world-engine/narrative-json.ts', 'src/lib/world-engine/narrative-time.ts',
+      'src/lib/world-engine/narrative-json.ts', 'src/lib/narrative-domain/json.ts', 'src/lib/world-engine/narrative-time.ts',
       'src/lib/registry/types.ts', 'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts',
       'tests/helpers/narrative-ir-fixture.ts', 'tests/helpers/narrative-world-evaluation.ts',
       'tests/regression/R-NW-1A-ir-codec.test.ts', 'tests/acceptance/narrative-world/ir-codec-golden-v1.json',
@@ -426,6 +434,6 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       cases: corpusResults.sort((a, b) => a.family.localeCompare(b.family, 'en')),
       inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_IR_REPORT) fs.writeFileSync(process.env.NW_IR_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261013-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261014-nw1b-v1.json', 'utf8')))
   })
 })

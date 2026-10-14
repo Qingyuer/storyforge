@@ -19,9 +19,11 @@ import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portabili
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import type { ProductReleaseManifestV1, ProductRuntimeEvent } from '../types'
+import { remapNarrativeDomainFieldV1 } from '../narrative-domain/references'
+import { assertNarrativeDomainReferenceRowsV1 } from '../narrative-domain/integrity'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 15
+export const CURRENT_EXPORT_VERSION = 16
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -264,7 +266,12 @@ function toExportRow(
   if (spec.exportIdField) obj._exportId = index
 
   for (const rr of spec.exportRefRemap ?? []) {
-    if (rr.kind === 'portals') {
+    if (rr.kind === 'narrative-source-refs-v1') {
+      if (Object.prototype.hasOwnProperty.call(obj, rr.field)) {
+        obj[rr.exportAs] = remapNarrativeDomainFieldV1(rr.field, obj[rr.field], 'export', idMaps)
+        delete obj[rr.field]
+      }
+    } else if (rr.kind === 'portals') {
       const map = idMaps.get(rr.remapVia)
       obj[rr.field] = remapWorldPortalTargets(obj[rr.field], (targetId: number) => map?.get(targetId))
     } else if (rr.kind === 'id-array') {
@@ -520,6 +527,7 @@ async function captureProjectExportInTransaction(
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
   }
+  assertNarrativeDomainReferenceRowsV1(rowsByTable, 'local')
   // 第二遍:逐行转导出对象
   const projectSpec = REGISTRY_BY_NAME.get('projects')
   if (!projectSpec) throw new Error('[deriveExport] PROJECT_TABLES 缺少 projects 根表')

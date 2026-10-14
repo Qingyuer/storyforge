@@ -223,7 +223,7 @@
 
 ## 三、AI 可写字段（FIELD_REGISTRY · adopt 写什么）
 
-AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(别名自动归一)。
+AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ target, data })`；标注领域政策的字段必须经过相应扩展的确认、引用和来源 CAS 校验。叙事确认凭据是系统字段，模型不得签发或嵌套提供。
 
 | 目标表 | 可写字段 |
 |---|---|
@@ -231,12 +231,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `adaptationDecisions` | `action` `rationale` `sourceFactKeys` `targetKeys` |
 | `adaptationProjects` | `brief` `plan` `visualBible` |
 | `adaptationSourceFacts` | `confidence` `kind` `sourceUnitKeys` `statement` `subjectKeys` |
-| `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
+| `chapters` | `content` `continuityHandoff` `narrativeDependenciesV1` `narrativeDisclosuresV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
 | `characterDrivenPlans` | `generatedVolumes` `status` |
-| `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
-| `characters` | `abilities` `activeChapterRange` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
+| `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeRelationV1` `narrativeTimeV1` `narrativeVisibilityV1` `relationType` `toCharacterId` |
+| `characters` | `abilities` `activeChapterRange` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeAliasesV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeStatus` `narrativeTimeV1` `narrativeVisibilityV1` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` |
-| `codexEntries` | `categoryId` `cultivationStageId` `cultivationSystemId` `description` `fields` `icon` `importance` `importantLocationId` `name` `order` `origin` `producerCandidateHash` `producerRunId` `refs` `sourceContentHash` `sourceEvidenceQuotes` `summary` `tags` `worldGroupId` |
+| `codexEntries` | `categoryId` `cultivationStageId` `cultivationSystemId` `description` `fields` `icon` `importance` `importantLocationId` `name` `narrativeAliasesV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `order` `origin` `producerCandidateHash` `producerRunId` `refs` `sourceContentHash` `sourceEvidenceQuotes` `summary` `tags` `worldGroupId` |
 | `comicPagePlans` | `beatKeys` `endReveal` `goal` `pageTurn` |
 | `comicPages` | `pagePlanKey` `summary` |
 | `comicPanels` | `action` `continuityRefs` `frame` `lettering` `moment` `narrativeFunction` `negativePrompt` `nextPanelKey` `protectedAreas` `shot` `sourceUnitIds` `subjectStates` `visualPrompt` |
@@ -249,15 +249,15 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
 | `emotionBeatCards` | `beats` `chapterId` `chapterTitle` `overallArc` `source` |
 | `extensionRecords` | `payload` |
-| `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
+| `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `narrativeDependenciesV1` `narrativeDevelopmentsV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
 | `geographies` | `locations` `overview` `worldMapData` |
 | `historicalKeywords` | `aiBrainstorm` `aiConsult` |
-| `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` |
+| `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` `narrativeDependenciesV1` `narrativeEventV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` |
 | `histories` | `eraSystem` `events` `overview` |
-| `importantLocations` | `description` `name` `parentId` `significance` `sortOrder` `tags` |
+| `importantLocations` | `description` `name` `narrativeAliasesV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `parentId` `significance` `sortOrder` `tags` |
 | `inspirationWorkspaces` | `fragments` `versions` |
 | `itemLedger` | `action` `chapterId` `chapterTitle` `characterId` `heldByName` `itemName` `note` `quantity` |
-| `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
+| `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `narrativeDependenciesV1` `narrativeEpistemicV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
 | `motionDramaAssetSubjects` | `appearance` `basePrompt` `continuityLocks` `identity` `kind` `label` `materials` `negativePrompt` `palette` `prohibitedChanges` `referenceBrief` `sourceUnitKeys` |
 | `motionDramaEpisodes` | `beats` `continuityIn` `continuityOut` `endHook` `logline` `openingHook` `sourceUnitKeys` `synopsis` `title` |
 | `motionDramaReviewIssues` | `category` `evidence` `problem` `sceneKey` `severity` `shotKey` `subjectKey` `suggestion` |
@@ -279,14 +279,15 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `screenplayScenes` | `blocks` `estimatedSeconds` `intExt` `location` `planSectionKey` `sourceUnitIds` `summary` `timeOfDay` |
 | `shortNovelProductions` | `brief` `latestReview` `storyDesign` |
 | `stateCards` | `category` `entityName` `fields` `lastChapterId` |
-| `storyArcs` | `description` `lastAlignedHash` `name` `origin` `producerCandidateHash` `producerRunId` `sourceStoryCoreHash` `sourceStoryCoreId` `sourceStoryCoreRevision` `stages` `status` `type` |
-| `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `order` `storyTime` `title` |
+| `storyArcs` | `description` `lastAlignedHash` `name` `narrativeDependenciesV1` `narrativeDevelopmentsV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `origin` `producerCandidateHash` `producerRunId` `sourceStoryCoreHash` `sourceStoryCoreId` `sourceStoryCoreRevision` `stages` `status` `type` |
+| `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `narrativeDependenciesV1` `narrativeEventV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `order` `storyTime` `title` |
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
-| `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
+| `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `narrativeDependenciesV1` `narrativeDevelopmentsV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `progressNote` `status` |
+| `temporalFacts` | `narrativeAssertionV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeRuleV1` `narrativeTimeV1` `narrativeVisibilityV1` |
 | `ttrpgRulePacks` | `contentHash` `rulePackJson` `ruleSystemId` `ruleSystemVersion` `status` `title` |
 | `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
 | `works` | `customGenre` `description` `genres` `includeCultivationProgressInAI` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
-| `worldGroups` | `description` `entryCondition` `exitCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `takeawayRules` `type` |
+| `worldGroups` | `description` `entryCondition` `exitCondition` `icon` `name` `narrativeAliasesV1` `narrativeChronologyV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `order` `plannedChapterCount` `powerRestriction` `takeawayRules` `type` |
 | `worldNodes` | `mapConfigJSON` |
 | `worldRulesProfiles` | `customNodes` `entries` `globalNote` |
 | `worlds` | `description` `name` |
@@ -301,13 +302,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `reference-analysis-chunk-lifecycle` | `referenceChunkAnalysis` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-reference-lifecycle` | `references` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES refs` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-citation-lifecycle` | `creativeRules` | `PROJECT_TABLES references refs` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
-| `fact-ledger` | `temporalFacts` | `FACT_PREDICATE_REGISTRY` | `src/lib/fact-ledger/fact-ledger.ts`<br/>`src/lib/fact-ledger/human-readable-io.ts`<br/>`src/lib/fact-ledger/lifecycle.ts`<br/>`src/lib/fact-ledger/setting-assertions.ts`<br/>`src/lib/consistency/impact-analysis.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/editor/entity-rename.ts` | 2027-01-01 |
-| `character-merge-lifecycle` | `characters` | `PROJECT_TABLES refs + remapCharacterReferences + cultivation DAG validator` | `src/lib/import/character-merge.ts`<br/>`src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
-| `knowledge-ledger` | `knowledgeLedger` | `KNOWLEDGE_ACTIONS + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/knowledge-ledger/knowledge-ledger.ts`<br/>`src/lib/knowledge-ledger/lifecycle.ts` | 2027-01-01 |
-| `storyline-progress-lifecycle` | `storylineProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
+| `fact-ledger` | `temporalFacts` | `FACT_PREDICATE_REGISTRY + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/fact-ledger/fact-ledger.ts`<br/>`src/lib/fact-ledger/human-readable-io.ts`<br/>`src/lib/fact-ledger/lifecycle.ts`<br/>`src/lib/fact-ledger/setting-assertions.ts`<br/>`src/lib/consistency/impact-analysis.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/editor/entity-rename.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `character-merge-lifecycle` | `characters` | `PROJECT_TABLES refs + remapCharacterReferences + cultivation DAG validator + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/import/character-merge.ts`<br/>`src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `knowledge-ledger` | `knowledgeLedger` | `KNOWLEDGE_ACTIONS + ADOPTION_SCHEMAS + PROJECT_TABLES + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/knowledge-ledger/knowledge-ledger.ts`<br/>`src/lib/knowledge-ledger/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `storyline-progress-lifecycle` | `storylineProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES refs + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/storyline/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
 | `storyline-crossing-lifecycle` | `storylineCrossings` | `ADOPTION_SCHEMAS + PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
-| `story-arc-dynamic-lifecycle` | `storyArcs` | `PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
-| `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
+| `story-arc-dynamic-lifecycle` | `storyArcs` | `PROJECT_TABLES refs + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/storyline/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
 | `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/world-engine/draft.ts` | 2027-08-01 |
@@ -345,7 +346,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
 | `short-novel-production-lifecycle` | `shortNovelProductions` | `SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-09-06 |
 | `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + MOTION_DRAMA_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-06 |
-| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
+| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness + PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts`<br/>`src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 | `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
 | `product-production-briefs` | `productProductionBriefs` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
@@ -354,6 +355,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `product-production-artifacts` | `productBuildArtifacts` | `PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/text-adventure-artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
 | `product-production-release-adoption` | `productReleases` | `PRODUCT_PRODUCTION_PACKAGE_ADOPTION_V1 + PRODUCT_DISTRIBUTION_BUNDLE_V2 + PROJECT_TABLES + product validators` | `src/lib/product/releases.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-platform/distribution-bundle.ts` | 2027-08-21 |
 | `ttrpg-rule-pack-library` | `ttrpgRulePacks` | `RULE_PACK_V1 parser + fixture verifier + immutable version identity + PROJECT_TABLES` | `src/lib/ttrpg/rule-pack-library.ts` | 2027-08-21 |
+| `narrative-annotation-historicalTimelineEvents` | `historicalTimelineEvents` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `narrative-annotation-importantLocations` | `importantLocations` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `narrative-annotation-characterRelations` | `characterRelations` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `narrative-annotation-foreshadows` | `foreshadows` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `narrative-annotation-storyTimelineEvents` | `storyTimelineEvents` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
+| `narrative-annotation-worldGroups` | `worldGroups` | `PROJECT_TABLES.worldSemantic.projector + FIELD_REGISTRY + source hash CAS` | `src/lib/world-engine/narrative-domain-authoring.ts`<br/>`src/lib/narrative-domain/lifecycle.ts` | 2027-01-01 |
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
@@ -504,4 +511,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `f716449b`
+生成时间基准:commit `f52f5d4d`

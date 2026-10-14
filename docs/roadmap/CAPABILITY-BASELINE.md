@@ -16,7 +16,7 @@
 |---|---|---|---|
 | A-GOV-01 | implemented | 总纲、WPS 完整归档、唯一现行文档白名单和当前架构审计已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
 | A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、`S1 世界封存 → S2 产品定向 → S3 产品执行`闸门、五项逻辑契约、中立网关、当前产品适配器、节点同源与能力/成熟度门均已机器化；schema v11 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
-| BASE-DATA-01 | implemented | Dexie 当前 schema v11；保留 v1～v10 的加表/索引升级（含 Brief hash 索引调整与聊天草稿兼容桥）；`npm run check:required-tables` 本轮验证 128 张 required/project tables；备份 v15，v14 严格校验后可显式转换；旧字段和其他不支持版本拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
+| BASE-DATA-01 | implemented | Dexie 当前 schema v11；保留 v1～v10 的加表/索引升级（含 Brief hash 索引调整与聊天草稿兼容桥）；`npm run check:required-tables` 本轮验证 128 张 required/project tables；备份 v16，v14/v15 严格校验后可沿显式版本链转换；旧字段和其他不支持版本拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在；Project 仅为 Workspace 壳，World/Work 身份、作品数据和上层产品读取边界已分离 | 后续新入口必须先登记，不得恢复组件私有清单、Project/Work 镜像或物理世界表读取 |
 | BASE-AI-01 | implemented | AI 入口注册表与自动生成手册区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
 | BASE-HARNESS-01 | implemented | Run contract、ledger、checkpoint、candidate/stale、receipt 及多个 durable use case | 并非所有旧按钮都统一到同样成熟度 |
@@ -66,7 +66,7 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | D-NW-EVAL | implemented | NW-0B：12 原创场景族、120 查询、48 修改、4 族留出；真实当前接口结果与 10 项缺口冻结 | 只完成确定性评测基线/守门；独立人工、模型、规模与增强能力未验收 |
-| D-NW-IR | partial | temporalFacts、knowledgeLedger、事件/故事线、WorldRelease 语义快照、候选/采纳已有；NW-1A 实现稳定身份、分轴时间、八类 exact codec、证据/hash/引用校验及同考卷复测 | 后台合同已验证；领域语义/视角/历史 projector、正式持久化字段和采纳生命周期待 NW-1B/1C；旧 provider 缺口保持 |
+| D-NW-IR | partial | temporalFacts、knowledgeLedger、事件/故事线、WorldRelease 语义快照、候选/采纳已有；NW-1A 实现稳定身份、分轴时间、八类 exact codec、证据/hash/引用校验及同考卷复测 | NW-1B 已加入注册领域注释、八类确定性 projector、确认 CAS、证据/依赖/可见范围闭包与备份 v16；工程验证见 WORLD-ENGINE §24。作者 UI/durable 候选采纳待 NW-1C，冻结 v4/查询待 NW-2A/2B；旧 provider 缺口保持 |
 | D-NW-INDEX | missing | v3 有按行目录与部分关系；Work 的检索块/层级摘要为非导出缓存 | 冻结 Narrative Index、原子证据闭包、版本化便携包与无向量查询待 NW-2A/2B/2E |
 | D-NW-COMPILER | partial | 六 adapter/plan/manifest 与确定性编译依赖闭包存在 | 完整精确选择、产品级禁止、视角/能力声明接缝待 NW-2C，各产品完整 Compiler 另验 |
 | D-NW-IMPACT | partial | 章级 edit impact、stale、修复 Harness 存在 | 世界字段/证据依赖、误伤/漏更新及增量等价验收待 NW-2D |

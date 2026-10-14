@@ -6,6 +6,7 @@ import type { PreparedContinuityContext } from '../ai/chapter-memory/continuity-
 import type { InspirationResultMode } from '../types/inspiration-workspace'
 import type { RagSelectionTraceCollector } from '../types/rag-library'
 import type { WorkspaceScope } from '../types/world-ownership'
+import type { NarrativeDomainFieldsV1 } from '../types/narrative-domain'
 import type {
   ExactRunArtifactKindV1,
   WorkspaceDocumentCodecV1,
@@ -56,6 +57,15 @@ export interface WorldSemanticResourceSpec {
   canonPolicy: 'authoritative-table' | 'confirmed-rows-only'
   statusField?: string
   confirmedStatusValues?: readonly string[]
+  /** Current source eligibility; historical release decoders freeze their own snapshot. */
+  projector?: {
+    version: 1
+    kind: 'entity' | 'event' | 'assertion' | 'relation' | 'epistemic-event' | 'development' | 'disclosure'
+    sourceFields: readonly string[]
+    annotationFields: readonly (keyof NarrativeDomainFieldsV1)[]
+    provenanceField: string
+  }
+  publishPolicy?: 'reviewed-narrative-v1'
 }
 
 /** WORLD-2C product ownership, separate from the physical project lifecycle owner. */
@@ -186,7 +196,15 @@ export interface BlobOwnerRef {
   onDelete: 'cascade'
 }
 
-export type RefSpec = SimpleRef | JsonRef | ArrayRef | IndirectRef | BlobOwnerRef
+export interface NarrativeSourceRefSpecV1 {
+  kind: 'narrative-source-refs-v1'
+  field: keyof NarrativeDomainFieldsV1
+  /** Typed FK vocabulary; deletion retains source UID and evidence. */
+  targetTables: readonly string[]
+  onDelete: 'tombstone'
+}
+
+export type RefSpec = SimpleRef | JsonRef | ArrayRef | IndirectRef | BlobOwnerRef | NarrativeSourceRefSpecV1
 
 /** 导出时的 ID 重映射声明 */
 export interface ExportRemapField {
@@ -224,6 +242,10 @@ export interface ExportRemapField {
  * exportAs 是当前便携协议的稳定影子坐标；导入时只用该坐标重映射。
  */
 export type ExportRefRemap = {
+  kind: 'narrative-source-refs-v1'
+  field: keyof NarrativeDomainFieldsV1
+  exportAs: string
+} | {
   field: string
   remapVia: string
   kind: 'portals'
@@ -399,6 +421,8 @@ export interface FieldSpec {
   field: string
   /** Optional stable CreativeArtifact output id resolved through this same registry. */
   candidateId?: string
+  /** This field requires the registered domain confirmation/CAS boundary. */
+  adoptionPolicy?: 'narrative-annotation-v1'
   type: 'string' | 'longtext' | 'json' | 'object' | 'number' | 'boolean' | 'enum' | 'array'
   enums?: string[]
   worldScoped?: boolean

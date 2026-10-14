@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261014-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261014-nw1b-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -35,9 +35,15 @@
         "workPackage": "NW-1A",
         "implementationCommit": "bfc68581",
         "note": "Identity/time/codec delivery receipt retained unchanged before origin/main integration."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261014-integration-v1.json",
+        "workPackage": "NW-integration",
+        "implementationCommit": "f52f5d4d",
+        "note": "Post-mainline-integration baseline preserved before NW-1B."
       }
     ],
-    "comparison": "Integrate origin/main e40fadce into NW-1A bfc68581. Re-measure unchanged v3 queries and edit gold after schema entry and package metadata updates; no new narrative semantic capability is claimed."
+    "comparison": "NW-1B adds author-reviewed domain projection and backup v16. Historical v3 registry is frozen; the existing query provider is unchanged. Compare this receipt with the original baseline without claiming query acceptance."
   },
   "sourceFingerprintPaths": [
     "src/lib/context-gateway/world-release-provider.ts",
@@ -69,7 +75,9 @@
     "scripts/check-narrative-world-baseline.mjs",
     "scripts/run-narrative-world-baseline.mjs",
     "src/lib/workspace/works.ts",
-    "tests/acceptance/narrative-world/manifest-v1.json"
+    "tests/acceptance/narrative-world/manifest-v1.json",
+    "src/lib/world-engine/semantic-registry-v3.ts",
+    "src/lib/narrative-domain/json.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

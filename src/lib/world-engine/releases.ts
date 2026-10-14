@@ -1,5 +1,6 @@
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
+import { WORLD_CAPABILITY_AREAS_V3 as WORLD_CAPABILITY_AREAS, WORLD_SEMANTIC_REGISTRY_V3 as V3_TABLES, type WorldSemanticTableV3 } from './semantic-registry-v3'
 import type {
   WorldRelease,
   WorldReleaseManifestV3,
@@ -7,7 +8,7 @@ import type {
   WorldRevision,
   WorkspaceScope,
 } from '../types'
-import { WORLD_CAPABILITY_AREAS, type TableSpec, type WorldReleaseSection } from '../registry/types'
+import type { WorldReleaseSection } from '../registry/types'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import {
   deriveStrictExportProjectSnapshot,
@@ -19,6 +20,7 @@ import { effectiveWorkKind } from '../workspace/work-kind'
 import { parsePureWorldReleaseManifestV3, verifyPureWorldReleaseRecordV3 } from './release-codec'
 import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-hash'
 import { isWorkCode, isWorkspaceUid } from '../memory/identity'
+import { NARRATIVE_DOMAIN_FIELDS_V1 } from '../narrative-domain/codec'
 
 export const WORLD_RELEASE_SECTIONS: ReadonlyArray<{
   key: WorldReleaseSection
@@ -39,7 +41,7 @@ export function worldReleaseSectionTables(section: WorldReleaseSection): string[
       : section === 'narrative'
         ? new Set(['story', 'storylines'])
         : new Set(['outline', 'detailed-outline', 'manuscript'])
-  return PROJECT_TABLES
+  return V3_TABLES
     .filter(spec => spec.worldSemantic && areas.has(spec.worldSemantic.area))
     .map(spec => spec.name)
 }
@@ -82,7 +84,7 @@ function rowMatchesScope(row: Record<string, unknown>, worldExportId: number, wo
   return row._worldOwnerExportId === worldExportId || row._workOwnerExportId === workExportId
 }
 
-function isSemanticCanonRow(spec: TableSpec, row: Record<string, unknown>): boolean {
+function isSemanticCanonRow(spec: WorldSemanticTableV3, row: Record<string, unknown>): boolean {
   const policy = spec.worldSemantic
   if (!policy) return false
   if (policy.canonPolicy === 'authoritative-table') return true
@@ -101,7 +103,7 @@ interface SemanticSelectionStatsV1 {
 }
 
 function semanticExcludedState(
-  spec: TableSpec,
+  spec: WorldSemanticTableV3,
   row: Record<string, unknown>,
 ): 'candidate' | 'conflict' | 'omitted' {
   const status = spec.worldSemantic?.statusField
@@ -159,7 +161,7 @@ async function buildWorldSemanticSnapshot(input: {
   }
   const source = backup as unknown as Record<string, unknown>
   const requestedTableSet = new Set(input.requestedTables)
-  const semanticSelectionStats = PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => {
+  const semanticSelectionStats = V3_TABLES.filter(spec => spec.worldSemantic).map(spec => {
     const rows = Array.isArray(source[spec.name])
       ? clone(source[spec.name] as Record<string, unknown>[])
         .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
@@ -192,11 +194,15 @@ async function buildWorldSemanticSnapshot(input: {
   for (const tableName of input.requestedTables) {
     if (tableName === 'worlds' || tableName === 'works' || tableName === 'worldReleases') continue
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
-    const spec = PROJECT_TABLES.find(candidate => candidate.name === tableName)
+    const spec = V3_TABLES.find(candidate => candidate.name === tableName)
     if (!spec?.worldSemantic) throw new Error(`[release] ${tableName} 未登记为世界语义资源`)
     records[tableName] = rows
       .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
       .filter(row => isSemanticCanonRow(spec, row))
+    if ((records[tableName] as Record<string, unknown>[]).some(row => NARRATIVE_DOMAIN_FIELDS_V1
+      .some(field => field in row || `_${field}Portable` in row))) {
+      throw new Error('[release] 带叙事注释的来源需要 v4 封存；v3 无法表达其证据与可见范围')
+    }
   }
   const portableWorks = semanticSnapshot.works
   portableWorks[0]._activeCharacterDrivenPlanExportId = null
@@ -240,7 +246,7 @@ async function buildWorldReleaseManifestInternal(input: {
   if (!options?.allowInternalSource && !isShareableWorld(world)) {
     throw new Error('[release] 独立作品的内部作用域不能直接发布；请先显式派生世界草稿')
   }
-  const publishable = PROJECT_TABLES.filter(spec => spec.worldSemantic)
+  const publishable = V3_TABLES.filter(spec => spec.worldSemantic)
   const requested = input.selectedTables ?? publishable.map(spec => spec.name)
   const unknown = requested.filter(name => !publishable.some(spec => spec.name === name))
   if (unknown.length) throw new Error(`[release] 表未登记为可发布:${unknown.join(', ')}`)
@@ -257,7 +263,7 @@ async function buildWorldReleaseManifestInternal(input: {
     contentHash: await hashWorldReleaseValueV1(rows),
   })))
   const resourceCatalog = dependencies.map(dependency => {
-    const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
+    const semantic = V3_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
     const stats = semanticSelectionStats.find(item => item.table === dependency.table)!
     return {
       // Public release coordinates describe semantic capabilities. The
@@ -277,7 +283,7 @@ async function buildWorldReleaseManifestInternal(input: {
     }
   })
   const capabilityProfile = WORLD_CAPABILITY_AREAS.map(area => {
-    const areaSpecs = PROJECT_TABLES.filter(spec => spec.worldSemantic?.area === area)
+    const areaSpecs = V3_TABLES.filter(spec => spec.worldSemantic?.area === area)
     const areaStats = semanticSelectionStats.filter(item => areaSpecs.some(spec => spec.name === item.table))
     const resources = resourceCatalog.filter(resource => resource.area === area)
     const rowCount = resources.reduce((sum, resource) => sum + resource.rowCount, 0)
@@ -314,7 +320,7 @@ async function buildWorldReleaseManifestInternal(input: {
   if (!project || !work || !isWorkspaceUid(project.workspaceUid) || !isWorkCode(work.code)) {
     throw new Error('[release] 工作区或作品缺少当前架构的稳定身份')
   }
-  const semanticResourceId = (spec: TableSpec) =>
+  const semanticResourceId = (spec: WorldSemanticTableV3) =>
     `world:${world.code}:semantic:${spec.worldSemantic!.area}:${spec.worldSemantic!.resourceKind}`
   const selectedResourceIds = publishable.filter(spec => selectedTables.includes(spec.name)).map(semanticResourceId)
   const omittedResourceIds = publishable.filter(spec => !selectedTables.includes(spec.name)).map(semanticResourceId)

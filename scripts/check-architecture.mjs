@@ -1321,9 +1321,13 @@ for (const token of [
 ]) {
   if (!worldDerivationSource.includes(token)) violations.push(`[㉜显式派生] 派生服务缺少 ${token}`)
 }
-if (!worldReleaseSource.includes('PROJECT_TABLES.filter(spec => spec.worldSemantic)')
+const historicalSemanticRegistryV3 = read('src/lib/world-engine/semantic-registry-v3.ts')
+if (!worldReleaseSource.includes('WORLD_SEMANTIC_REGISTRY_V3 as V3_TABLES')
+  || !read('src/lib/world-engine/release-codec.ts').includes('WORLD_SEMANTIC_REGISTRY_V3 as WORLD_SEMANTIC_SPECS')
+  || /import\s+[^\n]*PROJECT_TABLES/.test(historicalSemanticRegistryV3)
+  || !historicalSemanticRegistryV3.includes('Object.freeze')
   || worldReleaseSource.includes('communityShare')) {
-  violations.push('[㉜纯语义发布] WorldRelease 必须只从 worldSemantic 派生，禁止读取分享兼容标志')
+  violations.push('[㉜纯语义发布] v3 WorldRelease 必须使用历史 PROJECT_TABLES.worldSemantic 快照，禁止动态扩展旧协议或读取分享兼容标志')
 }
 if (!worldReleaseSource.includes('semanticContract: 3')
   || worldReleaseSource.includes('selectedNarrativeModules')) {
