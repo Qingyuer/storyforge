@@ -8,6 +8,7 @@ const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
   powerSystems: 'powerSystem',
   cultivationSystems: 'powerSystem',
   storyCores: 'storyCore',
+  creativeRules: 'creativeRules',
   characters: 'characters',
   storyArcs: 'storyArcs',
   storylineProgress: 'storylineProgress',

@@ -518,6 +518,9 @@ export async function beginProseGenerationGatewayStepV1(input: {
   }
   const execution = proseGatewayExecutionFromAssemblyV1(input.assembled)
   if (!execution) throw new Error('正式正文生成缺少 required Context Gateway 执行结果。')
+  if (!input.messages.some(message => message.content.includes(execution.contextPacket.content))) {
+    throw new Error('正文请求未完整包含已冻结的必读资料，已阻止模型调用。')
+  }
   const formalEntry = frozen?.formalEntry
   if (!formalEntry) throw new Error('正文生成 RunContract 缺少 FormalAIEntry snapshot。')
   const entry = await assertFormalAIEntrySnapshotIntegrityV1(formalEntry)

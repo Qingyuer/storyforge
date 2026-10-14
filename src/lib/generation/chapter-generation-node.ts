@@ -21,10 +21,10 @@ export function createChapterGenerationNode(input: {
     assembleInput: messages => messages.map(message => ({ ...message })),
     run: messages => category === 'chapter.content'
       ? ai.start(messages, undefined, {
-        formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId,
+        formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject',
       })
       : ai.start(messages, undefined, {
-        formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId,
+        formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject',
       }),
     ...(gate ? { gate } : {}),
   }

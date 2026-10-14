@@ -1565,7 +1565,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
           .filter(Boolean)
           .join('\n'),
-        { continuity, continuityBudgetTokens },
+        { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
       )
 
       // Phase 21.3: 计算上下文预算
@@ -1634,7 +1634,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
         .filter(Boolean)
         .join('\n'),
-      { continuity, continuityBudgetTokens },
+      { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
     )
     prepareOrRunChapterGeneration(
       'continue',

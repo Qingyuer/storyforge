@@ -19,6 +19,8 @@ export interface RunOptions {
   continuityBudgetTokens?: number
   /** 仅用于冻结旧生产基线，正常创作不得设置。 */
   skipContinuityEnvelope?: boolean
+  /** 正式路径的原 Gateway packet；不得靠词语过滤删掉已声明读取的资料。 */
+  requiredGatewayContext?: string
 }
 
 const QUARANTINED_GENERATION_MARKERS = ['未来计划', '尚未发生', '异世界档案']
@@ -81,12 +83,19 @@ function buildContinuityEnvelope(args: {
     parts.push(`【当前世界最近 verified summaries】\n${trimPart(args.continuity.recentSummaries, summaryChars)}`)
   }
   parts.push(
-    '硬约束执行协议：先在内部逐项核对保护块中的事实、动作、禁令与人物限制；必须在正文前 40% 用明确可观察的行动逐项落实，不得只暗示、遗漏或改成相反行为。',
+    '连续性执行协议：核对已发生事实、禁令与人物认知，按章纲和场景规定的次序安排目标、行动、选择与兑现；后段重点保留在对应场景，不提前结算奖励。缓冲、留白与悬念以作者任务为准，不强制每段发生冲突。规划的退出状态与奖励不代表已经发生。',
     '篇幅纪律：优先完成本章任务终点与全部硬约束，再补充氛围和细节；不得在关键动作完成前耗尽篇幅。',
     '以上内容是最低连续性约束；不得用未来章或其他世界资料覆盖。',
     CONTINUITY_CORE_END,
   )
   return parts.join('\n\n')
+}
+
+/** 保留作者模板；模板缺少 worldContext 时，仍交付同一份已冻结的必读 packet。 */
+function deliverRequiredGatewayContext(messages: ChatMessage[], content: string | undefined): ChatMessage[] {
+  if (content === undefined || messages.some(message => message.content.includes(content))) return messages
+  const required = `【本轮必读资料 · 已冻结 Context Gateway】\n${content}`
+  return [...messages, { role: 'user', content: required }]
 }
 
 function injectContinuityEnvelope(
@@ -113,7 +122,7 @@ export function buildChapterContentPrompt(
   options?: RunOptions,
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('chapter.content')
-  const safeWorldContext = options?.skipContinuityEnvelope
+  const safeWorldContext = options?.skipContinuityEnvelope || options?.requiredGatewayContext !== undefined
     ? worldContext
     : sanitizeProseGenerationContext(worldContext)
   const { messages } = renderPrompt(tpl, {
@@ -133,9 +142,10 @@ export function buildChapterContentPrompt(
   const guarded = appendSimplifiedChineseOutputConstraint(userHint?.trim() ? messages.map(message => message.role === 'system'
     ? { ...message, content: `${message.content}\n\n本轮作者明确指定的篇幅、文风、章节收尾和禁止事项优先于模板默认值。达到作者指定的结束位置就停止，不为凑默认字数追加情节；仍须遵守作品信息边界。` }
     : message) : messages)
-  return options?.skipContinuityEnvelope
+  const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
+  return deliverRequiredGatewayContext(result, options?.requiredGatewayContext)
 }
 
 export function buildContinuePrompt(
@@ -146,7 +156,7 @@ export function buildContinuePrompt(
   options?: RunOptions,
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('chapter.continue')
-  const safeWorldContext = options?.skipContinuityEnvelope
+  const safeWorldContext = options?.skipContinuityEnvelope || options?.requiredGatewayContext !== undefined
     ? worldContext
     : sanitizeProseGenerationContext(worldContext)
   const { messages } = renderPrompt(tpl, {
@@ -164,9 +174,10 @@ export function buildContinuePrompt(
   const guarded = appendSimplifiedChineseOutputConstraint(userHint?.trim() ? messages.map(message => message.role === 'system'
     ? { ...message, content: `${message.content}\n\n本轮作者明确指定的篇幅、文风、章节收尾和禁止事项优先于模板默认值。达到作者指定的结束位置就停止，不为凑默认字数追加情节；仍须遵守作品信息边界。` }
     : message) : messages)
-  return options?.skipContinuityEnvelope
+  const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
+  return deliverRequiredGatewayContext(result, options?.requiredGatewayContext)
 }
 
 export function buildPolishPrompt(text: string, instruction: string, options?: RunOptions): ChatMessage[] {

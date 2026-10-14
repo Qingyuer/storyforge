@@ -26,6 +26,7 @@ describe('PIPELINE-1 · 正文生成节点', () => {
       formalEntryId: 'prose.chapter.generate',
       category: 'chapter.content',
       projectId: 17,
+      contextOverflowPolicy: 'reject',
     })
   })
 
@@ -49,6 +50,9 @@ describe('PIPELINE-1 · 正文生成节点', () => {
       { role: 'user', content: '作者本次调整后的续写提示词' },
     ])
     expect(prepared.messages[0].content).toBe('原续写提示词')
+    expect(start).toHaveBeenCalledWith([{ role: 'user', content: '作者本次调整后的续写提示词' }], undefined, {
+      formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId: 17, contextOverflowPolicy: 'reject',
+    })
   })
 
   it('durable 候选可延迟 step success，等待作者采纳后再由 runner 完成', async () => {

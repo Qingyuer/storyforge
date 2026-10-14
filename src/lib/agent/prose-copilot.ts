@@ -6,6 +6,7 @@ import { buildChapterContentPrompt, buildContinuePrompt } from '../ai/adapters/c
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
+import { assertWorkspaceContentRevisionFreshV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
 import type {
   GenerationGateIssue,
   GenerationNode,
@@ -81,6 +82,8 @@ export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
 export type ProseCopilotOperation = 'generate' | 'continue'
 
 export interface ProseCopilotSnapshot {
+  /** 新候选冻结原注册表内容向量，缺失保留旧恢复协议的兼容性。 */
+  contentRevision?: WorkspaceContentRevisionVectorV1
   outlineNodeId: number
   outlineUpdatedAt: number
   chapterId: number | null
@@ -372,6 +375,7 @@ function buildProseMessages(input: ProseCopilotInput) {
       input.outlineNode.summary,
       perspectiveBoundary + '\n' + context,
       hint,
+      { requiredGatewayContext: input.assembled.text },
     )
   }
   const worldRulesIndex = input.assembled.included.indexOf('worldRules')
@@ -383,6 +387,7 @@ function buildProseMessages(input: ProseCopilotInput) {
     input.previousTail,
     worldRulesIndex >= 0 ? input.assembled.segments[worldRulesIndex]?.content ?? '' : '',
     perspectiveBoundary + '\n' + hint,
+    { requiredGatewayContext: input.assembled.text },
   )
 }
 
@@ -416,8 +421,10 @@ async function adoptCandidate(input: {
       db.outlineNodes,
       db.retrievalChunks,
       db.narrativeSummaryNodes,
+      ...(input.snapshot.contentRevision ? contentRevisionTableSpecsV1().map(spec => spec.table) : []),
     ),
     async () => {
+      if (input.snapshot.contentRevision) await assertWorkspaceContentRevisionFreshV1(input.snapshot.contentRevision, { scope: workspaceScope, worldGroupId: input.worldGroupId })
       const current = await readSnapshot(
         workspaceScope,
         input.snapshot,
@@ -592,6 +599,7 @@ export async function prepareProseCopilot(input: {
     informationBoundary.manifestHash,
     perspectiveFromChapter,
   )
+  snapshot.contentRevision = await captureWorkspaceContentRevisionV1({ scope, worldGroupId })
   const assembled = await prepareProseGatewayAssemblyV1({
     projectId: input.projectId,
     scope,
@@ -607,6 +615,7 @@ export async function prepareProseCopilot(input: {
     signal: input.signal,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
+  await assertWorkspaceContentRevisionFreshV1(snapshot.contentRevision, { scope, worldGroupId })
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
   const inputState = projectContextGatewayInputStateV1(
     skill,
@@ -943,6 +952,7 @@ export function createProseCopilotNode(
       return { status: issues.length ? 'blocked' : 'pass', issues }
     },
     adopt: async output => {
+      if (input.snapshot.contentRevision) await assertWorkspaceContentRevisionFreshV1(input.snapshot.contentRevision, { scope: input.scope, worldGroupId: input.worldGroupId })
       const current = await readCurrent()
       if (!sameSnapshot(current, input.snapshot)) throw new ProseCopilotStaleError()
       return save(parseProseCandidateDraft(output))

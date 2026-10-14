@@ -936,6 +936,8 @@ const OUTLINE_DETAIL_INPUT_POLICY = {
 
 const PROSE_INPUT_POLICY = {
   sourceKeys: [
+    'storyCore',
+    'creativeRules',
     'chapterOutline',
     'detailedOutline',
     'storyArcs',
