@@ -147,7 +147,7 @@
 | B-LF-Q01 | DONE | 固定样本、现版基线与验收量表 | 已有长篇基线 | 实验协议、原创样本、现版输出与问题清单 | [最终实验记录](../audits/SYSTEM-FICTION-Q01-BASELINE.md)：30 章、三作品恢复、23 项问题；工程修复交付门另记 |
 | B-LF-Q02 | DONE | 技法研究与可执行写作任务 | Q01 | 技法卡、正反例、阶段映射 | [研究与校准](../audits/SYSTEM-FICTION-Q02-TECHNIQUE-CARDS.md)：7 卡、28 例、7 对 / 14 个真实候选；保留回退与未确立收益 |
 | B-LF-Q03 | IN_PROGRESS | 元素配置与写作合同 | Q02 | 六组元素界面、owner 与字段合同、运行快照 | 已完成作用域修复、原生元素合同与候选编辑；正式正文快照待 Q05 |
-| B-LF-Q04 | QUEUED | 细纲结构和连续操作 | Q03 | 场景任务结构、章纲与正文跳转、旧数据兼容 | 待填写 |
+| B-LF-Q04 | IN_PROGRESS | 细纲结构和连续操作 | Q03 | 场景任务结构、章纲与正文跳转、旧数据兼容 | 字段、人工保存、候选与三向跳转已实施；定向验证通过，M2 完整工程门与实际模型交接随 Q05 核对 |
 | B-LF-Q05 | QUEUED | 上下文交接与预算 | Q04 | 完整细纲读取、版本与实际请求证据 | 待填写 |
 | B-LF-Q06 | QUEUED | 正文生成与文风控制 | Q05 | 共用章节生成策略、候选与参数证据 | 待填写 |
 | B-LF-Q07 | QUEUED | 全章评审与问题定位 | Q06 | 覆盖清单、证据问题、独立评估合同 | 待填写 |
@@ -214,6 +214,12 @@ Q01 已取得的优先反例为：卖完声明与存货冲突、余额透支、�
 **完成条件：**对应章节跳转、人工编辑、AI 候选、拒绝与采纳、刷新恢复、旧备份、跨作品隔离和窄屏操作通过；旧记录不会丢场景、备注或引用。
 
 **主要落点：**`DetailedOutlinePanel`、`DetailedSceneCard`、`OutlinePanel`、`ChapterEditor`、`WorkspacePage`、细纲类型/store、正式细纲 Skill 与 Adoption。
+
+**2026-10-14 实施合同：**在原 `DetailedScene` 中增加可选文本 `entryState/goal/keyChoice/outcome/exitState/sceneFunction`（进入、目标、选择、后果、退出、功能与期待），不要求统一公式、敌人或非空冲突。新字段留白和缺失均可；旧场景不补写，sceneId、顺序、引用和原备注保留。Field/Adoption 与 PROJECT_TABLES 导入预检使用同一验证器，新字段错误在写入前拒绝；没有新增表、索引或 schema 迁移。原正式细纲候选支持这些字段；modify 中未声明的任务、备注与角色引用保留，显式空字符串/空数组才清空对应值。
+
+独立细纲与正文内嵌场景复用同一编辑卡及 `editScene` 操作。每次人工新增、修改、删除在 pending 队列中读最新 DB 数组再合并，捕获明确 Work scope；输入立即保存在本地视图，失败保留草稿，完整重试成功后才解除导航阻挡。作者输入保存完成后，章纲→细纲→正文→细纲通过同一 Work 和 outlineNodeId 跳转；无正文时复用原创建流程，外来 Work、已删或非章节目标拒绝。手机显示章纲的细纲入口。
+
+侧栏区分未规划、待确认、已保存细纲、章纲变化待复核；空壳和默认场景名不算规划，作者可仅用备注表达任务。全章候选索引只读原 Harness，运行状态在 hash/验证之前进入实际订阅；拒绝写入后的标记会刷新，已取消或结束运行不能恢复为待确认。上游空摘要变为非空也会提示复核，复核由作者明确点击。定向证据见 [任务、Scope、往返与引用](../../tests/regression/R-LFQ4-scene-tasks.test.ts)、[输入与保存失败](../../tests/regression/R-AUDIT6-detailed-outline-views.test.tsx)、[原 Run 与只读索引](../../tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts)、[实际浏览器路径](../../tests/e2e/longform-scene-tasks.spec.ts)。模型替身只证明流程；正式 Agnes 文本、正文请求的完整任务交接与 M2 的完整工程门继续验证，当前不据此宣称文学提升。
 
 ### Q05 上下文交接与预算
 

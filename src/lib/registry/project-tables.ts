@@ -13,6 +13,7 @@
 import { db } from '../db/schema'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
 import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
+import { normalizeDetailedScenes } from '../types/detailed-outline'
 
 const WORKSPACE_DOMAIN_OWNER = {
   allowed: ['workspace'], defaultOwner: 'workspace', locator: { kind: 'workspace' },
@@ -860,6 +861,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ] },
 
   { table: db.detailedOutlines, name: 'detailedOutlines', owner: 'project', exportable: true,
+    validateImportRow: row => { normalizeDetailedScenes(row.scenes) },
     resourceIdentity: RESOURCE_IDENTITY('detailed-outline', 'detailed-outline', '细纲'),
     worldSemantic: { version: 1, area: 'detailed-outline', resourceKind: 'detailed-outline', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,

@@ -26,6 +26,7 @@ interface Props {
   project: Project
   /** 外部指定要打开的 outlineNodeId（从大纲跳转过来） */
   initialNodeId?: number | null
+  onOpenDetailedOutline?: (nodeId: number) => void
 }
 
 const STATUS_LABELS: Record<ChapterStatus, string> = {
@@ -44,7 +45,7 @@ const STATUS_DOT: Record<ChapterStatus, string> = {
   final:    'bg-success',
 }
 
-export default function ChaptersListPanel({ project, initialNodeId }: Props) {
+export default function ChaptersListPanel({ project, initialNodeId, onOpenDetailedOutline }: Props) {
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const loadCharacters = useCharacterStore(state => state.loadAll)
@@ -231,7 +232,9 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
           </div>
           {/* 场景细纲（可折叠） */}
           <div className="px-4 pt-2 pb-2">
+            {onOpenDetailedOutline && <button type="button" className="mb-2 text-xs text-accent" onClick={() => onOpenDetailedOutline(selectedNode.id!)}>查看本章细纲</button>}
             <ScenePanel
+              key={`${project.id}:${project.activeWorkId}:${selectedNode.id}`}
               project={project}
               outlineNodeId={selectedNode.id!}
               chapterTitle={selectedNode.title}
