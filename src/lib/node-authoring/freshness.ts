@@ -5,7 +5,7 @@ import { hashAuthoringText, readAuthoringCanonBinding } from './bindings'
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
-import { isQualityAuthoringReportCurrentV1 } from './quality-execution'
+import { isQualityAuthoringReportCurrentV1, readQualityAuthoringRevisionV1 } from './quality-execution'
 
 export type AuthoringFreshnessReason =
   | 'never-run'
@@ -71,6 +71,12 @@ export async function inspectAuthoringGraphFreshness(input: {
     if (candidate.domain?.kind === 'quality-review') {
       try {
         if (!await isQualityAuthoringReportCurrentV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, mode: candidate.domain.mode, reportHash: candidate.domain.reportHash })) reasons.push('source-updated')
+      } catch { reasons.push('source-missing') }
+    }
+    if (candidate.domain?.kind === 'quality-revision') {
+      try {
+        const { chapter, view } = await readQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: candidate.domain })
+        if (!view.current && !(view.state === 'completed' && chapter.content === view.draft.contentHtml)) reasons.push('source-updated')
       } catch { reasons.push('source-missing') }
     }
     const signature = candidate.signature

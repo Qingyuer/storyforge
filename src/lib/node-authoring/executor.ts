@@ -29,6 +29,8 @@ import type {
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode } from './domain-execution'
 import { authoringDomainActionBindingV1 } from './domain-action-registry'
+import { rejectQualityAuthoringRevisionV1 } from './quality-execution'
+import { inspectAuthoringGraphFreshness } from './freshness'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../workspace/scope'
 
 export interface AuthoringRunSnapshot {
@@ -198,7 +200,7 @@ export function buildAuthoringExecutionPlan(input: {
       || template?.capability === 'generate-collection'
       || node.templateId === 'processor.free-generation'
     if (!usesAI) continue
-    const count = Math.min(8, Math.max(1, Math.round(graphControlNumber(
+    const count = node.templateId === 'chapter.quality-revision' ? 2 : Math.min(8, Math.max(1, Math.round(graphControlNumber(
       input.graph,
       node,
       'control.count',
@@ -662,9 +664,24 @@ export async function reviseAuthoringCandidate(input: {
   selectedVariantIndex?: number
   reject?: boolean
 }): Promise<NodeRunRecord> {
+  if (input.flow.id == null) throw new Error('请先保存节点图。')
+  return withAuthoringExecutionOwner(input.flow.id, () => reviseIdleAuthoringCandidate(input))
+}
+
+async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAuthoringCandidate>[0]): Promise<NodeRunRecord> {
   const scope = await resolveScopeLike(input.flow.projectId)
   const flow = await db.nodeFlows.get(input.flow.id!)
   if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) throw new Error('节点图不存在或不属于当前作品。')
+  const original = await db.nodeRuns.get(input.runId)
+  if (!original || original.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', original, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')
+  const frozen = parseRunMaps(original).candidates[input.nodeId]
+  if (frozen?.domain?.kind === 'quality-revision') {
+    if (!input.reject) throw new Error('范围修订候选只读，请编辑原稿或开启明确的新一轮审修。')
+    if (original.status === 'running' || frozen.status === 'adopted' || frozen.status === 'rejected') throw new Error('候选不存在、正在执行或已处理。')
+    const node = parseAuthoringGraph(original.graphSnapshotJson ?? flow.graphJson).nodes.find(row => row.id === input.nodeId)
+    if (!node) throw new Error('修订节点证据缺失。')
+    await rejectQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: frozen.domain })
+  }
   return db.transaction('rw', db.nodeRuns, async () => {
     const run = await db.nodeRuns.get(input.runId)
     if (!run || run.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')
@@ -672,6 +689,7 @@ export async function reviseAuthoringCandidate(input: {
     const { candidates } = parseRunMaps(run)
     const candidate = candidates[input.nodeId]
     if (!candidate || candidate.status === 'adopted' || candidate.status === 'rejected') throw new Error('候选不存在或已处理。')
+    if (candidate.domain?.kind === 'quality-revision' && (frozen?.domain?.kind !== 'quality-revision' || candidate.domain.candidateHash !== frozen.domain.candidateHash)) throw new Error('修订候选已变化，未更新节点决定。')
     if (candidate.domain?.kind === 'quality-review' && !input.reject) throw new Error('阅读报告只读，请在审修面板选择问题，不得改写原评审证据。')
     if (input.reject) candidates[input.nodeId] = { ...candidate, status: 'rejected' }
     else if (input.selectedVariantIndex != null) {
@@ -822,10 +840,19 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
         throw new Error('过期重跑基线不存在或不属于当前节点图。')
       }
       const basePlan = parseAuthoringExecutionPlan(base.executionPlanJson)
-      if (!basePlan || !executionGraphMatches(basePlan.graphHash, graph)) {
+      if (!basePlan || (!executionGraphMatches(basePlan.graphHash, graph) && (!input.runNodeIds || !base.graphSnapshotJson))) {
         throw new Error('节点图已变化，不能复用旧运行候选；请开始一次新的运行。')
       }
       ;({ snapshots, candidates } = parseRunMaps(base))
+      if (input.runNodeIds) {
+        const originalGraph = parseAuthoringGraph(base.graphSnapshotJson ?? input.flow.graphJson)
+        const freshness = await inspectAuthoringGraphFreshness({ flow: input.flow, snapshots, candidates })
+        for (const upstream of topologicalAuthoringOrder(graph, targetNodeId).filter(node => !input.runNodeIds!.has(node.id))) {
+          if (!candidates[upstream.id] || !originalGraph.nodes.some(node => node.id === upstream.id)
+            || authoringExecutionGraphHash(authoringExecutionSubgraph(originalGraph, upstream.id)) !== authoringExecutionGraphHash(authoringExecutionSubgraph(graph, upstream.id))
+            || freshness[upstream.id]?.status !== 'fresh') throw new Error('要复用的上游节点、连线或来源已变化；请先重新运行上游。')
+        }
+      }
     }
     const row = stampNewRecord(scope, 'nodeRuns', {
       projectId: input.flow.projectId,

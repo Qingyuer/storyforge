@@ -26,7 +26,7 @@ import type { QualityReviewModeV1 } from '../../lib/prose/quality-review'
 import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-revision'
 import { db } from '../../lib/db/schema'
 import { createWholeChapterQualityCallV1, createQualityRevisionCallV1 } from '../../lib/prose/quality-transport'
-import { htmlToPlainText } from '../../lib/utils/html'
+import { WholeQualityReportView, QualityRevisionScopeControls, QualityRevisionComparisonView } from './QualityReviewViews'
 import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1 } from '../../lib/agent/run/quality-revision-durable'
 
 interface Props {
@@ -358,25 +358,19 @@ export default function ReviewPanel(props: Props) {
           {qualityResult.current && qualityResult.report.issues.length > 0 && <div className="mt-4 space-y-3 rounded border border-border p-3">
             <p className="text-sm font-medium">按选中问题修稿</p>
             <p className="text-xs text-text-muted">默认只允许修改问题所在段落。你可以增加相关段落，并保护要保留的原句；本轮再调用最多两次模型，先看修订与复核结果，再确认写回。</p>
-            <details><summary className="cursor-pointer text-xs">选择其它可改段落</summary><div className="mt-2 max-h-40 space-y-1 overflow-y-auto">{chapterContent.split('\n').filter(line => line.trim()).map((line, index) => <label key={index} className="flex gap-2 text-xs"><input type="checkbox" disabled={revisionBusy} checked={extraParagraphs.includes(index + 1)} onChange={() => setExtraParagraphs(value => value.includes(index + 1) ? value.filter(item => item !== index + 1) : [...value, index + 1])} />第 {index + 1} 段：{line}</label>)}</div></details>
-            <label className="block text-xs">保护原句（可选，每行一句，须与正文完全相同）<textarea aria-label="保护原句" className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={protectedText} disabled={revisionBusy} onChange={event => setProtectedText(event.target.value)} /></label>
+            <QualityRevisionScopeControls chapterText={chapterContent} extraParagraphs={extraParagraphs} protectedText={protectedText} disabled={revisionBusy} setExtraParagraphs={setExtraParagraphs} setProtectedText={setProtectedText} />
             <button className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" disabled={revisionBusy || qualityRunning || !selectedIssues.length} onClick={() => void handleRevision()}>{revisionBusy ? '修订与复核中…' : '生成修订并复核'}</button>
           </div>}
         </>}
         {revisionError && <p className="mt-3 rounded bg-error/10 p-3 text-xs text-error">{revisionError}</p>}
-        {revisionView && <div data-testid="quality-revision-preview" className="mt-4 space-y-3 rounded border border-border p-3">
-          <p className="text-sm font-medium">修订前后对照</p>
-          <p className="text-xs text-text-muted">{revisionView.state === 'completed' ? '已采纳，记录只读。' : revisionView.state === 'cancelled' ? '已放弃，原稿保留。' : !revisionView.current ? '原稿、资料或证据已变化，修订不能采纳。' : !revisionView.candidate || revisionView.state !== 'awaiting_confirmation' ? '复核未完成，预演结果只供查看；刷新不会重发。' : '复核已返回，最终是否采用由你判断。'}</p>
-          <div className="grid gap-3 md:grid-cols-2"><div><p className="text-xs text-text-muted">原稿</p><p className="whitespace-pre-wrap text-sm">{htmlToPlainText(revisionView.draft.sourceHtml)}</p></div><div><p className="text-xs text-text-muted">修订稿</p><p className="whitespace-pre-wrap text-sm">{revisionView.draft.outputText}</p></div></div>
-          {revisionView.candidate?.qualityRevision?.recheck.outcomes.map(item => <p key={item.issueId} className="text-xs">{item.status === 'improved' ? '模型认为已有改善' : item.status === 'unchanged' ? '模型认为仍未解决' : '模型无法确定'}：{item.reason}<br />依据：“{item.quote}”</p>)}
-          {revisionView.candidate?.qualityRevision?.recheck.review.issues.map(item => <p key={item.id} className="text-xs text-warning">复核建议：{item.reason} · “{item.quote}”</p>)}
+        {revisionView && <QualityRevisionComparisonView view={revisionView}>
           {revisionView.current && revisionView.candidate && revisionView.state === 'awaiting_confirmation' && <div className="flex gap-2"><button disabled={revisionBusy} className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" onClick={() => void decideRevision(true)}>确认采纳修订</button><button disabled={revisionBusy} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50" onClick={() => void decideRevision(false)}>放弃修订</button></div>}
           {['running', 'paused', 'recovery_required'].includes(revisionView.state) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
             setRevisionBusy(true); setRevisionError('')
             void resolveScopeLike(projectId).then(async scope => { await abandonQualityRevisionV1({ scope, chapterId, runId: revisionView.runId }); setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId })) })
               .catch(error => setRevisionError(error instanceof Error ? error.message : '运行未能结束。')).finally(() => setRevisionBusy(false))
           }}>结束未完成运行</button>}
-        </div>}
+        </QualityRevisionComparisonView>}
       </div>
     </div>
   )
@@ -411,23 +405,4 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
       ))}
     </div>
   )
-}
-
-// ── 评分徽章 ──
-
-function WholeQualityReportView({ result, selected, toggle, disabled }: { result: DurableQualityReviewV1; selected: string[]; toggle: (id: string) => void; disabled: boolean }) {
-  const report = result.report
-  return <div className="space-y-3" data-testid="whole-chapter-quality-report">
-    <p className={result.current ? 'text-xs text-text-muted' : 'text-xs text-warning'}>{result.current ? '当前正文报告' : '正文或作品资料已变化，以下为历史报告。'} · 全文已送审 · 引文已校验</p>
-    <p className="text-[11px] text-text-muted">{report.reviewer.provider} / {report.reviewer.model} · {report.coverage.paragraphs} 段 · {report.coverage.utf16Length} 字符 · {report.reviewer.correlatedJudge ? '与生成模型可能相关' : '使用不同的已记录模型'}。模型建议不代表文学达标或平台准入。</p>
-    <p className="text-sm text-text-primary">{report.summary}</p>
-    {report.strengths.map((item, index) => <p key={index} className="text-xs text-success">保留：{item}</p>)}
-    {report.issues.map(issue => <section key={issue.id} className="rounded border border-border bg-bg-base p-3">
-      <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" aria-label={`处理第${issue.paragraph}段问题`} checked={selected.includes(issue.id)} disabled={disabled} onChange={() => toggle(issue.id)} />本轮处理这个问题</label>
-      <p className="text-xs text-text-muted">第 {issue.paragraph} 段 · {issue.start}～{issue.end} · {issue.confidence === 'uncertain' ? '待作者判断' : '阅读建议'}</p>
-      <blockquote className="my-2 border-l-2 border-accent pl-2 text-xs">{issue.quote}</blockquote>
-      <p className="text-xs text-text-primary">{issue.reason}</p><p className="mt-1 text-xs text-text-secondary">{issue.suggestion}</p>
-    </section>)}
-    {!report.issues.length && <p className="text-xs text-text-muted">本次没有返回可定位的问题；这不等于整章无错。</p>}
-  </div>
 }

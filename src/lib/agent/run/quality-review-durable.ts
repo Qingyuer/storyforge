@@ -28,7 +28,7 @@ const VERIFIER = 'whole-chapter-review-terminal-v1'
 const entries = { quality: 'prose.review.quality', style: 'prose.review.anti-ai', readability: 'prose.review.readability' } as const
 const categories = { quality: 'review.quality', style: 'review.anti-ai', readability: 'review.readability' } as const
 
-export interface DurableQualityReviewV1 { report: QualityReviewArtifactV1; runId: number; current: boolean; messages: ChatMessage[] }
+export interface DurableQualityReviewV1 { report: QualityReviewArtifactV1; runId: number; current: boolean; messages: ChatMessage[]; authorRequest?: string }
 
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: any) {
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
@@ -91,7 +91,7 @@ export async function runWholeChapterQualityReviewV1(input: {
     snapshot = received.snapshot
     const report = await parseWholeChapterQualityReviewV1({ raw, mode: input.mode, chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: completion, settings, generatorIdentity: input.generatorIdentity })
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, outputHash: report.artifactHash })
-    const finalized = await finalizeContextGatewayAttemptEvidenceV1({ scope: input.scope, runId: snapshot.run.id, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, baseManifest: base, preflight: preflight.evidence, selector: execution.selector, sufficiency: execution.sufficiency, retrievalTrace: execution.retrievalTrace, gatewayVersionHash: execution.contextPacket.gatewayVersionHash, policyHash: execution.contextPacket.policyHash, rawResponse: { version: 'quality-review-response-v1', raw, chapterText, revision, report }, candidateHash: report.artifactHash, expectedLastSequence: snapshot.projection.lastSequence })
+    const finalized = await finalizeContextGatewayAttemptEvidenceV1({ scope: input.scope, runId: snapshot.run.id, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, baseManifest: base, preflight: preflight.evidence, selector: execution.selector, sufficiency: execution.sufficiency, retrievalTrace: execution.retrievalTrace, gatewayVersionHash: execution.contextPacket.gatewayVersionHash, policyHash: execution.contextPacket.policyHash, rawResponse: { version: 'quality-review-response-v1', raw, chapterText, revision, report, authorRequest: input.authorRequest?.trim() ?? '' }, candidateHash: report.artifactHash, expectedLastSequence: snapshot.projection.lastSequence })
     snapshot = finalized.snapshot
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, candidateHash: report.artifactHash, requiresConfirmation: false })
     await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
@@ -101,7 +101,7 @@ export async function runWholeChapterQualityReviewV1(input: {
     snapshot = await append(input.scope, snapshot, 'verification.started', { verifierSetVersion: VERIFIER })
     const receipt = await createVerificationReceiptV1({ version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash, contextManifestHashes: [finalized.manifest.manifestHash], candidateHashes: [report.artifactHash], adoptionEventIds: [], postStateHash: runtimeBindingHash, verifierSetVersion: VERIFIER, criteria: contract.acceptance.map(item => ({ id: item.id, status: 'passed' as const, evidenceRefs: [`report:${report.artifactHash}`, `target:${report.targetTextHash}`] })), acceptedAt: Date.now() })
     snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
-    return { report, runId: snapshot.run.id, current: true, messages: request.messages }
+    return { report, runId: snapshot.run.id, current: true, messages: request.messages, authorRequest: input.authorRequest?.trim() ?? '' }
   } catch (error) {
     if (snapshot.projection.steps[QUALITY_REVIEW_STEP_V1]?.status === 'running') snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, code: 'quality-review-invalid-or-stale', retryable: false })
     throw error
@@ -129,7 +129,7 @@ export async function readLatestWholeChapterQualityReviewV1(input: { scope: Work
     const evidence = await verifyContextGatewayCandidateEvidenceV1({ scope: input.scope, runId: row.id!, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, candidateHash: candidate.payload.candidateHash })
     const ref = evidence.manifest.artifacts.find(item => item.role === 'raw-response')
     if (!ref) throw new Error('报告原响应证据缺失。')
-    const payload = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: ref.contentHash })) as { version: string; chapterText: string; report: QualityReviewArtifactV1; revision: WorkspaceContentRevisionVectorV1 }
+    const payload = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: ref.contentHash })) as { version: string; chapterText: string; report: QualityReviewArtifactV1; revision: WorkspaceContentRevisionVectorV1; authorRequest?: string }
     const requestRef = evidence.manifest.artifacts.find(item => item.role === 'rendered-request')!
     const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'rendered-request', contentHash: requestRef.contentHash })) as { messages: ChatMessage[] }
     if (payload.version !== 'quality-review-response-v1' || payload.report.artifactHash !== candidate.payload.candidateHash || !await verifyWholeChapterQualityReviewV1(payload.report, payload.chapterText, request.messages)) throw new Error('报告证据已损坏。')
@@ -138,7 +138,7 @@ export async function readLatestWholeChapterQualityReviewV1(input: { scope: Work
     const session = await createContextGatewayToolSessionV1({ scope: { ...input.scope, worldGroupId: snapshot.contract.scope.worldGroupId ?? null, chapterId: input.chapterId, characterId: chapter.perspectiveCharacterId ?? null }, policy: createContextAccessPolicyForExecutionV1(getAgentSkillV1('prose.quality-review', 'prose')) })
     const freshness = await inspectContextGatewayManifestFreshnessV1({ session, manifest: evidence.manifest })
     current = current && freshness.status === 'fresh'
-    return { report: payload.report, runId: row.id!, current, messages: request.messages }
+    return { report: payload.report, runId: row.id!, current, messages: request.messages, authorRequest: payload.authorRequest ?? '' }
   }
   return null
 }

@@ -52,6 +52,7 @@ interface QualityRevisionInputV1 {
   revise: Call; recheck: Call; signal?: AbortSignal
   configOverride?: import('../../types').AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
+  authorRequest?: string
 }
 
 export async function runQualityRevisionV1(input: QualityRevisionInputV1): Promise<QualityRevisionViewV1> {
@@ -82,10 +83,10 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   const resolution = boundedQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.revise', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
   if (resolution.config.maxTokens > writer.maxOutputTokens) throw new Error('修订输出上限超过本轮预算。')
-  const assembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'revise', qualityRevision: true, authorRequest: '只处理作者选中的问题，保留保护文字、其它段落和停笔位置。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
+  const assembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'revise', qualityRevision: true, authorRequest: `只处理作者选中的问题，保留保护文字、其它段落和停笔位置。${plan.authorRequest ? `\n${plan.authorRequest}` : ''}`, config: resolution.config, allowOutlineOnlyAgentDraft: true })
   const messages: ChatMessage[] = [
     { role: 'system', content: `只处理作者明确选中的阅读问题。你只能替换允许范围，不能修改保护文字、其它段落、人物事实、奖励与停笔位置。不要额外改写全文，也不要把范围或任务说明写进小说。输出单个JSON：{"edits":[{"spanId":"允许范围的id","replacement":"该范围的替换文字，可为空以删除"}]}。每个spanId最多一次，总替换字符不超过${plan.maxReplacementChars}。` },
-    { role: 'user', content: `【完整原稿】\n${originalText}\n【作者选中的问题】\n${JSON.stringify(review.report.issues.filter(issue => plan.issueIds.includes(issue.id)))}\n【允许替换的文字范围】\n${JSON.stringify(plan.allowedSpans)}\n【保护文字】\n${JSON.stringify(plan.protectedQuotes)}\n【登记资料与作者要求】\n${assembly.text}` },
+    { role: 'user', content: `【完整原稿】\n${originalText}\n【作者选中的问题】\n${JSON.stringify(review.report.issues.filter(issue => plan.issueIds.includes(issue.id)))}\n【允许替换的文字范围】\n${JSON.stringify(plan.allowedSpans)}\n【保护文字】\n${JSON.stringify(plan.protectedQuotes)}\n【登记资料与作者要求】\n${assembly.text}${plan.authorRequest ? `\n【本轮作者补充要求 · 只适用于已授权范围】\n${plan.authorRequest}` : ''}` },
   ]
   const base = await buildProseGenerationRunContractV3({ projectId: input.scope.projectId, worldGroupId: input.worldGroupId, chapterId: input.chapterId, operation: 'quality-revise', generationBinding: writerBinding, formalEntry: await freezeFormalAIEntryBindingV1('prose.chapter.quality-revise') })
   const contract: AgentRunContractV3 = { ...base, objective: `定向修订章节 #${input.chapterId}，报告 ${input.reportHash}，一次修订与一次复核后等待作者`, runtimeBindingHash: plan.planHash,
@@ -183,7 +184,16 @@ export async function adoptQualityRevisionV1(input: { scope: WorkspaceScope; can
 }
 
 export async function rejectQualityRevisionV1(input: { scope: WorkspaceScope; candidate: ProseGenerationCandidateV1 }) {
-  return rejectProseGenerationCandidateV1({ ...input, runId: input.candidate.durable.runId })
+  if (input.candidate.operation !== 'quality-revise' || !input.candidate.qualityRevision) throw new Error('不是当前范围修订候选。')
+  let snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
+  if (snapshot.projection.steps['prose-generation']?.candidateHash !== input.candidate.durable.candidateHash) throw new Error('修订候选身份已变化，未记录拒绝。')
+  if (snapshot.projection.state === 'cancelled') return snapshot
+  if (snapshot.projection.state === 'completed') throw new Error('修订已采纳，不能重复拒绝。')
+  snapshot = await rejectProseGenerationCandidateV1({ ...input, runId: input.candidate.durable.runId })
+  if (snapshot.events.some(event => event.type === 'confirmation.recorded' && event.payload.decision === 'reject' && event.payload.candidateHash === input.candidate.durable.candidateHash) && !['cancelled', 'completed', 'failed'].includes(snapshot.projection.state)) {
+    snapshot = await append(input.scope, snapshot, 'run.cancelled', { reason: 'author-rejected-quality-revision' })
+  }
+  return snapshot
 }
 
 /** End a saved interrupted run without dispatching a model or overwriting text. */

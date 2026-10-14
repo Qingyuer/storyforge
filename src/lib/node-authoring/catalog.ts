@@ -316,6 +316,18 @@ const CONTENT_TEMPLATES: AuthoringNodeTemplate[] = [
     outputs: [{ id: 'report', label: '只读阅读报告', semantic: 'chapter.quality-review', cardinality: 'one', state: 'candidate' }],
     reads: { sourceKeys: resolveAgentSkillContextSourceKeysV1(getAgentSkillV1('prose.quality-review', 'prose')) },
     parameters: [{ key: 'chapterTitle', label: '目标章节标题', type: 'text', defaultValue: '' }, { key: 'request', label: '评审补充要求', type: 'text', defaultValue: '' }, { key: 'mode', label: '评审侧重', type: 'select', options: ['审校', '表达与重复', '追读力'], defaultValue: '审校' }, { key: 'newReport', label: '重新评审（另发一次请求）', type: 'boolean', defaultValue: false }],
+    recommendedAfter: ['chapter.quality-revision'],
+  },
+  {
+    id: 'chapter.quality-revision', version: 1, label: '定向修订与复核', category: '正文', class: 'processor', capability: 'generate-field',
+    description: '作者明确选择当前报告的问题与允许范围，一次修订和一次复核后保存正文候选；确认采纳才写回。',
+    inputs: [optionalControl('ai-profile', 'AI 配置', 'control.ai-profile'), optionalControl('prompt', '修订补充要求', 'control.prompt'), optionalControl('temperature', '温度', 'control.temperature'), optionalControl('max-tokens', '最大输出 Tokens', 'control.max-tokens'), { id: 'report', label: '已确认选择的阅读报告', semantic: 'chapter.quality-review', cardinality: 'one', state: 'candidate', required: true }],
+    outputs: [{ id: 'candidate', label: '修订正文候选', semantic: 'chapter.prose', cardinality: 'one', state: 'candidate' }],
+    reads: { sourceKeys: resolveAgentSkillContextSourceKeysV1(getAgentSkillV1('prose.quality-revise', 'prose')) },
+    writes: { target: 'chapters', fields: ['content', 'wordCount'], mode: 'replace' },
+    parameters: [{ key: 'chapterTitle', label: '目标章节标题', type: 'text', defaultValue: '' }, { key: 'request', label: '修订补充要求', type: 'text', defaultValue: '' }, { key: 'mode', label: '评审侧重', type: 'select', options: ['审校', '表达与重复', '追读力'], defaultValue: '审校' }],
+    recommendedBefore: ['chapter.quality-review'],
+    recommendedAfter: ['output.review-adopt', 'chapter.organize'],
   },
   collectionTemplate({
     id: 'continuity.foreshadow',

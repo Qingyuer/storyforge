@@ -88,7 +88,7 @@ import type {
   AuthoringSemantic,
 } from './contracts'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../workspace/scope'
-import { executeQualityAuthoringNodeV1 } from './quality-execution'
+import { executeQualityAuthoringNodeV1, executeQualityRevisionAuthoringNodeV1, adoptQualityAuthoringRevisionV1 } from './quality-execution'
 
 export interface DomainExecutionResult {
   output: string
@@ -862,6 +862,7 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
 /** 领域节点专用执行器；返回 null 时由通用 FLOW-3 执行器处理。 */
 export async function executeDomainNode(input: DomainExecutionInput): Promise<DomainExecutionResult | null> {
   if (input.node.templateId === 'chapter.quality-review') return executeQualityAuthoringNodeV1(input)
+  if (input.node.templateId === 'chapter.quality-revision') return executeQualityRevisionAuthoringNodeV1(input)
   // Preserve the formal action's schema prompt; the selected author template
   // supplements its request instead of replacing the domain contract.
   const prompt = inputControl(input.inputs, 'control.prompt')
@@ -903,6 +904,10 @@ export async function adoptDomainCandidate(input: {
 }): Promise<AdoptResult | null> {
   const scope = await resolveDomainScope(input)
   if (input.domain.kind === 'quality-review') throw new Error('全文阅读报告只读，不能采纳为正文；请打开审修面板选择问题。')
+  if (input.domain.kind === 'quality-revision') {
+    const result = await adoptQualityAuthoringRevisionV1({ ...input, domain: input.domain })
+    return { ...emptyAdoptResult(), written: [{ id: result.chapterId, fields: ['content', 'wordCount'] }] }
+  }
   if (input.domain.kind === 'worldview-field') {
     return adoptRestoredWorldviewFieldCandidate({
       projectId: input.projectId,

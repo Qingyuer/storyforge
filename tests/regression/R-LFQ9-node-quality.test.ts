@@ -62,6 +62,8 @@ describe('LFQ9 · 节点复用正式全文评审', () => {
     await executeDomainNode(args(f, n, [...inputs, control('control.prompt', '保持舒缓，不强制悬念')]))
     expect(executeRegisteredAIEntryV1).toHaveBeenCalledTimes(2)
     expect(vi.mocked(executeRegisteredAIEntryV1).mock.calls[1][1].some(message => message.content.includes('保持舒缓，不强制悬念'))).toBe(true)
+    await executeDomainNode(args(f, n, [...inputs, control('control.prompt', '保持舒缓，不强制悬念')]))
+    expect(executeRegisteredAIEntryV1).toHaveBeenCalledTimes(2)
     await expect(adoptDomainCandidate({ ...args(f), domain: result!.domain, output: result!.output })).rejects.toThrow('只读')
   })
 

@@ -23,6 +23,7 @@ export interface QualityRevisionPlanV1 {
   issueIds: string[]
   allowedSpans: QualityRevisionSpanV1[]
   protectedQuotes: string[]
+  authorRequest?: string
   budget: { previousCalls: number; maxTotalCalls: 4; maxRevisionCalls: 1; maxRecheckCalls: 1 }
   maxReplacementChars: number
   planHash: string
@@ -49,9 +50,11 @@ export async function freezeQualityRevisionPlanV1(input: {
   selectedIssueIds: string[]
   additionalParagraphs?: number[]
   protectedQuotes?: string[]
+  authorRequest?: string
   previousCalls: number
 }): Promise<QualityRevisionPlanV1> {
   if (!input.reviewCurrent || !await verifyWholeChapterQualityReviewV1(input.report, input.originalText, input.reviewMessages)) throw new Error('评审或原稿已变化，不能使用旧问题修订。')
+  if (input.authorRequest != null && (typeof input.authorRequest !== 'string' || input.authorRequest.length > 16000)) throw new Error('本次修订要求无效或过长。')
   for (const id of [input.scope.projectId, input.scope.worldId, input.scope.workId, input.chapterId, input.reportRunId]) {
     if (!Number.isSafeInteger(id) || id! < 1) throw new Error('修订计划缺少明确作品和章节身份。')
   }
@@ -92,6 +95,7 @@ export async function freezeQualityRevisionPlanV1(input: {
     targetTextHash: input.report.targetTextHash, issueIds: [...input.selectedIssueIds], allowedSpans, protectedQuotes,
     budget: { previousCalls: input.previousCalls, maxTotalCalls: 4, maxRevisionCalls: 1, maxRecheckCalls: 1 },
     maxReplacementChars: Math.max(800, Math.ceil(input.originalText.length * 1.25)),
+    ...(input.authorRequest?.trim() ? { authorRequest: input.authorRequest.trim() } : {}),
   }
   return { ...body, planHash: await hashCanonicalValue(body) }
 }

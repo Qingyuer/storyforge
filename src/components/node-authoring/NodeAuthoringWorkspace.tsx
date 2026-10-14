@@ -1,5 +1,6 @@
 import PromptControlEditor from './PromptControlEditor'
 import QualityNodeActions from './QualityNodeActions'
+import RevisionNodeSelection from './RevisionNodeSelection'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
@@ -474,6 +475,7 @@ function NodeInspector(props: { node: AuthoringNodeInstance | null; graph: Autho
           <div className="max-h-48 space-y-1 overflow-y-auto">{CONTEXT_SOURCES.filter(source => source.key !== 'ragSelection').map(source => <label key={source.key} className="flex items-start gap-2 text-[10px] text-text-secondary"><input type="checkbox" checked={sourceKeys.includes(source.key)} onChange={() => updateConfig('sourceKeys', sourceKeys.includes(source.key) ? sourceKeys.filter(item => item !== source.key) : [...sourceKeys, source.key])} className="mt-0.5 accent-[var(--accent)]" /><span><span className="block">{source.label}</span><span className="block text-[9px] text-text-muted">{source.key}</span></span></label>)}</div>
         </section>}
       </section>}
+      {node.templateId === 'chapter.quality-revision' && <RevisionNodeSelection projectId={props.projectId} worldGroupId={props.worldGroupId} node={node} onConfigChange={config => updateNode({ config })} />}
       {node.templateId === 'chapter.quality-review' && <QualityNodeActions projectId={props.projectId} worldGroupId={props.worldGroupId} node={node} inputs={props.qualityInputs} ready={props.qualityReady} />}
       {node.templateId === 'control.prompt' && <PromptControlEditor key={node.id} node={node} onChange={config => updateNode({ config })} />}
       <div className="space-y-3">{(node.templateId === 'control.prompt' ? [] : template.parameters ?? []).map(parameter => {
@@ -982,9 +984,9 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
             </div>
             {selectedNodeId && freshness[selectedNodeId]?.status === 'stale' && <p role="status" className="mb-2 text-sm text-warning">输入或来源已变化；旧结果保留，请核对后重新运行。</p>}
             {selectedCandidate ? <>
-              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
+              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.domain?.kind === 'quality-revision' ? (selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；原稿保留。' : '范围修订候选只读；前后对照与复核在节点设置中。确认采纳后才写回。') : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
               {selectedCandidate.errors?.length ? <div role="alert" className="mb-2 text-sm text-error">{selectedCandidate.errors.join('；')}</div> : null}
-              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || selectedNode?.binding?.mode === 'live' || selectedCandidate.domain?.kind === 'quality-review' || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
+              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || selectedNode?.binding?.mode === 'live' || (selectedCandidate.domain?.kind === 'quality-review' || selectedCandidate.domain?.kind === 'quality-revision') || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
               {selectedArtifact && <>
                 <CreativeArtifactSummary artifact={selectedArtifact} />
                 {selectedCandidate.authorEditedAfterArtifact && <p className="mt-1 text-[9px] text-warning">上方证据对应模型原稿；当前内容已由作者修改，点击“本地校验并采纳”时会按正式领域合同重新验证，不会追加模型调用。</p>}

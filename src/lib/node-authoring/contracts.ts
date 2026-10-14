@@ -256,6 +256,7 @@ export interface AuthoringCandidate {
 
 export type AuthoringCandidateDomain =
   | { kind: 'quality-review'; chapterTitle: string; mode: 'quality' | 'style' | 'readability'; reportHash: string }
+  | { kind: 'quality-revision'; chapterTitle: string; candidateHash: string; reportHash: string }
   | {
       kind: 'worldview-field'
       targetField: string
