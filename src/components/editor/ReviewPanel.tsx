@@ -161,7 +161,7 @@ export default function ReviewPanel(props: Props) {
       if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
       const result = await runWholeChapterQualityReviewV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode,
-        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: props.qualityAuthorRequest,
+        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: props.qualityAuthorRequest, signal: controller.signal,
         call: createWholeChapterQualityCallV1(projectId, mode, controller.signal),
       })
       if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityReports(value => ({ ...value, [mode]: result }))

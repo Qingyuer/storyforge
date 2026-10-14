@@ -43,6 +43,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   configOverride?: import('../../types').AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
   authorRequest?: string
+  signal?: AbortSignal
 }): Promise<DurableQualityReviewV1> {
   const chapter = await db.chapters.get(input.chapterId)
   if (!chapter || chapter.outlineNodeId !== input.outlineNodeId || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) throw new Error('评审章节不存在或越过当前作品。')
@@ -76,6 +77,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: input.worldGroupId, contract })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: QUALITY_REVIEW_STEP_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1 })
+  let staleInput = false
   try {
     const execution = assembled.contextGatewayExecution
     const preflight = await recordContextGatewayPreflightEvidenceV1({ scope: input.scope, runId: snapshot.run.id, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, contextPacket: execution.contextPacket, selector: execution.selector, renderedRequest: proseRenderedRequestV1(request.messages, settings), sourceSnapshots: execution.sourceSnapshots, toolTranscript: execution.toolTranscript, expectedLastSequence: snapshot.projection.lastSequence })
@@ -94,7 +96,9 @@ export async function runWholeChapterQualityReviewV1(input: {
     const finalized = await finalizeContextGatewayAttemptEvidenceV1({ scope: input.scope, runId: snapshot.run.id, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, baseManifest: base, preflight: preflight.evidence, selector: execution.selector, sufficiency: execution.sufficiency, retrievalTrace: execution.retrievalTrace, gatewayVersionHash: execution.contextPacket.gatewayVersionHash, policyHash: execution.contextPacket.policyHash, rawResponse: { version: 'quality-review-response-v1', raw, chapterText, revision, report, authorRequest: input.authorRequest?.trim() ?? '' }, candidateHash: report.artifactHash, expectedLastSequence: snapshot.projection.lastSequence })
     snapshot = finalized.snapshot
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, candidateHash: report.artifactHash, requiresConfirmation: false })
-    await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
+    try {
+      await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
+    } catch (error) { staleInput = true; throw error }
     await verifyContextGatewayCandidateEvidenceV1({ scope: input.scope, runId: snapshot.run.id, stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, candidateHash: report.artifactHash })
     if (!await verifyWholeChapterQualityReviewV1(report, chapterText, request.messages)) throw new Error('报告引文或覆盖证据验证失败。')
     snapshot = await append(input.scope, snapshot, 'step.succeeded', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, outputHash: report.artifactHash })
@@ -103,7 +107,13 @@ export async function runWholeChapterQualityReviewV1(input: {
     snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
     return { report, runId: snapshot.run.id, current: true, messages: request.messages, authorRequest: input.authorRequest?.trim() ?? '' }
   } catch (error) {
+    snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
     if (snapshot.projection.steps[QUALITY_REVIEW_STEP_V1]?.status === 'running') snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, code: 'quality-review-invalid-or-stale', retryable: false })
+    if (!['failed', 'cancelled', 'completed'].includes(snapshot.projection.state)) {
+      if (input.signal?.aborted) await append(input.scope, snapshot, 'run.cancelled', { reason: 'author-stopped-quality-review' })
+      else if (staleInput) await append(input.scope, snapshot, 'run.paused', { reason: 'author-changed-quality-review-source', recoverable: false })
+      else await append(input.scope, snapshot, 'run.failed', { code: 'quality-review-invalid-or-stale', retryable: false })
+    }
     throw error
   }
 }

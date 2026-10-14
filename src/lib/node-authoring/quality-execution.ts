@@ -61,7 +61,7 @@ export async function executeQualityAuthoringNodeV1(input: DomainExecutionInput)
   const settings = describeResolvedAIRequestSettingsV1(boundedQualityResolutionV1(resolveRequestConfig(input.aiConfig, { category: categories[mode], projectId: input.projectId, configOverrides: generationOverrides })), false, { responseFormat: 'json_object' })
   const identity = (value: typeof settings) => ({ provider: value.provider, model: value.model, parameters: value.parameters })
   const reusable = cached?.current && (cached.authorRequest ?? '') === authorRequest.trim() && await hashCanonicalValue(identity(cached.report.reviewer.settings)) === await hashCanonicalValue(identity(settings))
-  const result = reusable ? cached : await runWholeChapterQualityReviewV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, configOverride: input.aiConfig, generationOverrides, authorRequest, call: createWholeChapterQualityCallV1(input.projectId, mode, input.signal) })
+  const result = reusable ? cached : await runWholeChapterQualityReviewV1({ scope, chapterId: chapter.id!, outlineNodeId: chapter.outlineNodeId, worldGroupId: input.worldGroupId, mode, configOverride: input.aiConfig, generationOverrides, authorRequest, signal: input.signal, call: createWholeChapterQualityCallV1(input.projectId, mode, input.signal) })
   const binding = await readAuthoringCanonBinding({ ...input, scope })
   return { output: JSON.stringify(result.report), semantic: 'chapter.quality-review', domain: { kind: 'quality-review', chapterTitle: chapter.title, mode, reportHash: result.report.artifactHash }, sourceKeys: binding.sourceKeys, sourceHash: binding.sourceHash, sourceEvidence: binding }
 }

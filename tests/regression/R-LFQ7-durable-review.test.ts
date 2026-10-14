@@ -7,6 +7,7 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { runWholeChapterQualityReviewV1, readLatestWholeChapterQualityReviewV1 } from '../../src/lib/agent/run/quality-review-durable'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 
 const validCall = async (_messages: unknown, _config: unknown, result: any) => {
   result.completion = 'complete'; result.finishReason = 'stop'
@@ -56,6 +57,10 @@ describe('LFQ7 · 正式全文评审持久证据', () => {
     expect(call).toHaveBeenCalledTimes(1)
     expect(await readLatestWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, mode: 'style' })).toBeNull()
     expect((await db.agentRunArtifacts.toArray()).some(row => row.artifactKind === 'raw-response' && row.content?.includes('不在原文的句子'))).toBe(true)
+    const run = (await db.agentRuns.toArray())[0]
+    const failed = await readAgentRunV1(f.scope, run.id!)
+    expect(failed.projection.state).toBe('failed')
+    expect(failed.events.filter(event => event.type === 'run.failed')).toHaveLength(1)
   })
 
   it.each(['truncated', 'filtered', 'source-changed'] as const)('%s 拒绝完整报告并保留一次请求的结果', async failure => {
@@ -69,6 +74,24 @@ describe('LFQ7 · 正式全文评审持久证据', () => {
     expect(call).toHaveBeenCalledTimes(1)
     expect(await readLatestWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, mode: 'readability' })).toBeNull()
     expect((await db.agentRunArtifacts.toArray()).some(row => row.artifactKind === 'raw-response' && row.content?.includes('尚需作者核对'))).toBe(true)
+    const run = (await db.agentRuns.toArray())[0]
+    expect((await readAgentRunV1(f.scope, run.id!)).projection.state).toBe(failure === 'source-changed' ? 'paused' : 'failed')
+  })
+
+  it.each(['transport-failed', 'author-stopped'] as const)('%s 留下终态，刷新不恢复成进行中或重发', async failure => {
+    const f = await seed()
+    const original = (await db.chapters.get(f.chapterId))!.content
+    const controller = new AbortController()
+    const call = vi.fn(async () => {
+      if (failure === 'author-stopped') controller.abort()
+      throw new Error(failure)
+    })
+    await expect(runWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, outlineNodeId: f.outlineNodeId, worldGroupId: null, mode: 'quality', signal: controller.signal, call })).rejects.toThrow(failure)
+    const run = (await db.agentRuns.toArray())[0]
+    expect((await readAgentRunV1(f.scope, run.id!)).projection.state).toBe(failure === 'author-stopped' ? 'cancelled' : 'failed')
+    expect(await readLatestWholeChapterQualityReviewV1({ scope: f.scope, chapterId: f.chapterId, mode: 'quality' })).toBeNull()
+    expect(call).toHaveBeenCalledTimes(1)
+    expect((await db.chapters.get(f.chapterId))!.content).toBe(original)
   })
 
   it('另一作品不能查看报告，损坏的原响应不得恢复', async () => {

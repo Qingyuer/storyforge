@@ -75,13 +75,18 @@ test('假引文拒绝报告，保存原响应且不自动重发；原稿不改',
     const json = { summary: '虚构意见', strengths: [], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '不存在的台词', start: null, end: null, reason: '猜测', suggestion: '不应采用' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
   })
-  await setup(page)
+  const target = await setup(page)
   await page.getByRole('button', { name: '审校', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText(/引文不存在或重复/)).toBeVisible()
   await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
   expect(calls).toBe(1)
   await expect(page.locator('.tiptap-editor')).toContainText(quote)
+  expect(await page.evaluate(async id => {
+    const { db } = await import('/storyforge/src/lib/db/schema.ts')
+    const runs = await db.agentRuns.where('projectId').equals(id).toArray()
+    return runs.filter(run => JSON.parse(run.contractJson).workflowKind === 'read-only-audit').map(run => run.status)
+  }, target.projectId)).toEqual(['failed'])
 })
 
 test('小窗口不能装入全章时零请求，不拿前段充当全文报告', async ({ page }) => {
@@ -98,13 +103,18 @@ test('小窗口不能装入全章时零请求，不拿前段充当全文报告',
 test('提供商503只发送一次，失败不能生成有效报告', async ({ page }) => {
   let calls = 0
   await page.route('https://whole-review.invalid/**', route => { calls++; return route.fulfill({ status: 503, body: '暂时不可用' }) })
-  await setup(page)
+  const target = await setup(page)
   await page.getByRole('button', { name: '审校', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText(/暂时不可用|503/)).toBeVisible()
   expect(calls).toBe(1)
   await expect(page.getByTestId('whole-chapter-quality-report')).toHaveCount(0)
   await expect(page.locator('.tiptap-editor')).toContainText(quote)
+  expect(await page.evaluate(async id => {
+    const { db } = await import('/storyforge/src/lib/db/schema.ts')
+    const runs = await db.agentRuns.where('projectId').equals(id).toArray()
+    return runs.filter(run => JSON.parse(run.contractJson).workflowKind === 'read-only-audit').map(run => run.status)
+  }, target.projectId)).toEqual(['failed'])
 })
 
 test('评审中关闭面板停止请求，刷新无有效报告也不自动重发', async ({ page }) => {
@@ -114,11 +124,16 @@ test('评审中关闭面板停止请求，刷新无有效报告也不自动重�
     await new Promise(resolve => setTimeout(resolve, 1500))
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: '晚到结果', strengths: [], issues: [] }) }, finish_reason: 'stop' }] }) }).catch(() => undefined)
   })
-  await setup(page)
+  const target = await setup(page)
   await page.getByRole('button', { name: '审校', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect.poll(() => calls).toBe(1)
   await page.getByRole('button', { name: '关闭质量审校', exact: true }).click()
+  await expect.poll(() => page.evaluate(async id => {
+    const { db } = await import('/storyforge/src/lib/db/schema.ts')
+    const runs = await db.agentRuns.where('projectId').equals(id).toArray()
+    return runs.filter(run => JSON.parse(run.contractJson).workflowKind === 'read-only-audit').map(run => run.status)
+  }, target.projectId)).toEqual(['cancelled'])
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await page.getByRole('button', { name: '审校', exact: true }).click()
