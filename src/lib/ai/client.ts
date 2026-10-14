@@ -22,6 +22,8 @@ export interface AICallMeta {
    * 避免系统指令、用户目标或工具证据被静默移除后继续执行。
    */
   contextOverflowPolicy?: 'trim' | 'reject'
+  /** Durable callers account for each attempt themselves and forbid hidden transport resends. */
+  transportRetryPolicy?: 'none' | 'transient'
 }
 
 export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
@@ -395,7 +397,7 @@ export async function* streamChat(
   try {
     // 自动重试：遇到 429（频率限制）或 503（服务不可用）时，最多重试 2 次
     let response: Response | null = null
-    const MAX_RETRIES = 2
+    const MAX_RETRIES = meta?.transportRetryPolicy === 'none' ? 0 : 2
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       response = await fetch(req.url, {
         method: 'POST',

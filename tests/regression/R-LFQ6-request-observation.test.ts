@@ -10,6 +10,15 @@ const config = { ...previous.config, provider: 'deepseek' as const, model: 'deep
 describe('LFQ6 · 实际请求参数与正文完成情况', () => {
   afterEach(() => { vi.unstubAllGlobals(); useAIConfigStore.setState(previous, true) })
 
+  it.each([429, 503])('durable 显式禁止重发时 HTTP %s 只发送一次', async status => {
+    const fetch = vi.fn(async () => new Response('暂时不可用', { status }))
+    vi.stubGlobal('fetch', fetch)
+    await expect((async () => {
+      for await (const _chunk of streamChat([{ role: 'user', content: '全文评审' }], config, undefined, {}, { transportRetryPolicy: 'none' })) { /* collect until failure */ }
+    })()).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('参数证据对应真实请求构造，提供商不支持的参数不能冒充已发送；从不含密钥、地址或提示词', () => {
     useAIConfigStore.setState({ config })
     const resolution = resolveRequestConfig(config)

@@ -54,6 +54,8 @@ export async function prepareProseGatewayAssemblyV1(input: {
   chapterId?: number | null
   outlineNodeId: number
   operation: ProseGatewayOperationV1
+  /** Reading advice has its own registered prompt contract; fact auditing retains prose.review. */
+  qualityReview?: boolean
   authorRequest: string
   perspectiveCharacterId?: number | null
   citedReferenceIds?: readonly number[]
@@ -66,7 +68,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
   signal?: AbortSignal
 }): Promise<ProseGatewayAssemblyV1> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
-  const skill = resolveAgentSkillV1('prose', `prose.${input.operation}`)
+  const skill = resolveAgentSkillV1('prose', input.operation === 'review' && input.qualityReview ? 'prose.quality-review' : `prose.${input.operation}`)
   if (skill.contextGateway?.rollout !== 'required') {
     throw new Error(`prose.${input.operation} 尚未进入 required Context Gateway。`)
   }
@@ -240,7 +242,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const citedReferenceKeys = references
     .filter(row => row.ragDocumentId && input.citedReferenceIds?.includes(Number(row.id)))
     .map(row => `reference:${row.ragDocumentId}`)
-  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals])
+  const targetTextResources = targetChapter && (input.operation === 'review' || input.operation === 'revise')
+    ? await canonRowResourceKeysV1('chapters', { ...targetChapter, projectId: scope.projectId }) : null
+  const targetTextOriginal = targetTextResources?.fields.content
+  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals, ...(targetTextOriginal ? [targetTextOriginal] : [])])
   const mandatoryFullResourceKeys = unique([
     authorIntentKey,
     targetOutlineRecord,

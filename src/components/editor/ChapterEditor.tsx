@@ -831,12 +831,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const html = editorRef.current?.getHTML() ?? content
     const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
     const wc = countWords(plain)
-    await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    if (shouldPersistChapterEditorContentV1(currentChapter, html, wc)) {
+      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    }
     setContent(html)
     setPlainText(plain)
     setSavedContent(html)
     return { html, plain, wordCount: wc }
-  }, [content, currentChapter?.id, updateChapter])
+  }, [content, currentChapter, updateChapter])
 
   const handleManualSave = useCallback(async () => {
     if (manualSaving) return
