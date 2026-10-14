@@ -190,6 +190,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       'agnes-2.5-pro',
       'agnes-2.5-pro-alpha',
       'agnes-2.5-pro-beta',
+      'agnes-3.0-flash',
       'agnes-2.0-flash',
     ])
 
@@ -206,15 +207,15 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
   })
 
-  it('已登记的 Agnes Beta 型号在保存和刷新后保持原型号，未登记型号仍按原规则处理', async () => {
-    expect(normalizeProviderModel('agnes', 'agnes-2.5-pro-beta')).toBe('agnes-2.5-pro-beta')
+  it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {
+    expect(normalizeProviderModel('agnes', model)).toBe(model)
     expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe(PROVIDER_PRESETS.agnes.model)
     const useAIConfigStore = await freshStore()
     useAIConfigStore.getState().switchProvider('agnes')
-    useAIConfigStore.getState().setConfig({ model: 'agnes-2.5-pro-beta' })
-    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-pro-beta')
-    expect((await freshStore()).getState().config.model).toBe('agnes-2.5-pro-beta')
-    expect(getModelPreset('agnes', 'agnes-2.5-pro-beta')).toEqual(MODEL_CONTEXT_PRESETS.agnes)
+    useAIConfigStore.getState().setConfig({ model })
+    expect(useAIConfigStore.getState().config.model).toBe(model)
+    expect((await freshStore()).getState().config.model).toBe(model)
+    expect(getModelPreset('agnes', model)).toEqual(MODEL_CONTEXT_PRESETS.agnes)
   })
 
   it('DeepSeek、Gemini 与 NVIDIA 使用 2026-08 官方端点、模型 ID 和窗口', async () => {
