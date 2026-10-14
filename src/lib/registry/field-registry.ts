@@ -1,5 +1,6 @@
 /** FIELD_REGISTRY · 当前 AI/结构化采纳允许写入字段的单一事实源。 */
 import type { FieldSpec } from './types'
+import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 
 const trimString = (val: unknown): unknown =>
   typeof val === 'string' ? val.trim() : val
@@ -497,6 +498,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   json('creativeRules', 'prohibitions', ['禁止事项']),
   json('creativeRules', 'consistencyRules', ['一致性规则']),
   longtext('creativeRules', 'specialRequirements', ['特殊要求']),
+  { ...object('creativeRules', 'systemFictionElements', ['系统文元素']), sanitize: parseSystemFictionElementsV1 },
   json('creativeRules', 'citedReferenceIds'),
   json('creativeRules', 'citedInsightIds'),
 

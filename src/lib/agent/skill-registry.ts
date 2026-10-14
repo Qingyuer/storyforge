@@ -1686,7 +1686,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 4_000,
     writeTargets: [{
       table: 'creativeRules',
-      fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
+      fields: ['writingStyle', 'atmosphere', 'specialRequirements', 'systemFictionElements'],
     }],
     lastVerifiedAt: '2026-09-26',
     regressionTests: [

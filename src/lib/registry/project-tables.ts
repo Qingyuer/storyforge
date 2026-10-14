@@ -12,6 +12,7 @@
  */
 import { db } from '../db/schema'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
+import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 
 const WORKSPACE_DOMAIN_OWNER = {
   allowed: ['workspace'], defaultOwner: 'workspace', locator: { kind: 'workspace' },
@@ -1075,6 +1076,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     domainOwner: WORK_DOMAIN_OWNER },
 
   { table: db.creativeRules, name: 'creativeRules', owner: 'project', exportable: true,
+    validateImportRow: row => {
+      if (row.systemFictionElements !== undefined) parseSystemFictionElementsV1(row.systemFictionElements)
+    },
     resourceIdentity: RESOURCE_IDENTITY('creative-rules', 'reference', '创作规则'),
     domainOwner: WORK_DOMAIN_OWNER,
     workspaceProjection: {

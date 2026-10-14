@@ -243,7 +243,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `comicReviewIssues` | `assetKey` `category` `evidence` `pageKey` `panelKey` `problem` `severity` `sourceUnitKeys` `subjectKey` `suggestion` |
 | `comicScriptBeats` | `causalFactKeys` `decisionKeys` `dialogueIntent` `emotion` `narrativeFunction` `sectionKey` `sourceUnitKeys` `visualAction` |
 | `comicVisualSubjects` | `design` `label` `sourceUnitIds` |
-| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `writingStyle` |
+| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `systemFictionElements` `writingStyle` |
 | `cultivationProgress` | `characterId` `characterName` `cultivationSystemId` `cultivationSystemName` `sourceChapterId` `sourceChapterTitle` `sourceOffset` `sourceQuote` `stageId` `stageName` `status` `transition` `trigger` `worldGroupId` |
 | `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
@@ -416,7 +416,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/character-revision-copilot.ts:727 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:578 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:437 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:521 · chat`
@@ -504,4 +504,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `99901e28`
+生成时间基准:commit `cdc410d3`

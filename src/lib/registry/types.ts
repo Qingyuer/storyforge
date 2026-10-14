@@ -356,6 +356,8 @@ export interface TableSpec<T = any> {
   refs?: RefSpec[]
   /** 是否纳入 JSON 备份导出 */
   exportable: boolean
+  /** 注册表拥有的嵌套结构校验，在正式导入事务前执行，不修改原备份。 */
+  validateImportRow?: (row: Record<string, unknown>) => void
   /** First portable backup version containing this table; older imports use an explicit converter. */
   introducedBackupVersion?: number
   /** 导出时需要的 ID 重映射 */

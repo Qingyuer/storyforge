@@ -1,4 +1,5 @@
 import type { Worldview, StoryCore, PowerSystem, Character, CreativeRules } from '../types'
+import { formatSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import type { HistoricalKeyword, HistoricalKeywordCategory } from '../types/history'
 import { KEYWORD_CATEGORY_LABELS } from '../types/history'
 import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../types/reference'
@@ -50,6 +51,8 @@ export function buildCreativeRulesContext(rules: CreativeRules | null): string {
     const cons: string[] = JSON.parse(rules.consistencyRules || '[]')
     if (cons.length) parts.push(`一致性规则：${cons.join('；').slice(0, 200)}`)
   } catch { /* ignore */ }
+  const systemFiction = formatSystemFictionElementsV1(rules.systemFictionElements)
+  if (systemFiction) parts.push(systemFiction)
   if (!parts.length) return ''
   return `【创作规则】（务必遵守）\n${parts.join('\n')}`
 }
