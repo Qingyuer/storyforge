@@ -9,7 +9,6 @@ import { X, ShieldCheck, Bot, TrendingUp, Loader2, ScanSearch } from 'lucide-rea
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useReviewResultStore, selectChapterReview, type ReviewTab } from '../../stores/review-result'
-import type { ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import {
   type ConsistencyAuditMode,
   type ConsistencyAuditResult,
@@ -28,6 +27,8 @@ import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-r
 import { db } from '../../lib/db/schema'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import type { ChatResult } from '../../lib/ai/client'
+import { htmlToPlainText } from '../../lib/utils/html'
+import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1 } from '../../lib/agent/run/quality-revision-durable'
 
 interface Props {
   projectId: number
@@ -45,12 +46,11 @@ interface Props {
   foreshadowContext: string
   stateContext: string
   onClose: () => void
-  /** G8：按审校报告让 AI 改全文（交给 ChapterEditor 走标准生成→采纳流程） */
-  onReviseByReport?: (report: ReviewResult) => void
   consistencyRun?: ConsistencyAgentRun | null
   consistencyCurrent?: boolean
   onConsistencyRun?: (run: ConsistencyAgentRun) => void
   onBeforeConsistencyRun?: () => Promise<void>
+  onQualityRevisionAdopted?: () => Promise<void>
 }
 
 type TabType = ReviewTab
@@ -117,6 +117,22 @@ export default function ReviewPanel(props: Props) {
     return () => { active = false; unsubscribe?.() }
   }, [projectId, worldGroupId])
   const mode: QualityReviewModeV1 = activeTab === 'antiAI' ? 'style' : activeTab === 'readability' ? 'readability' : 'quality'
+  const [selectedIssues, setSelectedIssues] = useState<string[]>([])
+  const [extraParagraphs, setExtraParagraphs] = useState<number[]>([])
+  const [protectedText, setProtectedText] = useState('')
+  const [revisionView, setRevisionView] = useState<QualityRevisionViewV1 | null>(null)
+  const [revisionBusy, setRevisionBusy] = useState(false)
+  const [revisionError, setRevisionError] = useState('')
+  const selectedReportHash = qualityReports[mode]?.report.artifactHash
+  useEffect(() => { setSelectedIssues([]); setExtraParagraphs([]); setProtectedText('') }, [chapterId, selectedReportHash])
+  useEffect(() => {
+    if (revisionBusy) return
+    let active = true
+    void resolveScopeLike(projectId).then(scope => readLatestQualityRevisionV1({ scope, chapterId }))
+      .then(view => { if (active) setRevisionView(view) })
+      .catch(error => { if (active) setRevisionError(error instanceof Error ? error.message : '修订记录恢复失败。') })
+    return () => { active = false }
+  }, [projectId, chapterId, chapterContent, revisionHash, revisionBusy])
   useEffect(() => {
     if (qualityRunning) return
     let active = true
@@ -208,6 +224,46 @@ export default function ReviewPanel(props: Props) {
   const currentResult = activeTab === 'consistency' ? consistencyResult : qualityResult
   const consistencyMeta = localConsistencyRun?.candidate
 
+  const handleRevision = async () => {
+    if (qualityAbort.current || !qualityResult?.current || outlineNodeId == null) return
+    const controller = new AbortController(); qualityAbort.current = controller
+    const target = qualityTarget.current
+    setRevisionBusy(true); setRevisionError('')
+    try {
+      await props.onBeforeConsistencyRun?.()
+      if (qualityTarget.current !== target || controller.signal.aborted) return
+      const scope = await resolveScopeLike(projectId)
+      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), signal: controller.signal,
+        revise: async (messages, resolution, response) => {
+          const result: ChatResult = {}
+          const raw = await executeRegisteredAIEntryV1('prose.chapter.quality-revise', messages, resolution.config, { category: 'review.revise', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, { responseFormat: 'json_object' }, resolution)
+          response.finishReason = result.finishReason; response.usage = result.usage; response.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'; return raw
+        },
+        recheck: async (messages, resolution, response) => {
+          const result: ChatResult = {}
+          const raw = await executeRegisteredAIEntryV1('prose.review.recheck', messages, resolution.config, { category: 'review.quality', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, { responseFormat: 'json_object' }, resolution)
+          response.finishReason = result.finishReason; response.usage = result.usage; response.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'; return raw
+        },
+      })
+      if (qualityTarget.current === target) setRevisionView(view)
+    } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '范围修订未完成。') }
+    finally { if (qualityAbort.current === controller) qualityAbort.current = null; setRevisionBusy(false) }
+  }
+
+  const decideRevision = async (adopt: boolean) => {
+    const candidate = revisionView?.candidate
+    if (!candidate || revisionBusy) return
+    setRevisionBusy(true); setRevisionError('')
+    try {
+      await props.onBeforeConsistencyRun?.()
+      const scope = await resolveScopeLike(projectId)
+      if (adopt) { await adoptQualityRevisionV1({ scope, candidate }); await props.onQualityRevisionAdopted?.() }
+      else await rejectQualityRevisionV1({ scope, candidate })
+      setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId }))
+    } catch (error) { setRevisionError(error instanceof Error ? error.message : '作者决定未保存。') }
+    finally { setRevisionBusy(false) }
+  }
+
   return (
     <div className="bg-bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
       {/* 头部 */}
@@ -231,7 +287,7 @@ export default function ReviewPanel(props: Props) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleRun}
-            disabled={ai.isStreaming || consistencyRunning || qualityRunning || !chapterContent}
+            disabled={ai.isStreaming || consistencyRunning || qualityRunning || revisionBusy || !chapterContent}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
             {ai.isStreaming || consistencyRunning || qualityRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
@@ -314,7 +370,30 @@ export default function ReviewPanel(props: Props) {
           <ConsistencyResultView result={consistencyResult} />
         )}
 
-        {activeTab !== 'consistency' && qualityResult && !qualityRunning && !ai.isStreaming && <WholeQualityReportView result={qualityResult} />}
+        {activeTab !== 'consistency' && qualityResult && !qualityRunning && !ai.isStreaming && <>
+          <WholeQualityReportView result={qualityResult} selected={selectedIssues} disabled={revisionBusy || !qualityResult.current} toggle={id => setSelectedIssues(value => value.includes(id) ? value.filter(item => item !== id) : [...value, id])} />
+          {qualityResult.current && qualityResult.report.issues.length > 0 && <div className="mt-4 space-y-3 rounded border border-border p-3">
+            <p className="text-sm font-medium">按选中问题修稿</p>
+            <p className="text-xs text-text-muted">默认只允许修改问题所在段落。你可以增加相关段落，并保护要保留的原句；本轮再调用最多两次模型，先看修订与复核结果，再确认写回。</p>
+            <details><summary className="cursor-pointer text-xs">选择其它可改段落</summary><div className="mt-2 max-h-40 space-y-1 overflow-y-auto">{chapterContent.split('\n').filter(line => line.trim()).map((line, index) => <label key={index} className="flex gap-2 text-xs"><input type="checkbox" disabled={revisionBusy} checked={extraParagraphs.includes(index + 1)} onChange={() => setExtraParagraphs(value => value.includes(index + 1) ? value.filter(item => item !== index + 1) : [...value, index + 1])} />第 {index + 1} 段：{line}</label>)}</div></details>
+            <label className="block text-xs">保护原句（可选，每行一句，须与正文完全相同）<textarea aria-label="保护原句" className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={protectedText} disabled={revisionBusy} onChange={event => setProtectedText(event.target.value)} /></label>
+            <button className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" disabled={revisionBusy || qualityRunning || !selectedIssues.length} onClick={() => void handleRevision()}>{revisionBusy ? '修订与复核中…' : '生成修订并复核'}</button>
+          </div>}
+        </>}
+        {revisionError && <p className="mt-3 rounded bg-error/10 p-3 text-xs text-error">{revisionError}</p>}
+        {revisionView && <div data-testid="quality-revision-preview" className="mt-4 space-y-3 rounded border border-border p-3">
+          <p className="text-sm font-medium">修订前后对照</p>
+          <p className="text-xs text-text-muted">{revisionView.state === 'completed' ? '已采纳，记录只读。' : revisionView.state === 'cancelled' ? '已放弃，原稿保留。' : !revisionView.current ? '原稿、资料或证据已变化，修订不能采纳。' : !revisionView.candidate || revisionView.state !== 'awaiting_confirmation' ? '复核未完成，预演结果只供查看；刷新不会重发。' : '复核已返回，最终是否采用由你判断。'}</p>
+          <div className="grid gap-3 md:grid-cols-2"><div><p className="text-xs text-text-muted">原稿</p><p className="whitespace-pre-wrap text-sm">{htmlToPlainText(revisionView.draft.sourceHtml)}</p></div><div><p className="text-xs text-text-muted">修订稿</p><p className="whitespace-pre-wrap text-sm">{revisionView.draft.outputText}</p></div></div>
+          {revisionView.candidate?.qualityRevision?.recheck.outcomes.map(item => <p key={item.issueId} className="text-xs">{item.status === 'improved' ? '模型认为已有改善' : item.status === 'unchanged' ? '模型认为仍未解决' : '模型无法确定'}：{item.reason}<br />依据：“{item.quote}”</p>)}
+          {revisionView.candidate?.qualityRevision?.recheck.review.issues.map(item => <p key={item.id} className="text-xs text-warning">复核建议：{item.reason} · “{item.quote}”</p>)}
+          {revisionView.current && revisionView.candidate && revisionView.state === 'awaiting_confirmation' && <div className="flex gap-2"><button disabled={revisionBusy} className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" onClick={() => void decideRevision(true)}>确认采纳修订</button><button disabled={revisionBusy} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50" onClick={() => void decideRevision(false)}>放弃修订</button></div>}
+          {['running', 'paused', 'recovery_required'].includes(revisionView.state) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
+            setRevisionBusy(true); setRevisionError('')
+            void resolveScopeLike(projectId).then(async scope => { await abandonQualityRevisionV1({ scope, chapterId, runId: revisionView.runId }); setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId })) })
+              .catch(error => setRevisionError(error instanceof Error ? error.message : '运行未能结束。')).finally(() => setRevisionBusy(false))
+          }}>结束未完成运行</button>}
+        </div>}
       </div>
     </div>
   )
@@ -353,7 +432,7 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
 
 // ── 评分徽章 ──
 
-function WholeQualityReportView({ result }: { result: DurableQualityReviewV1 }) {
+function WholeQualityReportView({ result, selected, toggle, disabled }: { result: DurableQualityReviewV1; selected: string[]; toggle: (id: string) => void; disabled: boolean }) {
   const report = result.report
   return <div className="space-y-3" data-testid="whole-chapter-quality-report">
     <p className={result.current ? 'text-xs text-text-muted' : 'text-xs text-warning'}>{result.current ? '当前正文报告' : '正文或作品资料已变化，以下为历史报告。'} · 全文已送审 · 引文已校验</p>
@@ -361,6 +440,7 @@ function WholeQualityReportView({ result }: { result: DurableQualityReviewV1 }) 
     <p className="text-sm text-text-primary">{report.summary}</p>
     {report.strengths.map((item, index) => <p key={index} className="text-xs text-success">保留：{item}</p>)}
     {report.issues.map(issue => <section key={issue.id} className="rounded border border-border bg-bg-base p-3">
+      <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" aria-label={`处理第${issue.paragraph}段问题`} checked={selected.includes(issue.id)} disabled={disabled} onChange={() => toggle(issue.id)} />本轮处理这个问题</label>
       <p className="text-xs text-text-muted">第 {issue.paragraph} 段 · {issue.start}～{issue.end} · {issue.confidence === 'uncertain' ? '待作者判断' : '阅读建议'}</p>
       <blockquote className="my-2 border-l-2 border-accent pl-2 text-xs">{issue.quote}</blockquote>
       <p className="text-xs text-text-primary">{issue.reason}</p><p className="mt-1 text-xs text-text-secondary">{issue.suggestion}</p>

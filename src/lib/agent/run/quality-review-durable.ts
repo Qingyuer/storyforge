@@ -9,6 +9,7 @@ import { captureWorkspaceContentRevisionV1, assertWorkspaceContentRevisionFreshV
 import { prepareProseGatewayAssemblyV1 } from '../../prose/gateway-context'
 import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, QUALITY_REVIEW_PROMPT_VERSION_V1, type QualityReviewArtifactV1, type QualityReviewModeV1 } from '../../prose/quality-review'
 import { proseRenderedRequestV1 } from '../../prose/request-evidence'
+import { boundedQualityResolutionV1 } from '../../prose/quality-request-budget'
 import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV2 } from '../execution-binding'
 import { freezeFormalAIEntryBindingV1 } from '../formal-ai-entry'
@@ -27,7 +28,7 @@ const VERIFIER = 'whole-chapter-review-terminal-v1'
 const entries = { quality: 'prose.review.quality', style: 'prose.review.anti-ai', readability: 'prose.review.readability' } as const
 const categories = { quality: 'review.quality', style: 'review.anti-ai', readability: 'review.readability' } as const
 
-export interface DurableQualityReviewV1 { report: QualityReviewArtifactV1; runId: number; current: boolean }
+export interface DurableQualityReviewV1 { report: QualityReviewArtifactV1; runId: number; current: boolean; messages: ChatMessage[] }
 
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: any) {
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
@@ -46,7 +47,7 @@ export async function runWholeChapterQualityReviewV1(input: {
   if (!chapterText.trim()) throw new Error('正文为空，不能全文评审。')
   const revision = await captureWorkspaceContentRevisionV1({ scope: input.scope, worldGroupId: input.worldGroupId })
   const config = useAIConfigStore.getState().config
-  const resolution = resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId })
+  const resolution = boundedQualityResolutionV1(resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
   const assembled = await prepareProseGatewayAssemblyV1({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: input.worldGroupId, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, operation: 'review', qualityReview: true, authorRequest: '评审当前完整章节，保留作者场景任务和停笔要求。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
   const request = await buildWholeChapterQualityReviewRequestV1({ mode: input.mode, chapterTitle: chapter.title, chapterText, registeredContext: assembled.text })
@@ -97,7 +98,7 @@ export async function runWholeChapterQualityReviewV1(input: {
     snapshot = await append(input.scope, snapshot, 'verification.started', { verifierSetVersion: VERIFIER })
     const receipt = await createVerificationReceiptV1({ version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation, contractHash: snapshot.projection.contractHash, contextManifestHashes: [finalized.manifest.manifestHash], candidateHashes: [report.artifactHash], adoptionEventIds: [], postStateHash: runtimeBindingHash, verifierSetVersion: VERIFIER, criteria: contract.acceptance.map(item => ({ id: item.id, status: 'passed' as const, evidenceRefs: [`report:${report.artifactHash}`, `target:${report.targetTextHash}`] })), acceptedAt: Date.now() })
     snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
-    return { report, runId: snapshot.run.id, current: true }
+    return { report, runId: snapshot.run.id, current: true, messages: request.messages }
   } catch (error) {
     if (snapshot.projection.steps[QUALITY_REVIEW_STEP_V1]?.status === 'running') snapshot = await append(input.scope, snapshot, 'step.failed', { stepId: QUALITY_REVIEW_STEP_V1, attempt: 1, code: 'quality-review-invalid-or-stale', retryable: false })
     throw error
@@ -134,7 +135,7 @@ export async function readLatestWholeChapterQualityReviewV1(input: { scope: Work
     const session = await createContextGatewayToolSessionV1({ scope: { ...input.scope, worldGroupId: snapshot.contract.scope.worldGroupId ?? null, chapterId: input.chapterId, characterId: chapter.perspectiveCharacterId ?? null }, policy: createContextAccessPolicyForExecutionV1(getAgentSkillV1('prose.quality-review', 'prose')) })
     const freshness = await inspectContextGatewayManifestFreshnessV1({ session, manifest: evidence.manifest })
     current = current && freshness.status === 'fresh'
-    return { report: payload.report, runId: row.id!, current }
+    return { report: payload.report, runId: row.id!, current, messages: request.messages }
   }
   return null
 }

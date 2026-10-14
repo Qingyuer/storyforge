@@ -12,7 +12,6 @@ import { useAutoSave } from '../../hooks/useAutoSave'
 import { buildChapterStatusPatchV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentRequestV1, buildContinueRequestV1, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
-import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import {
   buildImpactRemediationPlanV1,
@@ -356,7 +355,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const consistencyRunRef = useRef<ConsistencyAgentRun | null>(null)
   const memoryRebuildInFlightRef = useRef(new Set<number>())
   const creatingChapterForOutlineRef = useRef(new Set<number>())
-  const reviseReportRef = useRef<ReviewResult | null>(null)  // G8：记住上次"按报告修改"的报告，供重试
   // Phase A1: 自动流程标记
   const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'memory'>('idle')
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
@@ -1710,34 +1708,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
-  // G8：按审校报告让 AI 改全文 —— 走和「生成正文」相同的预览→采纳/关闭流程
-  const handleReviseByReport = async (report: ReviewResult) => {
-    if (!plainText.trim() || !currentChapter?.id || !outlineNode?.id) return
-    const ok = await dialog.confirm({
-      title: '按审校报告让 AI 改全文？',
-      message: `将依据本章审校报告修改整章正文（约 ${countWords(plainText)} 字），篇幅与原文保持相近。改写结果会先预览，确认后才替换原文。`,
-      confirmText: '开始修改',
-    })
-    if (!ok) return
-    reviseReportRef.current = report
-    await persistCurrentEditorContent()
-    const assembled = await prepareProseGatewayAssemblyV1({
-      projectId: project.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      chapterId: currentChapter.id,
-      outlineNodeId: outlineNode.id,
-      operation: 'revise',
-      authorRequest: `按审校报告修订本章：${JSON.stringify(report)}`,
-      perspectiveCharacterId,
-      config: aiConfig,
-    })
-    const messages = buildReviewRevisePrompt(plainText, report, assembled.text, '')
-    ai.setOperation('revise-full')
-    ai.start(messages, undefined, {
-      formalEntryId: 'prose.chapter.revise', category: 'review.revise', projectId: project.id!,
-    })
-  }
-
   const handleRunChapterOrganization = async (force = false) => {
     if (!currentChapter?.id || !plainText.trim()) return
     if (organizingChapter) {
@@ -2740,6 +2710,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleAcceptAI = async (text: string) => {
+    if (ai.operation === 'revise-full') {
+      await dialog.alert({ title: '旧修订预览只读', message: '请从质量审校重新选择问题与可改范围。旧报告输出不能直接写回当前章节。' })
+      return
+    }
     if (!editorRef.current || !currentChapter?.id) return
     const acceptedChapterId = currentChapter.id
     const acceptedChapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
@@ -2830,7 +2804,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     if (aiAction === 'continue') {
       editorRef.current.appendContent(html)
-    } else if (aiAction === 'generate' || aiAction === 'deai-full' || aiAction === 'revise-full') {
+    } else if (aiAction === 'generate' || aiAction === 'deai-full') {
       // generate / 整章去AI味 / 按报告修改：替换全文
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
@@ -3108,7 +3082,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
               stateContext={stateCards.slice(0, 10).map(sc => `${sc.category}:${sc.entityName} — ${sc.fields?.slice(0, 50)}`).join('\n')}
               onClose={() => setShowReviewPanel(false)}
-              onReviseByReport={handleReviseByReport}
               consistencyRun={consistencyRun}
               consistencyCurrent={consistencyCurrent}
               onConsistencyRun={run => {
@@ -3117,6 +3090,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               }}
               onBeforeConsistencyRun={async () => {
                 await persistCurrentEditorContent()
+              }}
+              onQualityRevisionAdopted={async () => {
+                await loadChapters(project.id!)
               }}
             />
           </Suspense>
@@ -3286,13 +3262,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               else if (ai.operation === 'polish') handlePolish()
               else if (ai.operation === 'expand') handleExpand()
               else if (ai.operation === 'deai' || ai.operation === 'deai-full') handleDeAI()
-              else if (ai.operation === 'revise-full') {
-                const cachedReport = currentChapter?.id
-                  ? useReviewResultStore.getState().byChapter[currentChapter.id]?.review
-                  : null
-                const report = reviseReportRef.current ?? cachedReport
-                if (report) handleReviseByReport(report)
-              }
+
             }} />
         </div>
       )}
