@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
+import { createHash } from 'node:crypto'
 import { makeAuthorRepairPackets, readAuthorRepairHtml, renderAuthorRepair } from '../../scripts/quality-evals/longform-author-repair.mjs'
 
 const packet = makeAuthorRepairPackets({ studyId: 'Q10-repair-browser', mode: 'preview', participants: ['W01'], samples: [1, 2].map(n => ({ pairId: `pair-${n}`, genre: '都市系统文', brief: '保留行动及关灯收尾，去掉重复解释。', baseline: '陈禾核账，核账之后，她再次核账。关灯。', improved: '陈禾核账，合上账本，关灯。' })) }, 'frozen').packets[0]
@@ -15,6 +16,8 @@ test('作者只选择参与信息，实际改稿计时并保存同一 HTML，断
   await page.getByRole('button', { name: '开始 / 继续修稿', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '修稿正文' })).toHaveValue(packet.tasks[0].source)
   await page.getByRole('textbox', { name: '修稿正文' }).fill('陈禾核对余额，记清这笔支出，合上账本，关灯。')
+  await page.getByRole('checkbox', { name: '情节因果与人物选择', exact: true }).check()
+  await page.getByRole('checkbox', { name: '语言与表达', exact: true }).check()
   await page.getByLabel('处理结果').selectOption('ready')
   const pending = page.waitForEvent('download')
   await page.getByRole('button', { name: '保存修稿与计时 HTML', exact: true }).click()
@@ -24,12 +27,14 @@ test('作者只选择参与信息，实际改稿计时并保存同一 HTML，断
   expect(saved.result.tasks[0].status).toBe('paused')
   expect(saved.result.tasks[0].sessions[0].elapsedMs).toBeGreaterThan(0)
   expect(saved.result.tasks[0].text).toContain('记清这笔支出')
+  expect(saved.result.tasks[0].problemTypes).toEqual(['causality', 'prose'])
   const context = await browser.newContext({ offline: true, acceptDownloads: true, viewport: { width: 390, height: 844 } })
   try {
     const local = await context.newPage()
     await local.goto(pathToFileURL(file).href)
     await expect(local.getByRole('textbox', { name: '修稿正文' })).toHaveValue(saved.result.tasks[0].text)
     await expect(local.locator('#notice')).toContainText('计时保持暂停')
+    await expect(local.getByRole('checkbox', { name: '语言与表达', exact: true })).toBeChecked()
     expect(await local.getByRole('textbox', { name: '修稿正文' }).evaluate(element => (element as HTMLTextAreaElement).readOnly)).toBe(true)
     expect(await local.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await local.getByRole('button', { name: '开始 / 继续修稿', exact: true }).click()
@@ -43,7 +48,47 @@ test('作者只选择参与信息，实际改稿计时并保存同一 HTML，断
     const completed = readAuthorRepairHtml(packet, await readFile(completedFile, 'utf8'))
     expect(completed.result.tasks[0].sessions).toHaveLength(2)
     expect(completed.result.tasks[0].status).toBe('finished')
+    expect(completed.manuscripts[0].problemTypes).toEqual(['causality', 'prose'])
+    expect(completed.manuscripts[0].originalWindow).not.toBeNull()
     expect(completed.manuscripts[0].editedTextHash).not.toBe(saved.manuscripts[0].editedTextHash)
     expect(completed.validation.complete).toBe(false)
   } finally { await context.close() }
+})
+
+test('缺选问题类型时正文和计时保留，选择互斥项不会混用，修后文本不能误选无需修改', async ({ page }) => {
+  await page.route('**/__author-repair-types', route => route.fulfill({ contentType: 'text/html', body: renderAuthorRepair(packet) }))
+  await page.goto('__author-repair-types')
+  await expect(page.getByRole('checkbox', { name: '语言与表达', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: '开始 / 继续修稿', exact: true }).click()
+  await page.getByRole('textbox', { name: '修稿正文' }).fill('陈禾核对余额，合上账本，关灯。')
+  await page.getByLabel('处理结果').selectOption('ready')
+  await page.getByRole('button', { name: '完成本份修稿', exact: true }).click()
+  await expect(page.locator('#notice')).toContainText('需要选择问题类型')
+  await expect(page.getByRole('textbox', { name: '修稿正文' })).toHaveValue('陈禾核对余额，合上账本，关灯。')
+  await page.getByRole('checkbox', { name: '无需修改', exact: true }).check()
+  await page.getByRole('button', { name: '完成本份修稿', exact: true }).click()
+  await expect(page.locator('#notice')).toContainText('已改稿时不能选择无需修改')
+  await page.getByRole('checkbox', { name: '语言与表达', exact: true }).check()
+  await expect(page.getByRole('checkbox', { name: '无需修改', exact: true })).not.toBeChecked()
+  await page.getByRole('button', { name: '完成本份修稿', exact: true }).click()
+  await expect(page.locator('#progress')).toHaveText('1/4 份已完成')
+})
+
+test('旧 v1 修稿包可以继续填写并保存，仍按旧版本读取，缺少分类不补造', async ({ page }, info) => {
+  const { packetId: _packetId, problemTypes: _problemTypes, ...old } = packet
+  const data = { ...old, version: 1 }, legacy = { ...data, packetId: createHash('sha256').update(JSON.stringify(data)).digest('hex') }
+  await page.route('**/__legacy-repair', route => route.fulfill({ contentType: 'text/html', body: renderAuthorRepair(legacy) }))
+  await page.goto('__legacy-repair')
+  await expect(page.locator('#problem-types')).toBeHidden()
+  await page.getByRole('button', { name: '开始 / 继续修稿', exact: true }).click()
+  await page.getByRole('textbox', { name: '修稿正文' }).fill('陈禾核账，合上账本，关灯。')
+  await page.getByLabel('处理结果').selectOption('ready')
+  await page.getByRole('button', { name: '完成本份修稿', exact: true }).click()
+  await expect(page.locator('#progress')).toHaveText('1/4 份已完成')
+  const pending = page.waitForEvent('download')
+  await page.getByRole('button', { name: '保存修稿与计时 HTML', exact: true }).click()
+  const file = info.outputPath('legacy-return.html'); await (await pending).saveAs(file)
+  const parsed = readAuthorRepairHtml(legacy, await readFile(file, 'utf8'))
+  expect(parsed.result.version).toBe(1)
+  expect(parsed.manuscripts[0].problemTypes).toBeNull()
 })
