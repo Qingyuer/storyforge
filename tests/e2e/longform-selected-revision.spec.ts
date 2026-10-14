@@ -30,7 +30,7 @@ function mock(page: Page, state: { calls: any[]; gate?: Promise<void> }, recheck
     else if (system.includes('本轮只复核一次')) {
       if (recheckFails) return route.fulfill({ status: 503, body: '复核暂时不可用' })
       const text = body.messages[1].content
-      const match = text.match(/【冻结计划 [\s\S]*?原选中问题】\n([^\n]+)/)!
+      const match = text.match(/【冻结计划 [^\n]+】\n([^\n]+)/)!
       const issueId = JSON.parse(match[1])[0].id
       report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', quote: '陈禾签下名字。', reason: '保留签字且不再插入任务说明' }] }
     } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '正文到此结束。', start: null, end: null, reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }

@@ -3072,7 +3072,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '范围修订的一次复核',
     owner: 'prose-agent',
-    promptVersion: 'quality-revision-recheck-v1',
+    promptVersion: 'quality-revision-recheck-v2',
     executionMode: 'review',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

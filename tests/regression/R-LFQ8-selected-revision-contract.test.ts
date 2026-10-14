@@ -3,6 +3,8 @@ import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReview
 import { freezeQualityRevisionPlanV1, applyQualityRevisionPatchesV1 } from '../../src/lib/prose/quality-revision'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { buildQualityRecheckRequestV1, parseQualityRecheckV1, verifyQualityRecheckV1 } from '../../src/lib/prose/quality-recheck'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 async function seed() {
   const originalText = '已确认事实：余额3点。\n陈禾写下已收款，但未交代付款过程。\n两人关灯，停笔。'
@@ -14,6 +16,26 @@ async function seed() {
 }
 
 describe('LFQ8 · 作者选题与限定文字范围', () => {
+  it('复核明确旧稿只作比较，全文候选放在资料之后；拒绝旧稿引文，旧版历史仍可验签', async () => {
+    const f = await seed()
+    const plan = await freezeQualityRevisionPlanV1(f)
+    const candidateText = '已确认事实：余额3点。\n赵经理递来一百二十元；陈禾点清后开了收条。\n两人关灯，停笔。'
+    const messages = await buildQualityRecheckRequestV1({ plan, originalReport: f.report, chapterTitle: '交付', candidateText, registeredContext: f.originalText })
+    expect(messages[1].content.indexOf(candidateText)).toBeGreaterThan(messages[1].content.indexOf(f.originalText))
+    expect(messages[1].content).toContain(`唯一审查对象 · hash ${await hashCanonicalValue(candidateText)}`)
+    const settings = f.report.reviewer.settings
+    const outcome = { issueId: plan.issueIds[0], status: 'improved', quote: '赵经理递来一百二十元；陈禾点清后开了收条。', reason: '实际付款过程可见' }
+    const raw = JSON.stringify({ review: { summary: '复核修订后正文', strengths: [], issues: [] }, outcomes: [outcome] })
+    const checked = await parseQualityRecheckV1({ raw, plan, candidateText, messages, settings, completion: 'complete' })
+    expect(checked.promptVersion).toBe('quality-revision-recheck-v2')
+    expect(await verifyQualityRecheckV1(checked, plan, candidateText, messages)).toBe(true)
+    await expect(parseQualityRecheckV1({ raw: JSON.stringify({ review: { summary: '误看旧稿', strengths: [], issues: [] }, outcomes: [{ ...outcome, quote: f.report.issues[0].quote }] }), plan, candidateText, messages, settings, completion: 'complete' })).rejects.toThrow('引文')
+    const legacyMessages = messages.map((message, i) => i === 0 ? { ...message, content: message.content.replace('复核契约：quality-revision-recheck-v2。', '') } : message)
+    const historical = await parseQualityRecheckV1({ raw, plan, candidateText, messages: legacyMessages, settings, completion: 'complete' })
+    expect(historical.promptVersion).toBe('quality-revision-recheck-v1')
+    expect(await verifyQualityRecheckV1(historical, plan, candidateText, legacyMessages)).toBe(true)
+  })
+
   it('只修所选问题的段落，未选事实和停笔逐字保留；本轮冻结四次总预算', async () => {
     const f = await seed()
     const plan = await freezeQualityRevisionPlanV1(f)
