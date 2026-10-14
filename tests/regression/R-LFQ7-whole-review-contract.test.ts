@@ -67,4 +67,19 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     expect(request.messages[0].content).toContain('只有start/end允许同时为null')
     expect(request.messages[0].content).toContain('章纲、细纲与作者要求是计划')
   })
+
+  it('富文本存稿的单换行按非空文本段定位，旧v2的段落规则仍可验签', async () => {
+    const chapterText = '准备验收。\n\n检查封盖。\n拿出收条。\n实际收款缺失。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '验收', chapterText, registeredContext: '' })
+    const raw = JSON.stringify({ summary: '核对动作和结果', strengths: [], issues: [issue('实际收款缺失。', null, null)] })
+    const base = { raw, mode: 'quality' as const, chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete' as const, settings }
+    const current = await parseWholeChapterQualityReviewV1(base)
+    expect(current.coverage.paragraphs).toBe(4)
+    expect(current.issues[0].paragraph).toBe(4)
+    expect(await verifyWholeChapterQualityReviewV1(current, chapterText, request.messages)).toBe(true)
+    const old = await parseWholeChapterQualityReviewV1({ ...base, promptVersion: 'whole-chapter-quality-review-v2' })
+    expect(old.coverage.paragraphs).toBe(2)
+    expect(old.issues[0].paragraph).toBe(2)
+    expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)
+  })
 })
