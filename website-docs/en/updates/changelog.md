@@ -2,6 +2,10 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.0; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## October 14, 2026 · Knowledge-base scrolling
+
+The header and navigation now share an opaque surface that follows light and dark themes, preventing scrolling document text from showing through navigation labels. Persistent tabs remain visible on desktop and narrow screens.
+
 ## October 14, 2026 · Text adventure image-preserving revisions, recovery, and web export
 
 This review confirms that [PR #119](https://github.com/yuanbw2025/storyforge/pull/119) entered main (`e40fadce`). These are **main-branch changes after the fixed v4.0.0 release**, not automatic updates to existing downloads or the hosted experience. The product remains a preview.
