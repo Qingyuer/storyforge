@@ -11,8 +11,7 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { buildChapterStatusPatchV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { useActiveWork } from '../../hooks/useActiveWork'
-import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
+import { buildChapterContentRequestV1, buildContinueRequestV1, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import {
@@ -31,8 +30,6 @@ import { resolveRequestConfig } from '../../lib/ai/client'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
-import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
-import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
@@ -249,6 +246,7 @@ function LazyPanelFallback() {
 type MemoryTaskType = 'write' | 'plan' | 'review'
 
 interface PendingChapterGeneration {
+  generationOverrides?: { temperature?: number; maxTokens?: number }
   operation: ChapterGenerationOperation
   category: ChapterGenerationCategory
   prepared: PreparedGenerationNode
@@ -265,7 +263,6 @@ interface Props {
 
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const navigate = useNavigate()
-  const activeWork = useActiveWork(project)
   const {
     chapters,
     currentChapter: storeChapter,
@@ -1213,19 +1210,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     console.log(`[ContextGateway] ${taskType} 模式 — path:${assembled.contextGatewayExecution.path} selected:${assembled.contextGatewayExecution.retrievalTrace.mandatory.length + assembled.contextGatewayExecution.retrievalTrace.autoSelected.length} tokens:${assembled.totalInputTokens}`)
 
-    // Phase E: 题材约束 + 写作风格注入
-    const genreCtx = buildGenreConstraintContext(activeWork?.genres ?? [])
-    const styleCtx = activeWork?.writingStyleId ? buildStylePromptInjection(activeWork.writingStyleId) : ''
-
-    const parts = [assembled.text]
-    if (genreCtx) parts.push(genreCtx)
-    if (styleCtx) parts.push(styleCtx)
     const maxContext = aiConfig.contextWindow && aiConfig.contextWindow > 0
       ? aiConfig.contextWindow
       : getModelPreset(aiConfig.provider, aiConfig.model).maxContext
     const continuityBudgetTokens = maxContext <= 8_192 ? 3000 : maxContext <= 32_768 ? 6000 : 10_000
     return {
-      text: parts.filter(Boolean).join('\n\n'),
+      text: assembled.text,
       segments: assembled.segments,
       assembled,
       generationBinding,
@@ -1245,12 +1235,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     informationBoundary: InformationBoundaryManifestV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
   ) => createChapterGenerationNode({
     operation,
     category,
     projectId: project.id!,
     chapterIdentity: currentChapter?.id ?? outlineNodeId ?? 'unselected',
-    ai,
+    ai, generationOverrides,
     gate: output => {
       const issues = validateProseInformationBoundaryV1(output, informationBoundary)
       return { status: issues.length ? 'blocked' : 'pass', issues }
@@ -1267,6 +1258,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     generationBinding: AgentSkillExecutionBindingV2
     informationBoundary: InformationBoundaryManifestV1
     contentRevision: WorkspaceContentRevisionVectorV1
+    generationOverrides?: { temperature?: number; maxTokens?: number }
   }): Promise<void> => {
     if (!currentChapter?.id || !input.assembled) {
       throw new Error('正文生成缺少章节或受控上下文快照。')
@@ -1289,7 +1281,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const generationReservation = budget.reserveCall({
       label: input.operation === 'continue' ? '正文续写' : '正文生成',
       messages: actualMessages,
-      maxOutputTokens: 16_000,
+      maxOutputTokens: input.generationOverrides?.maxTokens && input.generationOverrides.maxTokens > 0 ? input.generationOverrides.maxTokens : 16_000,
     })
     let generationSettled = false
 
@@ -1457,13 +1449,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     generationBinding?: AgentSkillExecutionBindingV2,
     informationBoundary?: InformationBoundaryManifestV1,
     contentRevision?: WorkspaceContentRevisionVectorV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
   ) => {
     if (!informationBoundary || !generationBinding || !contentRevision) {
       setProseGenerationError('正文生成缺少 Skill 或信息边界快照，已阻止模型调用。')
       return
     }
     ai.setOperation(operation)
-    const node = chapterGenerationNode(operation, category, informationBoundary)
+    const node = chapterGenerationNode(operation, category, informationBoundary, generationOverrides)
     void runDurableChapterGeneration({
       operation,
       category,
@@ -1473,7 +1466,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, generationOverrides,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
       setProseGenerationError(error instanceof Error ? error.message : '正文生成执行失败。')
@@ -1488,8 +1481,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     generationBinding: AgentSkillExecutionBindingV2,
     informationBoundary: InformationBoundaryManifestV1,
     contentRevision: WorkspaceContentRevisionVectorV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
   ) => {
-    const node = chapterGenerationNode(operation, category, informationBoundary)
+    const node = chapterGenerationNode(operation, category, informationBoundary, generationOverrides)
     const prepared = prepareGenerationNode(node, messages)
     if (transparentMode) {
       ai.setOperation(operation)
@@ -1500,7 +1494,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision,
+        contentRevision, generationOverrides,
       })
       return
     }
@@ -1513,7 +1507,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, generationOverrides,
     )
   }
 
@@ -1555,7 +1549,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         worldGroupId: chapterWorldGroupId ?? null,
         perspectiveCharacterId,
       })
-      const messages = buildChapterContentPrompt(
+      const promptRequest = buildChapterContentRequestV1(
         outlineNode.title,
         outlineNode.summary,
         fullCtx,
@@ -1568,6 +1562,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
       )
 
+      const messages = promptRequest.messages
       // Phase 21.3: 计算上下文预算
       const segments = analyzeContextSegments([
         { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
@@ -1584,7 +1579,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision,
+        contentRevision, promptRequest.modelOverride,
       )
     } catch (error) {
       setProseGenerationError(error instanceof Error ? error.message : '正文生成准备失败。')
@@ -1627,7 +1622,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       perspectiveCharacterId,
     })
     const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
-    const messages = buildContinuePrompt(
+    const promptRequest = buildContinueRequestV1(
       plainText,
       outlineNode.summary,
       ctxWithChars,
@@ -1639,11 +1634,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     prepareOrRunChapterGeneration(
       'continue',
       'chapter.continue',
-      messages,
+      promptRequest.messages,
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, promptRequest.modelOverride,
     )
   }
 
@@ -3229,6 +3224,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                 pending.generationBinding,
                 pending.informationBoundary,
                 pending.contentRevision,
+                pending.generationOverrides,
               )
             }}
           />

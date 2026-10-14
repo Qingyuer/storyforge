@@ -66,6 +66,11 @@ describe('LFQ6 · 登记的作者意图与文风资源', () => {
 
   it('完整资料超过预算明确失败，目录游标和限额不会被默默修正', async () => {
     const f = await seed()
+    const probe = await WORK_AUTHORING_INTENT_PROVIDER_V1.read({ scope: f.frozenScope, resourceKey: f.descriptor.resourceKey, depth: 'index', maxTokens: 1 })
+    expect(probe.descriptor.contentHash).toBe(f.descriptor.contentHash)
+    expect(probe.descriptor.sourceRefs).toEqual(f.descriptor.sourceRefs)
+    expect(probe.content).toBe('')
+    expect(probe.tokenCount).toBe(0)
     await expect(WORK_AUTHORING_INTENT_PROVIDER_V1.read({ scope: f.frozenScope, resourceKey: f.descriptor.resourceKey, depth: 'full', maxTokens: 1 })).rejects.toThrow('拒绝截断')
     await expect(WORK_AUTHORING_INTENT_PROVIDER_V1.readOriginal({ scope: f.frozenScope, resourceKey: f.descriptor.resourceKey, sourceRef: f.descriptor.sourceRefs[1], maxTokens: 1 })).rejects.toThrow('拒绝截断')
     await expect(WORK_AUTHORING_INTENT_PROVIDER_V1.listMetadata({ scope: f.frozenScope, limit: 0 })).rejects.toThrow('参数无效')

@@ -1,4 +1,5 @@
 import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
+import { workAuthoringIntentResourceKeyV1 } from '../context-gateway/work-intent-provider'
 import { db } from '../db/schema'
 import { assembleContextGatewayPacketV1, projectContextGatewayInputStateV1 } from '../agent/context-gateway-input'
 import { resolveAgentContextPolicy, type AgentContextProfile } from '../agent/context-policy'
@@ -71,7 +72,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
   }
   const policy = resolveAgentContextPolicy(skill.contextTaskKind, input.contextProfile ?? 'full')
   const budget = Math.min(policy.maxInputTokens, skill.contextGateway.maxRetrievedTokens)
-  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work, rulesRows, storyCoreRows, states, items, timeline, cultivation] = await Promise.all([
+  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work, rulesRows, storyCoreRows, states, items, timeline, cultivation, styleProfiles] = await Promise.all([
     readOwnedRows<OutlineNode & StableRow>(scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'detailedOutlines', { owner: 'work' }),
     readOwnedRows<Chapter & StableRow>(scope, 'chapters', { owner: 'work' }),
@@ -92,7 +93,13 @@ export async function prepareProseGatewayAssemblyV1(input: {
     readOwnedRows<StableRow>(scope, 'itemLedger', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'storyTimelineEvents', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'cultivationProgress', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'userStyleProfiles', { owner: 'work' }),
   ])
+  if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('正文的作品意图缺少当前 Work。')
+  const authorIntentKey = workAuthoringIntentResourceKeyV1(work)
+  const enabledStyles = styleProfiles.filter(row => row.enabled === true && typeof row.profile === 'string' && row.profile.trim())
+  const styleKeys = await Promise.all(enabledStyles.map(row => canonRowResourceKeysV1('userStyleProfiles', { ...row, projectId: scope.projectId })))
+  const styleOriginals = unique(styleKeys.flatMap(keys => ['profile', 'revisionPairs', 'calibrationFeedback'].map(field => keys.fields[field] ?? '')))
   const targetChapter = input.chapterId == null
     ? undefined
     : chapters.find(row => row.id === input.chapterId)
@@ -233,8 +240,9 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const citedReferenceKeys = references
     .filter(row => row.ragDocumentId && input.citedReferenceIds?.includes(Number(row.id)))
     .map(row => `reference:${row.ragDocumentId}`)
-  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals])
+  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals])
   const mandatoryFullResourceKeys = unique([
+    authorIntentKey,
     targetOutlineRecord,
     ...(detailRecord ? [detailRecord] : []),
     ...previousContinuity,
@@ -268,6 +276,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
     mandatoryOriginalResourceKeys,
     excludedRecordResourceKeys,
     targetResourceKeys: unique([
+      authorIntentKey,
       targetOutlineRecord,
       ...(detailRecord ? [detailRecord] : []),
       ...(dossierKey ? [dossierKey] : []),

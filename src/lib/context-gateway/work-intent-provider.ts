@@ -9,7 +9,7 @@ import type { Work } from '../types'
 import { canonScopeFingerprintV1 } from './canon-provider'
 
 const SOURCE_KEY = 'workAuthoringIntent'
-const PROVIDER_VERSION = 'work-authoring-intent-v1'
+const PROVIDER_VERSION = 'work-authoring-intent-v2'
 const FIELDS = ['title', 'description', 'genres', 'customGenre', 'writingStyleId'] as const
 const exact = (value: unknown) => value == null ? '' : typeof value === 'string' ? value : JSON.stringify(value)
 
@@ -71,7 +71,10 @@ export const WORK_AUTHORING_INTENT_PROVIDER_V1: ContextResourceProviderV1 = {
   read: async input => {
     const { descriptor, content } = await projection(input.scope)
     if (input.resourceKey !== descriptor.resourceKey) throw new Error('作品意图资源越界或已经失效。')
-    const text = ['index', 'summary'].includes(input.depth) ? descriptor.shortSummary : content
+    // Freshness probes request descriptor metadata with a one-token index budget.
+    // Omit index prose when it cannot fit; full and original reads remain exact.
+    const text = input.depth === 'index' && estimateTokens(descriptor.shortSummary) > input.maxTokens
+      ? '' : ['index', 'summary'].includes(input.depth) ? descriptor.shortSummary : content
     assertBudget(text, input.maxTokens)
     return { version: 1, descriptor, depth: input.depth, content: text, contentHash: await sha256Text(text), tokenCount: estimateTokens(text), sourceRefs: descriptor.sourceRefs }
   },

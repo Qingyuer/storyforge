@@ -12,8 +12,10 @@ export function createChapterGenerationNode(input: {
   chapterIdentity: number | string
   ai: Pick<UseAIStreamReturn, 'start'>
   gate?: (output: string) => Promise<GenerationGateResult> | GenerationGateResult
+  generationOverrides?: { temperature?: number; maxTokens?: number }
 }): GenerationNode<ChatMessage[], string> {
   const { operation, category, projectId, chapterIdentity, ai, gate } = input
+  const modelOptions = input.generationOverrides ? { configOverrides: { ...input.generationOverrides } } : {}
   return {
     id: `chapter.${operation}:${chapterIdentity}`,
     kind: category,
@@ -21,10 +23,10 @@ export function createChapterGenerationNode(input: {
     assembleInput: messages => messages.map(message => ({ ...message })),
     run: messages => category === 'chapter.content'
       ? ai.start(messages, undefined, {
-        formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject',
+        formalEntryId: 'prose.chapter.generate', category: 'chapter.content', projectId, contextOverflowPolicy: 'reject', ...modelOptions,
       })
       : ai.start(messages, undefined, {
-        formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject',
+        formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId, contextOverflowPolicy: 'reject', ...modelOptions,
       }),
     ...(gate ? { gate } : {}),
   }

@@ -133,7 +133,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
 
     expect(prepared.operation).toBe('generate')
     expect(prepared.outlineNodeId).toBe(firstId)
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prepared.contextGatewayExecution.retrievalTrace.mandatory.length).toBeGreaterThan(0)
     expect(prepared.contextEvidence.inputState).toMatchObject({
       state: 'partial',
@@ -375,7 +375,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     })
 
     expect(prepared.perspectiveCharacterId).toBeNull()
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prepared.prepared.messages.map(message => message.content).join('\n'))
       .toContain('未指定视角角色')
   })
@@ -446,7 +446,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     })
     const context = prepared.prepared.messages.map(message => message.content).join('\n')
     expect(prepared.perspectiveCharacterId).toBe(mainId)
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(context).toContain('主角知道潮门会在黎明前关闭')
     expect(context).not.toContain('配角知道钟芯其实被藏在井底')
     expect(prepared.snapshot.perspectiveCharacterId).toBe(mainId)

@@ -23,6 +23,11 @@ export interface RunOptions {
   requiredGatewayContext?: string
 }
 
+export interface ChapterPromptRequestV1 {
+  messages: ChatMessage[]
+  modelOverride?: { temperature?: number; maxTokens?: number }
+}
+
 const QUARANTINED_GENERATION_MARKERS = ['未来计划', '尚未发生', '异世界档案']
 
 /**
@@ -111,7 +116,7 @@ function injectContinuityEnvelope(
   ))
 }
 
-export function buildChapterContentPrompt(
+export function buildChapterContentRequestV1(
   chapterTitle: string,
   chapterSummary: string,
   worldContext: string,
@@ -120,12 +125,12 @@ export function buildChapterContentPrompt(
   worldRulesContext?: string,
   userHint?: string,
   options?: RunOptions,
-): ChatMessage[] {
+): ChapterPromptRequestV1 {
   const tpl = usePromptStore.getState().getActive('chapter.content')
   const safeWorldContext = options?.skipContinuityEnvelope || options?.requiredGatewayContext !== undefined
     ? worldContext
     : sanitizeProseGenerationContext(worldContext)
-  const { messages } = renderPrompt(tpl, {
+  const { messages, modelOverride } = renderPrompt(tpl, {
     chapterTitle,
     chapterSummary,
     worldContext: safeWorldContext || '（暂无）',
@@ -145,21 +150,25 @@ export function buildChapterContentPrompt(
   const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
-  return deliverRequiredGatewayContext(result, options?.requiredGatewayContext)
+  return { messages: deliverRequiredGatewayContext(result, options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
 }
 
-export function buildContinuePrompt(
+export function buildChapterContentPrompt(...args: Parameters<typeof buildChapterContentRequestV1>): ChatMessage[] {
+  return buildChapterContentRequestV1(...args).messages
+}
+
+export function buildContinueRequestV1(
   existingContent: string,
   chapterSummary: string,
   worldContext: string,
   userHint?: string,
   options?: RunOptions,
-): ChatMessage[] {
+): ChapterPromptRequestV1 {
   const tpl = usePromptStore.getState().getActive('chapter.continue')
   const safeWorldContext = options?.skipContinuityEnvelope || options?.requiredGatewayContext !== undefined
     ? worldContext
     : sanitizeProseGenerationContext(worldContext)
-  const { messages } = renderPrompt(tpl, {
+  const { messages, modelOverride } = renderPrompt(tpl, {
     chapterSummary,
     worldContext: safeWorldContext || '（暂无）',
     existingContent: existingContent.slice(-3000),
@@ -177,7 +186,11 @@ export function buildContinuePrompt(
   const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
-  return deliverRequiredGatewayContext(result, options?.requiredGatewayContext)
+  return { messages: deliverRequiredGatewayContext(result, options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
+}
+
+export function buildContinuePrompt(...args: Parameters<typeof buildContinueRequestV1>): ChatMessage[] {
+  return buildContinueRequestV1(...args).messages
 }
 
 export function buildPolishPrompt(text: string, instruction: string, options?: RunOptions): ChatMessage[] {

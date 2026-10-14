@@ -30,20 +30,22 @@ async function prepare(page: Page, smallWindow = false) {
     ])
     const project = await db.projects.toCollection().first()
     const scope = await resolveScope({ projectId: project.id })
+    await db.works.update(scope.workId, { writingStyleId: 'luxun', description: '【Work 写作意图】只写平静收店，不领取次日奖励。', updatedAt: Date.now() })
+    await db.userStyleProfiles.add(stampNewRecord(scope, 'userStyleProfiles', { projectId: project.id, enabled: true, profile: '【作者画像完整尾部】保留两人的口语区别。', sourceChapterIds: '[]', sampleCount: 0, sampleWords: 0, createdAt: Date.now(), updatedAt: Date.now() }, { owner: 'work' }))
     const rules = await db.creativeRules.where('projectId').equals(project.id).first()
     const value = { writingStyle: style, narrativePOV: 'third-limited', atmosphere: '平静、轻松', specialRequirements: '最后才签收', prohibitions: '[]', consistencyRules: '[]', systemFictionElements: { ...createSystemFictionElementsV1(), enabled: true, systemMechanism: '每天第一次签到免费', rewardGrowth: '未来计划：明日试做点心，尚未发生' }, updatedAt: Date.now() }
     if (rules) await db.creativeRules.update(rules.id, value)
     else await db.creativeRules.add(stampNewRecord(scope, 'creativeRules', { ...value, projectId: project.id, createdAt: Date.now() }, { owner: 'work' }))
     await usePromptStore.getState().init()
     const template = usePromptStore.getState().getActive('chapter.content')
-    const id = await usePromptStore.getState().saveTemplate({ ...template, id: undefined, scope: 'user', name: '交接验收的自定义模板', isActive: false, systemPrompt: '作者自定义：克制而轻松。', userPromptTemplate: '完成作者当前任务。', continuityMode: 'off' })
+    const id = await usePromptStore.getState().saveTemplate({ ...template, id: undefined, scope: 'user', name: '交接验收的自定义模板', isActive: false, systemPrompt: '作者自定义：克制而轻松。', userPromptTemplate: '完成作者当前任务。', continuityMode: 'off', modelOverride: { temperature: 0.2, maxTokens: 1700 } })
     await usePromptStore.getState().setActive(id)
   }, { style })
   await page.getByPlaceholder('自定义指令...', { exact: true }).fill('只写600字，保持平静，签收后停笔。')
 }
 
 test('分步骤实际请求完整交付长备注、元素和作者文风；自定义模板保留，候选刷新采纳', async ({ page }) => {
-  const requests: Array<{ messages: Array<{ content: string }> }> = []
+  const requests: Array<{ messages: Array<{ content: string }>; temperature: number; max_tokens: number }> = []
   await page.route('https://prose-handoff.invalid/**', async route => {
     requests.push(route.request().postDataJSON())
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated } }] })}\n\ndata: [DONE]\n\n` })
@@ -54,7 +56,9 @@ test('分步骤实际请求完整交付长备注、元素和作者文风；自�
   await expect(draft).toHaveValue(generated)
   expect(requests).toHaveLength(1)
   const wire = requests[0].messages.map(message => message.content).join('\n')
-  for (const required of [notes, style, '先问搭档意愿', '未来计划：明日试做点心，尚未发生', '每天第一次签到免费', '作者自定义：克制而轻松。']) expect(wire).toContain(required)
+  for (const required of [notes, style, '先问搭档意愿', '未来计划：明日试做点心，尚未发生', '每天第一次签到免费', '作者自定义：克制而轻松。', '【Work 写作意图】', '鲁迅式犀利', '【作者画像完整尾部】']) expect(wire).toContain(required)
+  expect(requests[0].temperature).toBe(0.2)
+  expect(requests[0].max_tokens).toBe(1700)
   expect(wire).not.toContain('前 40%')
   await page.reload()
   await expect(draft).toHaveValue(generated)

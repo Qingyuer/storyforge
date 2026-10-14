@@ -2,7 +2,7 @@ import { chapterPostAdoptionChainStateV1, readLatestChapterPostAdoptionRunV1 } f
 import { readWorkPostAdoptionSettingsV1 } from '../prose/post-adoption-policy'
 import { affirmativeAuthorActionsV1, parseAuthorOrdinalV1 } from './author-intent'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { buildChapterContentPrompt, buildContinuePrompt } from '../ai/adapters/chapter-adapter'
+import { buildChapterContentRequestV1, buildContinueRequestV1, type ChapterPromptRequestV1 } from '../ai/adapters/chapter-adapter'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
@@ -356,21 +356,21 @@ function candidateIssues(
   }
 }
 
-function buildProseMessages(input: ProseCopilotInput) {
+function buildProseRequest(input: ProseCopilotInput): ChapterPromptRequestV1 {
   const perspectiveBoundary = buildInformationBoundaryInstructionV1(input.informationBoundary)
   const charactersIndex = input.assembled.included.indexOf('characters')
   const characters = charactersIndex >= 0
     ? input.assembled.segments[charactersIndex]?.content ?? ''
     : ''
-  const world = input.assembled.segments
-    .filter((_, index) => index !== charactersIndex)
-    .map(segment => segment.content)
-    .filter(Boolean)
-    .join('\n\n')
+  const world = input.assembled.text
   const supplemental = input.supplementalContext.trim()
     ? `\n\n【本轮上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
     : ''
   const targetWordCount = Number(input.parameterValues?.wordCount)
+  const parameterValues = input.parameterValues ? { ...input.parameterValues } : undefined
+  if (parameterValues && Object.prototype.hasOwnProperty.call(parameterValues, 'wordCount')) {
+    parameterValues.chapterLength = Number.isFinite(targetWordCount) && targetWordCount > 0 ? Math.floor(targetWordCount) : ''
+  }
   const wordCountHint = Number.isFinite(targetWordCount) && targetWordCount > 0
     ? `\n\n【节点字数目标】正文候选尽量接近 ${Math.floor(targetWordCount)} 字。`
     : ''
@@ -381,16 +381,16 @@ function buildProseMessages(input: ProseCopilotInput) {
   ].join('\n\n')
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
-    return buildContinuePrompt(
+    return buildContinueRequestV1(
       htmlToPlainText(input.chapter?.content ?? ''),
       input.outlineNode.summary,
       perspectiveBoundary + '\n' + context,
       hint,
-      { requiredGatewayContext: input.assembled.text },
+      { requiredGatewayContext: input.assembled.text, parameterValues },
     )
   }
   const worldRulesIndex = input.assembled.included.indexOf('worldRules')
-  return buildChapterContentPrompt(
+  return buildChapterContentRequestV1(
     input.outlineNode.title,
     input.outlineNode.summary,
     world,
@@ -398,8 +398,20 @@ function buildProseMessages(input: ProseCopilotInput) {
     input.previousTail,
     worldRulesIndex >= 0 ? input.assembled.segments[worldRulesIndex]?.content ?? '' : '',
     perspectiveBoundary + '\n' + hint,
-    { requiredGatewayContext: input.assembled.text },
+    { requiredGatewayContext: input.assembled.text, parameterValues },
   )
+}
+
+function buildProseMessages(input: ProseCopilotInput) {
+  return buildProseRequest(input).messages
+}
+
+function proseRequestOverridesV1(request: ChapterPromptRequestV1, supplied: ProseCopilotInput['generationOverrides']) {
+  const temperature = supplied?.temperature ?? request.modelOverride?.temperature
+  return {
+    maxTokens: supplied?.maxTokens ?? request.modelOverride?.maxTokens ?? 16_000,
+    ...(temperature == null ? {} : { temperature }),
+  }
 }
 
 async function adoptCandidate(input: {
@@ -670,6 +682,8 @@ export async function prepareProseCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
+  const promptRequest = buildProseRequest(nodeInput)
+  nodeInput.generationOverrides = proseRequestOverridesV1(promptRequest, input.generationOverrides)
   const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
     const startedAt = Date.now()
     const result: ChatResult = {}
@@ -679,9 +693,9 @@ export async function prepareProseCopilot(input: {
           category: routingCategory,
           projectId: input.projectId,
           configOverrides: {
-            maxTokens: input.generationOverrides?.maxTokens ?? 16_000,
-            ...(input.generationOverrides?.temperature != null
-              ? { temperature: input.generationOverrides.temperature }
+            maxTokens: nodeInput.generationOverrides?.maxTokens ?? 16_000,
+            ...(nodeInput.generationOverrides?.temperature != null
+              ? { temperature: nodeInput.generationOverrides.temperature }
               : {}),
           },
           contextOverflowPolicy: 'reject',
@@ -695,7 +709,7 @@ export async function prepareProseCopilot(input: {
   const node = createProseCopilotNode(nodeInput, {
     ...dependencies,
     runAI: async messages => (await runRaw(messages)).output,
-  })
+  }, promptRequest)
   return {
     node,
     prepared: prepareGenerationNode(node, nodeInput),
@@ -929,7 +943,9 @@ export function revalidateProseCreativeDraftV1(input: {
 export function createProseCopilotNode(
   input: ProseCopilotInput,
   dependencies: ProseCopilotDependencies = {},
+  promptRequest: ChapterPromptRequestV1 = buildProseRequest(input),
 ): PreparedProseCopilot['node'] {
+  const generationOverrides = proseRequestOverridesV1(promptRequest, input.generationOverrides)
   const readCurrent = dependencies.readCurrent
     ?? (() => readSnapshot(input.scope, input.snapshot, input.worldGroupId))
   const save = dependencies.save ?? (draft => adoptCandidate({
@@ -944,19 +960,14 @@ export function createProseCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? (input.operation === 'continue' ? 'chapter.continue' : 'chapter.content'),
     projectId: input.project.id!,
-    configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 16_000,
-      ...(input.generationOverrides?.temperature != null
-        ? { temperature: input.generationOverrides.temperature }
-        : {}),
-    },
+    configOverrides: generationOverrides,
     contextOverflowPolicy: 'reject',
   }, input.signal))
   return {
     id: `agent.chat-copilot.prose:${input.project.id}:${input.outlineNode.id}:${input.operation}:${input.snapshot.chapterUpdatedAt ?? 'new'}`,
     kind: input.operation === 'continue' ? 'chapter.continue' : 'chapter.content',
     editableInput: true,
-    assembleInput: buildProseMessages,
+    assembleInput: () => promptRequest.messages.map(message => ({ ...message })),
     run: async messages => parseProseCandidateDraft(await runAI(messages)),
     gate: output => {
       const issues = candidateIssues(output, input.informationBoundary)

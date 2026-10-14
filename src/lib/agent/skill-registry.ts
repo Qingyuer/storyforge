@@ -615,7 +615,7 @@ export const OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS = [
 
 export const OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS = ['ragSelection'] as const
 
-const PROSE_CONTEXT_SOURCE_KEYS = ['ragSelection'] as const
+const PROSE_CONTEXT_SOURCE_KEYS = ['ragSelection', 'workAuthoringIntent'] as const
 
 const PROSE_EMOTION_BEAT_CONTEXT_SOURCE_KEYS = [
   'chapterOutline',
@@ -936,6 +936,8 @@ const OUTLINE_DETAIL_INPUT_POLICY = {
 
 const PROSE_INPUT_POLICY = {
   sourceKeys: [
+    'workAuthoringIntent',
+    'userStyleProfile',
     'storyCore',
     'creativeRules',
     'chapterOutline',
@@ -1131,13 +1133,13 @@ const OUTLINE_IMPACT_REGENERATION_COMPRESSION_POLICY = compressionPolicy(
   OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS,
 )
 const OUTLINE_DETAIL_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
-const PROSE_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
+const PROSE_COMPRESSION_POLICY = compressionPolicy(['ragSelection', 'workAuthoringIntent'])
 
 const PROSE_CONTEXT_GATEWAY_POLICY = {
   version: 1 as const,
   rollout: 'required' as const,
   requiredWriteTargets: ['chapters.content', 'chapters.wordCount'],
-  providerSourceKeys: ['ragSelection'],
+  providerSourceKeys: ['ragSelection', 'workAuthoringIntent'],
   allowedResourceKinds: [
     'world', 'worldview-field', 'story-core-field', 'character',
     'character-relation', 'story-arc', 'storyline-progress', 'outline-node',
