@@ -6,6 +6,7 @@ import { buildChapterContentRequestV1, buildContinueRequestV1, type ChapterPromp
 import { chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1, type ChatResult, type AIRequestSettingsV1 } from '../ai/client'
 import { proseRenderedRequestV1, type ProseRenderedRequestV1 } from '../prose/request-evidence'
 import { observeProseLengthV1, proseLengthExpectationV1 } from '../prose/length-observation'
+import { observeDuplicatedProseFrameV1 } from '../prose/provider-frame-observation'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
 import { verifyWorkspaceContentRevisionV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
@@ -185,6 +186,8 @@ function fingerprintContent(value: string): string {
 }
 
 export function parseProseCandidateDraft(draft: string): string {
+  const frame = observeDuplicatedProseFrameV1(draft)
+  if (frame) throw new Error(frame.message)
   const value = draft.replace(/^```(?:markdown|text)?\s*/i, '').replace(/\s*```$/, '').trim()
   if (value.length < MIN_PROSE_CHARS) throw new Error(`正文候选至少需要 ${MIN_PROSE_CHARS} 个字符。`)
   if (value.length > MAX_PROSE_CHARS) throw new Error(`正文候选不能超过 ${MAX_PROSE_CHARS} 个字符。`)
@@ -809,10 +812,12 @@ function parseProseCreativeOutcomeV1(
       assumptions: prepared.input.narrativeBrief.assumptions,
     }
   } catch (error) {
+    const duplicatedFrame = observeDuplicatedProseFrameV1(raw)
     const issue = createCreativeIssueV1({
-      code: 'prose-response-invalid',
+      code: duplicatedFrame ? 'prose-duplicate-provider-frame' : 'prose-response-invalid',
       path: '$',
       message: error instanceof Error ? error.message : '正文响应无效。',
+      ...(duplicatedFrame ? { action: 'edit' as const } : {}),
     })
     return {
       status: 'manual-repair',

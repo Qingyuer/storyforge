@@ -226,6 +226,19 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     expect(normalizeChapterText((await db.chapters.get(pending.fixture.chapterId))!.content)).toBe(fullText)
   })
 
+  it('重复草稿与正文之间出现推理分隔符时不能原样采纳；作者保留后段后同一候选可正式采纳', async () => {
+    const pending = await preparePending('回复分隔核对', 'generate')
+    const text = '守灯人决定关门，放下铜钥匙，转身离开潮门。'.repeat(30)
+    const mixed = `${text}\n</think>\n# 第1章 潮门\n${text}`
+    const candidate = await reviseProseGenerationCandidateV1({ scope: pending.fixture.scope, candidate: pending.candidate, outputText: mixed })
+    await expect(commitProseGenerationAdoptionV1({ scope: pending.fixture.scope, runId: candidate.durable.runId, candidate, contentHtml: plainTextToHtml(mixed), wordCount: mixed.length })).rejects.toThrow('重复了正文')
+    expect((await db.chapters.get(pending.fixture.chapterId))!.content).toBe(pending.fixture.content)
+    const resolved = await reviseProseGenerationCandidateV1({ scope: pending.fixture.scope, candidate, outputText: text })
+    const written = await commitProseGenerationAdoptionV1({ scope: pending.fixture.scope, runId: resolved.durable.runId, candidate: resolved, contentHtml: plainTextToHtml(text), wordCount: text.length })
+    expect(written.snapshot.projection.state).toBe('completed')
+    expect(normalizeChapterText((await db.chapters.get(pending.fixture.chapterId))!.content)).toBe(text)
+  })
+
   it('正文候选修订拒绝空内容、跨作品、过期和重复旧版本', async () => {
     const pending = await preparePending('修订保护')
     const revise = (outputText: string) => reviseProseGenerationCandidateV1({ scope: pending.fixture.scope, candidate: pending.candidate, outputText })

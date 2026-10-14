@@ -1,4 +1,5 @@
 import { db } from '../../db/schema'
+import { observeDuplicatedProseFrameV1 } from '../../prose/provider-frame-observation'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../utils/html'
 import { adopt } from '../../registry/adopt'
 import { hashChapterText, normalizeChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
@@ -1225,6 +1226,8 @@ export async function commitProseGenerationAdoptionV1(input: {
   contentHtml: string
   wordCount: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
+  if (frame) throw new Error(frame.message)
   if (input.candidate.operation === 'quality-revise' && input.contentHtml !== input.candidate.qualityRevision?.contentHtml) throw new Error('范围修订待写回的富文本与冻结候选不一致。')
   try {
     await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
