@@ -25,8 +25,7 @@ import { runWholeChapterQualityReviewV1, readLatestWholeChapterQualityReviewV1, 
 import type { QualityReviewModeV1 } from '../../lib/prose/quality-review'
 import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-revision'
 import { db } from '../../lib/db/schema'
-import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
-import type { ChatResult } from '../../lib/ai/client'
+import { createWholeChapterQualityCallV1, createQualityRevisionCallV1 } from '../../lib/prose/quality-transport'
 import { htmlToPlainText } from '../../lib/utils/html'
 import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1 } from '../../lib/agent/run/quality-revision-durable'
 
@@ -51,6 +50,9 @@ interface Props {
   onConsistencyRun?: (run: ConsistencyAgentRun) => void
   onBeforeConsistencyRun?: () => Promise<void>
   onQualityRevisionAdopted?: () => Promise<void>
+  qualityConfigOverride?: import('../../lib/types').AIConfig
+  qualityGenerationOverrides?: { temperature?: number; maxTokens?: number }
+  qualityAuthorRequest?: string
 }
 
 type TabType = ReviewTab
@@ -159,19 +161,8 @@ export default function ReviewPanel(props: Props) {
       if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
       const result = await runWholeChapterQualityReviewV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode,
-        call: async (messages, resolution, streamResult) => {
-          const result: ChatResult = {}
-          const options = { responseFormat: 'json_object' as const }
-          const raw = mode === 'quality'
-            ? await executeRegisteredAIEntryV1('prose.review.quality', messages, resolution.config, { category: 'review.quality', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
-            : mode === 'style'
-              ? await executeRegisteredAIEntryV1('prose.review.anti-ai', messages, resolution.config, { category: 'review.anti-ai', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
-              : await executeRegisteredAIEntryV1('prose.review.readability', messages, resolution.config, { category: 'review.readability', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, options, resolution)
-          streamResult.usage = result.usage
-          streamResult.finishReason = result.finishReason
-          streamResult.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'
-          return raw
-        },
+        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: props.qualityAuthorRequest,
+        call: createWholeChapterQualityCallV1(projectId, mode, controller.signal),
       })
       if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityReports(value => ({ ...value, [mode]: result }))
     } catch (error) { if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityError(controller.signal.aborted ? '评审已停止，未自动重发。' : error instanceof Error ? error.message : '全文评审未完成。') }
@@ -233,17 +224,9 @@ export default function ReviewPanel(props: Props) {
       await props.onBeforeConsistencyRun?.()
       if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
-      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), signal: controller.signal,
-        revise: async (messages, resolution, response) => {
-          const result: ChatResult = {}
-          const raw = await executeRegisteredAIEntryV1('prose.chapter.quality-revise', messages, resolution.config, { category: 'review.revise', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, { responseFormat: 'json_object' }, resolution)
-          response.finishReason = result.finishReason; response.usage = result.usage; response.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'; return raw
-        },
-        recheck: async (messages, resolution, response) => {
-          const result: ChatResult = {}
-          const raw = await executeRegisteredAIEntryV1('prose.review.recheck', messages, resolution.config, { category: 'review.quality', projectId, contextOverflowPolicy: 'reject' }, controller.signal, result, { responseFormat: 'json_object' }, resolution)
-          response.finishReason = result.finishReason; response.usage = result.usage; response.completion = result.finishReason === 'stop' ? 'complete' : 'unknown'; return raw
-        },
+      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), signal: controller.signal, configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides,
+        revise: createQualityRevisionCallV1(projectId, 'revision', controller.signal),
+        recheck: createQualityRevisionCallV1(projectId, 'recheck', controller.signal),
       })
       if (qualityTarget.current === target) setRevisionView(view)
     } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '范围修订未完成。') }

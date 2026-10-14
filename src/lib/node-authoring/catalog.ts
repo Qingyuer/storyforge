@@ -1,4 +1,5 @@
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
+import { getAgentSkillV1, resolveAgentSkillContextSourceKeysV1 } from '../agent/skill-registry'
 import type { PromptModuleKey } from '../types/prompt'
 import type {
   AuthoringNodeTemplate,
@@ -306,8 +307,16 @@ const CONTENT_TEMPLATES: AuthoringNodeTemplate[] = [
       { key: 'chapterTitle', label: '目标章节标题', type: 'text', defaultValue: '' },
     ],
     extraInputs: [{ id: 'plan', label: '章节计划', semantic: 'outline.plan', cardinality: 'one', state: 'any', required: false }],
-    recommendedAfter: ['chapter.organize'],
+    recommendedAfter: ['chapter.organize', 'chapter.quality-review'],
   }),
+  {
+    id: 'chapter.quality-review', version: 1, label: '全文评审与修订', category: '正文', class: 'processor', capability: 'generate-field',
+    description: '评审已保存的完整章节；可查看问题、选择范围修订，确认后经同一正文采纳。已有有效报告默认复用，评审结果本身只读。',
+    inputs: [optionalControl('ai-profile', 'AI 配置', 'control.ai-profile'), optionalControl('prompt', '评审补充要求', 'control.prompt'), optionalControl('temperature', '温度', 'control.temperature'), optionalControl('max-tokens', '最大输出 Tokens', 'control.max-tokens'), { id: 'chapter', label: '已保存的正文', semantic: 'chapter.prose', cardinality: 'one', state: 'canon', required: false }],
+    outputs: [{ id: 'report', label: '只读阅读报告', semantic: 'chapter.quality-review', cardinality: 'one', state: 'candidate' }],
+    reads: { sourceKeys: resolveAgentSkillContextSourceKeysV1(getAgentSkillV1('prose.quality-review', 'prose')) },
+    parameters: [{ key: 'chapterTitle', label: '目标章节标题', type: 'text', defaultValue: '' }, { key: 'request', label: '评审补充要求', type: 'text', defaultValue: '' }, { key: 'mode', label: '评审侧重', type: 'select', options: ['审校', '表达与重复', '追读力'], defaultValue: '审校' }, { key: 'newReport', label: '重新评审（另发一次请求）', type: 'boolean', defaultValue: false }],
+  },
   collectionTemplate({
     id: 'continuity.foreshadow',
     label: '伏笔',

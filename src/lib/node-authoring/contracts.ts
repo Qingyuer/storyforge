@@ -57,6 +57,7 @@ export const AUTHORING_SEMANTICS = [
   'outline.chapter',
   'outline.plan',
   'chapter.prose',
+  'chapter.quality-review',
   'continuity.foreshadow',
   'continuity.location',
   'continuity.state',
@@ -254,6 +255,7 @@ export interface AuthoringCandidate {
 }
 
 export type AuthoringCandidateDomain =
+  | { kind: 'quality-review'; chapterTitle: string; mode: 'quality' | 'style' | 'readability'; reportHash: string }
   | {
       kind: 'worldview-field'
       targetField: string

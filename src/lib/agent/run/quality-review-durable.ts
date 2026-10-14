@@ -40,17 +40,20 @@ export async function runWholeChapterQualityReviewV1(input: {
   scope: WorkspaceScope; chapterId: number; outlineNodeId: number; worldGroupId: number | null; mode: QualityReviewModeV1
   call: (messages: ChatMessage[], resolution: AIRequestConfigResolution, result: StreamResult) => Promise<string>
   generatorIdentity?: { provider: string; model: string }
+  configOverride?: import('../../types').AIConfig
+  generationOverrides?: { temperature?: number; maxTokens?: number }
+  authorRequest?: string
 }): Promise<DurableQualityReviewV1> {
   const chapter = await db.chapters.get(input.chapterId)
   if (!chapter || chapter.outlineNodeId !== input.outlineNodeId || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) throw new Error('评审章节不存在或越过当前作品。')
   const chapterText = htmlToPlainText(chapter.content ?? '')
   if (!chapterText.trim()) throw new Error('正文为空，不能全文评审。')
   const revision = await captureWorkspaceContentRevisionV1({ scope: input.scope, worldGroupId: input.worldGroupId })
-  const config = useAIConfigStore.getState().config
-  const resolution = boundedQualityResolutionV1(resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId }))
+  const config = input.configOverride ?? useAIConfigStore.getState().config
+  const resolution = boundedQualityResolutionV1(resolveRequestConfig(config, { category: categories[input.mode], projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
-  const assembled = await prepareProseGatewayAssemblyV1({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: input.worldGroupId, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, operation: 'review', qualityReview: true, authorRequest: '评审当前完整章节，保留作者场景任务和停笔要求。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
-  const request = await buildWholeChapterQualityReviewRequestV1({ mode: input.mode, chapterTitle: chapter.title, chapterText, registeredContext: assembled.text })
+  const assembled = await prepareProseGatewayAssemblyV1({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: input.worldGroupId, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, operation: 'review', qualityReview: true, authorRequest: input.authorRequest?.trim() || '评审当前完整章节，保留作者场景任务和停笔要求。', config: resolution.config, allowOutlineOnlyAgentDraft: true })
+  const request = await buildWholeChapterQualityReviewRequestV1({ mode: input.mode, chapterTitle: chapter.title, chapterText, registeredContext: assembled.text, authorRequest: input.authorRequest })
   await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
   const skill = getAgentSkillV1('prose.quality-review', 'prose')
   if (skill.promptVersion !== QUALITY_REVIEW_PROMPT_VERSION_V1) throw new Error('全文评审 Skill 与请求版本不一致。')

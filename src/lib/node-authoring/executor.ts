@@ -126,7 +126,7 @@ function inputSignature(inputs: AuthoringInputEnvelope[]): string {
   return hashAuthoringText(inputs.map(input => `${input.sourceNodeId}:${input.targetPortId}:${input.content}`).join('\n'))
 }
 
-function requestedAIConfig(node: AuthoringNodeInstance, inputs: AuthoringInputEnvelope[] = []) {
+export function requestedAIConfig(node: AuthoringNodeInstance, inputs: AuthoringInputEnvelope[] = []) {
   const state = useAIConfigStore.getState()
   const presetId = inputControl(inputs, 'control.ai-profile')
     || stringConfig(node, 'aiPresetId')
@@ -672,6 +672,7 @@ export async function reviseAuthoringCandidate(input: {
     const { candidates } = parseRunMaps(run)
     const candidate = candidates[input.nodeId]
     if (!candidate || candidate.status === 'adopted' || candidate.status === 'rejected') throw new Error('候选不存在或已处理。')
+    if (candidate.domain?.kind === 'quality-review' && !input.reject) throw new Error('阅读报告只读，请在审修面板选择问题，不得改写原评审证据。')
     if (input.reject) candidates[input.nodeId] = { ...candidate, status: 'rejected' }
     else if (input.selectedVariantIndex != null) {
       const index = input.selectedVariantIndex

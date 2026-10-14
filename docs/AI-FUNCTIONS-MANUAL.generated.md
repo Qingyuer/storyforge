@@ -370,13 +370,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1706` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1684` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1674` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:606` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
@@ -405,7 +405,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ReviewPanel.tsx:201 · ai.start`
+- `src/components/editor/ReviewPanel.tsx:192 · ai.start`
 - `src/lib/adventure/harness.ts:383 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
@@ -459,11 +459,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.chapter.memory` | `prose.memory` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate` | `chapters` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
 | `prose.chapter.organize` | `prose.organize` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
-| `prose.review.quality` | `prose.quality-review` | `review.quality` | auxiliary / durable-run | `quality-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
-| `prose.review.anti-ai` | `prose.quality-review` | `review.anti-ai` | auxiliary / durable-run | `anti-ai-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
-| `prose.review.readability` | `prose.quality-review` | `review.readability` | auxiliary / durable-run | `readability-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
-| `prose.chapter.quality-revise` | `prose.quality-revise` | `review.revise` | formal / durable-run | `prose-generation-candidate` | `chapters` | `src/components/editor/ReviewPanel.tsx` |
-| `prose.review.recheck` | `prose.quality-recheck` | `review.quality` | auxiliary / durable-run | `quality-revision-recheck` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `prose.review.quality` | `prose.quality-review` | `review.quality` | auxiliary / durable-run | `quality-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.review.anti-ai` | `prose.quality-review` | `review.anti-ai` | auxiliary / durable-run | `anti-ai-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.review.readability` | `prose.quality-review` | `review.readability` | auxiliary / durable-run | `readability-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.chapter.quality-revise` | `prose.quality-revise` | `review.revise` | formal / durable-run | `prose-generation-candidate` | `chapters` | `src/lib/prose/quality-transport.ts` |
+| `prose.review.recheck` | `prose.quality-recheck` | `review.quality` | auxiliary / durable-run | `quality-revision-recheck` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.consistency` | `prose.review` | `review.consistency.fast`<br/>`review.consistency.deep` | auxiliary / durable-run | `consistency-audit-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
 | `world.map.concept` | `world-origin.map-config` | `geography.concept-map` | auxiliary / authoring-draft | `concept-map-svg` | 禁止 | `src/components/geography/GeographyPanel.tsx` |
 | `world.setting.lookup.qa` | `world-origin.review` | `setting-qa` | auxiliary / read-only | `setting-qa-answer` | 禁止 | `src/components/editor/SettingLookupPanel.tsx` |
@@ -502,4 +502,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `ba47a816`
+生成时间基准:commit `86b39de5`

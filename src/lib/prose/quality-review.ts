@@ -65,9 +65,11 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
   chapterTitle: string
   chapterText: string
   registeredContext: string
+  authorRequest?: string
 }): Promise<{ messages: ChatMessage[]; targetTextHash: string }> {
   if (!Object.prototype.hasOwnProperty.call(labels, input.mode)) throw new Error('评审模式无效。')
   if (!input.chapterText.trim()) throw new Error('正文为空，不能进行全文评审。')
+  if (input.authorRequest && input.authorRequest.length > 16000) throw new Error('本次评审要求过长，请精简后再开始。')
   const targetTextHash = await hashCanonicalValue(input.chapterText)
   const system = `你提供${labels[input.mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
 维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
@@ -82,7 +84,7 @@ quote必须是从正文复制的一段连续、非空字符串，绝不能填写
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`
   return { targetTextHash, messages: [
     { role: 'system', content: system },
-    { role: 'user', content: `【章节】${input.chapterTitle}\n【完整正文 · hash ${targetTextHash} · UTF16长度 ${input.chapterText.length}】\n${input.chapterText}\n【正文结束】\n\n【登记的作品资料、场景任务与作者意图】\n${input.registeredContext || '（暂无）'}` },
+    { role: 'user', content: `【章节】${input.chapterTitle}\n【完整正文 · hash ${targetTextHash} · UTF16长度 ${input.chapterText.length}】\n${input.chapterText}\n【正文结束】\n\n【登记的作品资料、场景任务与作者意图】\n${input.registeredContext || '（暂无）'}${input.authorRequest?.trim() ? `\n\n【本次作者评审要求 · 不属于故事事实】\n${input.authorRequest.trim()}` : ''}` },
   ] }
 }
 
