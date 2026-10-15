@@ -67,7 +67,7 @@ Android 禁用系统自动云备份，避免把用户选择保存的密钥交给
 - `npm run test:clients`：更新状态、原生确认门、非法 IPC、网络异常、SSE 分块/取消、网页不出现客户端更新入口。
 - `node scripts/desktop/smoke.mjs`：独立临时 profile 中启动、renderer 无 Node 权限、重启后 IndexedDB/localStorage 保留。Windows Actions 对真正的解包程序执行此检查。
 - Android `testDebugUnitTest`：稳定版本顺序、下载来源白名单与反例。
-- Android `connectedDebugAndroidTest`：在隔离模拟器中启动打包 WebView，检查固定 origin、原生插件、HTTPS 限制及 Activity 重建后的 IndexedDB/localStorage；不等于两版本覆盖升级验收。
+- Android `:app:connectedDebugAndroidTest`：在隔离模拟器中启动打包 WebView，检查固定 origin、原生插件、HTTPS 限制及 Activity 重建后的 IndexedDB/localStorage；不等于两版本覆盖升级验收。只执行本应用测试，不运行依赖库自带的测试应用。
 - 发版前人工/设备验证：旧版保存实际作品与媒资 → 导出备份 → 安装更高版本 → 核对内容与存档 → 重启 → 导入备份；取消安装、网络中断、磁盘不足、签名不匹配均应保留旧版。
 - 单元测试和重启探针不等于两版本安装器升级验收。当前还需 Windows 真机与 Android 真机的覆盖升级验收、移动端所有产品的触屏/键盘布局验收，以及首次公开 Release 后的真实 GitHub 更新验证。
 - Android 完整 JSON 和数据管理页文本导出已接系统保存；其他专用媒资/独立网页游戏导出入口仍需逐项设备验收，不能因此宣称所有网页能力已完成移动适配。

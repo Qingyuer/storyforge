@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { readFile, mkdir, copyFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 const release = process.argv.includes('--release')
-const result = spawnSync(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [release ? 'assembleRelease' : 'assembleDebug', 'testDebugUnitTest', '--no-daemon'], { cwd: 'android', stdio: 'inherit', shell: process.platform === 'win32' })
+const result = spawnSync(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [release ? ':app:assembleRelease' : ':app:assembleDebug', ':app:testDebugUnitTest', '--no-daemon'], { cwd: 'android', stdio: 'inherit', shell: process.platform === 'win32' })
 if (result.status !== 0) process.exit(result.status ?? 1)
 const { version } = JSON.parse(await readFile('package.json', 'utf8'))
 await mkdir('release/android', { recursive: true })

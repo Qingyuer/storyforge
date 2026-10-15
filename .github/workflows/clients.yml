@@ -110,4 +110,12 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon
+          script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon
+      - name: Preserve Android device test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-device-test-results
+          path: android/app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
+          retention-days: 14
