@@ -54,6 +54,7 @@ import { authoringExecutionSubgraph, topologicalAuthoringOrder, validateAuthorin
 import {
   adoptAuthoringCandidate,
   buildAuthoringExecutionPlan,
+  canRefreshAuthoringNodeLocally,
   parseAuthoringExecutionPlan,
   persistAdoptedAuthoringCandidate,
   reviseAuthoringCandidate,
@@ -811,15 +812,13 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       const reusableTargetRun = mode === 'normal' && targetNodeId && run?.id != null
         ? topologicalAuthoringOrder(graph, targetNodeId).slice(0, -1).every(node => {
             const candidate = candidates[node.id]
-            const state = freshness[node.id]?.status
-            return Boolean(candidate)
+            // Current source reads are local work. Let the shared executor
+            // validate saved candidates instead of falling back to rerunning AI.
+            return canRefreshAuthoringNodeLocally(node) || Boolean(candidate)
               && candidate.status !== 'blocked'
               && candidate.status !== 'stale'
               && candidate.status !== 'draft'
               && candidate.status !== 'rejected'
-              && state !== 'blocked'
-              && state !== 'stale'
-              && state !== 'never-run'
           })
         : false
       const result = await runAuthoringGraph({

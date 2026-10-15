@@ -8,6 +8,7 @@ import {
 } from '../agent/creative-reliability'
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
+import type { AdoptResult } from '../registry/types'
 import type { NodeFlow, NodeRunRecord, WorkspaceScope } from '../types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
 import {
@@ -15,6 +16,9 @@ import {
   readAuthoringCanonBinding,
   readAuthoringTargetFingerprint,
   resolveAuthoringBoundRecordId,
+  captureAuthoringCanonReceipt,
+  readAuthoringReceiptRows,
+  assertAuthoringCanonReceipt,
 } from './bindings'
 import { authoringExecutionSubgraph, validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
@@ -51,6 +55,12 @@ export interface AuthoringRunSnapshot {
 
 export type AuthoringRunSnapshotMap = Record<string, AuthoringRunSnapshot>
 export type AuthoringCandidateMap = Record<string, AuthoringCandidate>
+
+export function canRefreshAuthoringNodeLocally(node: AuthoringNodeInstance): boolean {
+  const template = AUTHORING_NODE_BY_ID.get(node.templateId)
+  return template?.capability === 'read-canon' || template?.capability === 'manual-draft'
+    || template?.class === 'control' || node.templateId === 'processor.compose'
+}
 
 export interface AuthoringRunUpdate {
   run: NodeRunRecord
@@ -278,6 +288,7 @@ function parseRunMaps(run: NodeRunRecord): {
       if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
         throw new Error(`节点 ${nodeId} 的候选记录无效。`)
       }
+      if (candidate.canonReceipt !== undefined) assertAuthoringCanonReceipt(candidate.canonReceipt)
       if (candidate.creativeArtifacts !== undefined) {
         if (!Array.isArray(candidate.creativeArtifacts) || candidate.creativeArtifacts.length > 8) {
           throw new Error(`节点 ${nodeId} 的创作产物证据无效。`)
@@ -508,6 +519,7 @@ export async function adoptAuthoringCandidate(input: {
   latestRuns.sort((left, right) => right.startedAt - left.startedAt)
   let expectedSignature: AuthoringRunSignature | undefined
   let latestDomain: AuthoringCandidate['domain']
+  let selectedRunId: number | undefined
   for (const run of latestRuns) {
     const { candidates } = parseRunMaps(run)
     const candidate = candidates[input.nodeId]
@@ -520,6 +532,7 @@ export async function adoptAuthoringCandidate(input: {
     }
     expectedSignature = candidate.signature
     latestDomain = candidate.domain
+    selectedRunId = run.id
     break
   }
   if (expectedSignature?.targetHash && expectedSignature.executorVersion === 'FLOW-3B.2') {
@@ -533,6 +546,21 @@ export async function adoptAuthoringCandidate(input: {
       throw new Error('目标内容已在分步骤模式或其它入口中更新；请重新运行节点后再采纳，避免覆盖新内容。')
     }
   }
+  if (selectedRunId == null) throw new Error('没有当前作用域的正式节点候选，不能采纳。')
+  const target = template?.writes?.target
+  const beforeIds = new Set(target ? (await readAuthoringReceiptRows(scope, target))
+    .flatMap(row => typeof row.id === 'number' ? [row.id] : []) : [])
+  const confirm = async (result: AdoptResult): Promise<AdoptResult> => {
+    if (!result.written.length || result.unknown.length || result.typeErrors.length
+      || result.fkErrors.length || result.skipped.length) return result
+    const canonReceipt = target ? await captureAuthoringCanonReceipt({
+      scope, target, beforeIds, result, output: input.output, graph, nodeId: node.id,
+    }) : undefined
+    await recordAdoptedAuthoringCandidate({
+      flow: input.flow, runId: selectedRunId!, nodeId: node.id, output: input.output, canonReceipt,
+    })
+    return result
+  }
   if (latestDomain) {
     const adopted = await adoptDomainCandidate({
       node,
@@ -542,7 +570,7 @@ export async function adoptAuthoringCandidate(input: {
       scope,
       worldGroupId: input.flow.worldGroupId ?? null,
     })
-    if (adopted) return adopted
+    if (adopted) return confirm(adopted)
   }
   if (actionBinding?.mode === 'formal-domain-action') {
     throw new Error('该正式节点缺少分步骤领域候选证据；请用当前版本重新运行节点后再采纳。')
@@ -563,7 +591,7 @@ export async function adoptAuthoringCandidate(input: {
     if (write.target === 'characters' && recordId == null) {
       throw new Error('角色维度节点需要先绑定一个目标角色，避免把内容写入错误角色。')
     }
-    return adopt({
+    return confirm(await adopt({
       projectId: input.flow.projectId,
       scope,
       worldGroupId: input.flow.worldGroupId ?? null,
@@ -571,7 +599,7 @@ export async function adoptAuthoringCandidate(input: {
       ...(recordId == null ? {} : { recordId }),
       mode: 'replace',
       data: { [write.fields[0]]: input.output },
-    })
+    }))
   }
   let data: Record<string, unknown>[]
   try {
@@ -583,14 +611,14 @@ export async function adoptAuthoringCandidate(input: {
     throw new Error('集合节点的候选必须是合法 JSON；请先编辑为 JSON 后再采纳。')
   }
   if (!data.length) throw new Error('候选没有可采纳的记录。')
-  return adopt({
+  return confirm(await adopt({
     projectId: input.flow.projectId,
     scope,
     worldGroupId: input.flow.worldGroupId ?? null,
     target: write.target,
     mode: write.mode === 'replace' ? 'add-many' : write.mode,
     data,
-  })
+  }))
 }
 
 async function persistAuthoringRun(
@@ -714,11 +742,12 @@ async function reviseIdleAuthoringCandidate(input: Parameters<typeof reviseAutho
  * graph can resume from the next node instead of paying to regenerate the same
  * artifact.
  */
-export async function persistAdoptedAuthoringCandidate(input: {
+async function recordAdoptedAuthoringCandidate(input: {
   flow: NodeFlow
   runId: number
   nodeId: string
   output: string
+  canonReceipt?: AuthoringCandidate['canonReceipt']
 }): Promise<NodeRunRecord> {
   if (input.flow.id == null) throw new Error('请先保存节点图。')
   const scope = await resolveScopeLike(input.flow.projectId)
@@ -738,6 +767,7 @@ export async function persistAdoptedAuthoringCandidate(input: {
     ...candidateWithoutErrors,
     output: input.output,
     status: 'adopted',
+    ...(input.canonReceipt ? { canonReceipt: input.canonReceipt } : {}),
     ...(edited || candidate.authorEditedAfterArtifact ? { authorEditedAfterArtifact: true } : {}),
   }
   const stillBlocked = plan.completedNodeIds.some(nodeId => candidateNeedsAuthorRepair(candidates[nodeId]) || candidates[nodeId]?.status === 'rejected')
@@ -753,6 +783,26 @@ export async function persistAdoptedAuthoringCandidate(input: {
     updatedAt,
     completedAt,
   }
+}
+
+/** Compatibility readback: only the actual governed adoption can mint confirmation. */
+export async function persistAdoptedAuthoringCandidate(input: {
+  flow: NodeFlow
+  runId: number
+  nodeId: string
+  output: string
+}): Promise<NodeRunRecord> {
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const run = await db.nodeRuns.get(input.runId)
+  if (!run || run.flowId !== input.flow.id
+    || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) {
+    throw new Error('节点运行记录不存在或不属于当前节点图。')
+  }
+  const candidate = parseRunMaps(run).candidates[input.nodeId]
+  if (candidate?.status !== 'adopted' || candidate.output !== input.output) {
+    throw new Error('候选尚未通过正式采纳，不能只保存已采纳标记。')
+  }
+  return run
 }
 
 export async function runAuthoringGraph(input: {
@@ -847,11 +897,22 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
       if (input.runNodeIds) {
         const originalGraph = parseAuthoringGraph(base.graphSnapshotJson ?? input.flow.graphJson)
         const freshness = await inspectAuthoringGraphFreshness({ flow: input.flow, snapshots, candidates })
+        const runNodeIds = new Set(input.runNodeIds)
         for (const upstream of topologicalAuthoringOrder(graph, targetNodeId).filter(node => !input.runNodeIds!.has(node.id))) {
-          if (!candidates[upstream.id] || !originalGraph.nodes.some(node => node.id === upstream.id)
+          const refreshLocal = canRefreshAuthoringNodeLocally(upstream)
+          if ((!refreshLocal && !candidates[upstream.id]) || !originalGraph.nodes.some(node => node.id === upstream.id)
             || authoringExecutionGraphHash(authoringExecutionSubgraph(originalGraph, upstream.id)) !== authoringExecutionGraphHash(authoringExecutionSubgraph(graph, upstream.id))
-            || freshness[upstream.id]?.status !== 'fresh') throw new Error('要复用的上游节点、连线或来源已变化；请先重新运行上游。')
+            || (!refreshLocal && freshness[upstream.id]?.status !== 'fresh'
+              && !(candidates[upstream.id].status === 'adopted' && candidates[upstream.id].canonReceipt
+                && freshness[upstream.id]?.reasons.every(reason => reason === 'upstream-stale')))) {
+            throw new Error(`要复用的上游节点、连线或来源已变化；请先重新运行上游。（${upstream.title}：${freshness[upstream.id]?.reasons.join('、') || '节点结构变化'}）`)
+          }
+          // Explicitly starting a downstream run rereads registered Canon without
+          // model calls. Never label an old source payload as the current Canon.
+          if (refreshLocal) runNodeIds.add(upstream.id)
         }
+        ordered = topologicalAuthoringOrder(graph, targetNodeId).filter(node => runNodeIds.has(node.id))
+        plan = buildAuthoringExecutionPlan({ graph, targetNodeId, runNodeIds })
       }
     }
     const row = stampNewRecord(scope, 'nodeRuns', {

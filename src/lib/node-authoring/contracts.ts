@@ -248,6 +248,14 @@ export interface AuthoringCandidate {
   authorEditedAfterArtifact?: boolean
   semantic: AuthoringSemantic
   signature?: AuthoringRunSignature
+  /** Minted only after governed adoption; references the confirmed Canon, not generation-time inputs. */
+  canonReceipt?: {
+    version: 1
+    target: string
+    outputHash: string
+    connectionsHash: string
+    records: { documentId: string; fields: string[]; hash: string }[]
+  }
   /** 领域候选的结构化目标与快照；只保存稳定语义，正文仍留在 Canon 表。 */
   domain?: AuthoringCandidateDomain
   errors?: string[]

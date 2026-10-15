@@ -17,15 +17,17 @@ jobs:
     if: contains(github.event.pull_request.labels.*.name, 'full-delivery')
     name: Full delivery / ${{ matrix.id }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - id: cli
             script: ci
+            timeout: 90
           - id: browser
             script: ci:e2e
+            timeout: 180
     env:
       CI: "true"
       PLAYWRIGHT_FROZEN_WORKSPACE: "1"
