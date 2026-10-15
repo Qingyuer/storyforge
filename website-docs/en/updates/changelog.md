@@ -2,6 +2,10 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.0; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## October 15, 2026 · Longform quality development instructions (unreleased)
+
+[Draft PR #141](https://github.com/yuanbw2025/storyforge/pull/141) now has [trial instructions](/en/updates/development-status) for system-fiction elements, optional scene tasks, whole-chapter review, scoped revision, and returning HTML with embedded answers. Product source `c2836ba8` is unmerged and undeployed; complete engineering and independent human acceptance remain pending. This is a development-documentation update, not a change to v4.0.0 downloads or the hosted experience.
+
 ## October 14, 2026 · Knowledge-base scrolling
 
 The header and navigation now share an opaque surface that follows light and dark themes, preventing scrolling document text from showing through navigation labels. Persistent tabs remain visible on desktop and narrow screens.
