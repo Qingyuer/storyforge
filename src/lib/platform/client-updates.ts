@@ -7,6 +7,8 @@ export interface ClientUpdateState {
   error?: string
 }
 export interface ClientBridge {
+  diagnostics?(): Promise<unknown[]>
+  telemetryAllowed?(): Promise<boolean>
   getState(): Promise<ClientUpdateState>
   check(): Promise<ClientUpdateState>
   download(): Promise<ClientUpdateState>

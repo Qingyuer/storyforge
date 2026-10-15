@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test'
+
+test('a non-crashing bug and a feature request submit inside settings with an explicit receipt', async ({ page }) => {
+  const sent: Record<string, unknown>[] = []
+  await page.route('https://storyforge-lab.com/v1/client-support/**', async route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' } })
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    sent.push(body)
+    if (sent.length === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'UNAVAILABLE' }) })
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accepted: true, id: body.id }) })
+  })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'client-support-isolated'))
+  await page.goto('home/settings')
+  const panel = page.getByRole('region', { name: '问题与故障反馈' })
+  await panel.getByRole('button', { name: '报告问题', exact: true }).click()
+  await panel.getByLabel('标题', { exact: true }).fill('导出按钮没有响应')
+  await panel.getByLabel('问题描述', { exact: true }).fill('没有出现崩溃或错误弹窗，但点击后没有任何变化。')
+  await panel.getByLabel('我已检查填写内容，确认发送给维护者。').check()
+  await panel.getByRole('button', { name: '提交反馈', exact: true }).click()
+  await expect(panel.getByRole('status')).toContainText('未收到提交成功回执')
+  await expect(panel.getByLabel('问题描述', { exact: true })).not.toHaveValue('')
+  await panel.getByRole('button', { name: '提交反馈', exact: true }).click()
+  await expect(panel.getByRole('status')).toContainText('提交成功')
+  expect(sent[0].id).toBe(sent[1].id)
+  expect(sent[0]).not.toHaveProperty('diagnostics')
+  await panel.getByRole('button', { name: '功能建议', exact: true }).click()
+  await panel.getByLabel('标题', { exact: true }).fill('增加导出选项')
+  await panel.getByLabel('建议与使用场景', { exact: true }).fill('我希望将作品导出为更多文档格式。')
+  await panel.getByLabel('我已检查填写内容，确认发送给维护者。').check()
+  await panel.getByRole('button', { name: '提交反馈', exact: true }).click()
+  await expect(panel.getByRole('status')).toContainText('提交成功')
+  expect(sent[2].kind).toBe('feature')
+  expect(sent[2]).not.toHaveProperty('diagnostics')
+})
+
+test('packaged portable consent precedes analytics and survives reload', async ({ page }) => {
+  test.skip(process.env.PLAYWRIGHT_PRODUCTION_PREVIEW !== '1', 'Runs against an actual portable production build')
+  const uploads: Record<string, unknown>[] = []
+  await page.route('https://storyforge-lab.com/v1/client-support/**', async route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' } })
+    const body = route.request().postDataJSON()
+    uploads.push(body)
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accepted: body.events?.map((row: {id:string}) => row.id) ?? [], discarded: [] }) })
+  })
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'client-support-isolated'))
+  await page.goto('home/settings')
+  await expect(page.getByRole('button', { name: '同意统计与错误上报' })).toBeVisible()
+  expect(uploads).toHaveLength(0)
+  await page.getByRole('button', { name: '同意统计与错误上报' }).click()
+  await expect.poll(() => uploads.length).toBe(1)
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: '分享安装活跃统计' })).toBeChecked()
+  await page.getByRole('checkbox', { name: '分享安装活跃统计' }).uncheck()
+  await page.getByRole('checkbox', { name: '自动发送脱敏错误报告' }).uncheck()
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: '分享安装活跃统计' })).not.toBeChecked()
+  expect(uploads).toHaveLength(1)
+})

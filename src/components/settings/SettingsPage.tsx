@@ -3,8 +3,10 @@ import { BookOpen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import ClientUpdatePanel from './ClientUpdatePanel'
+import ClientPrivacyPanel from './ClientPrivacyPanel'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
+import FailureFeedbackPanel from '../shared/FailureFeedbackPanel'
 import type { Project } from '../../lib/types'
 import {
   parseTextOpenWorldSettingsReturnV1,
@@ -42,11 +44,13 @@ export default function SettingsPage({
         onClick={() => onReturnToTextOpenWorldCreator(textOpenWorldCreatorReturn)}
       >返回开放世界制作</button>}
       <ClientUpdatePanel />
+      <ClientPrivacyPanel />
       <AIConfigPanel />
       <div className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
       </div>
       <CreativeReliabilityCommunityPanel />
+      <FailureFeedbackPanel />
       {HarnessEvalPanel && (
         <Suspense fallback={null}>
           <HarnessEvalPanel />

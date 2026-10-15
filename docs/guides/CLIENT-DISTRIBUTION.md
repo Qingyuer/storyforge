@@ -73,3 +73,15 @@ Android 禁用系统自动云备份，避免把用户选择保存的密钥交给
 - Android 完整 JSON 和数据管理页文本导出已接系统保存；其他专用媒资/独立网页游戏导出入口仍需逐项设备验收，不能因此宣称所有网页能力已完成移动适配。
 
 参考：[Electron 更新](https://www.electron.build/v26/docs/features/auto-update/)、[Capacitor 原生代码](https://capacitorjs.com/docs/android/custom-code)、[Android 签名](https://developer.android.com/studio/publish/app-signing)。
+
+## 客户端反馈与观测候选增量
+
+本增量依赖客户端 PR #142 与本地故障摘要 PR #144；未发布前不代表固定下载包具备这些能力。属于总纲 §8 共享工程底座的产品研发，数据 owner 为安装环境及维护者反馈服务；不涉及 S1/S2/S3、世界引用、作品媒资、AI 上下文/采纳或 PROJECT_TABLES。安装偏好和有界队列使用独立 localStorage 键，不进入作品导出。服务器独立 SQLite 保存运营数据，由 platform 仓库管理迁移、过期与删除。
+
+统一 HTTPS 接口 `/v1/client-support/{events,feedback,forget}`，协议 version=1。客户端包不携带后台管理凭证。反馈必须点击确认；只有回执 id 与请求 id 一致才显示成功，未知结果保留同一请求 id 供手动重试。错误正文、手稿、Prompt、模型回复、密钥、完整 URL/磁盘路径、屏幕和内存转储不进入自动协议。
+
+统计首次观测与活跃采用安装随机 UUID，服务器使用私有 HMAC 摘要；按北京时间和独立安装/日期去重。D1/D7 为精确自然日 cohort，未成熟显示 null；离线补传最长 30 天，cohort 在延迟窗口后固化汇总。Debug APK 和 Windows 测试用户目录禁用自动采集；CI 不创建安装标识。GitHub 工作流同时验证 shared feedback/diagnostics 变动。
+
+Windows 只保存固定枚举的进程异常摘要；主进程原生硬崩溃未能捕获时只能以未正常退出提示，不能冒称已获得转储。Android Java handler 保持系统终止行为，Android 11+ 读取本应用 ApplicationExitInfo 元数据，不读取 trace 流。原生数据返回后再通过统一白名单校验。
+
+验证包括：同安装跨升级及日内去重、离线乱序与成熟留存、删明细后的迟到重传、权限/过载/非法字段、普通 Bug 无日志提交、建议不带诊断、失败保留输入与同编号重试、关闭采集、真实打包启动和独立浏览器操作。

@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('storyforgeClient', Object.freeze({
   check: () => ipcRenderer.invoke('client-update:check'),
   download: () => ipcRenderer.invoke('client-update:download'),
   install: () => ipcRenderer.invoke('client-update:install'),
+  diagnostics: () => ipcRenderer.invoke('client-diagnostics:read'),
+  telemetryAllowed: () => ipcRenderer.invoke('client-diagnostics:allowed'),
   subscribe: callback => {
     const listener = (_event, state) => callback(state)
     ipcRenderer.on('client-update:changed', listener)

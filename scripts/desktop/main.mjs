@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { createPortableServer } from '../distribution/server.mjs'
 import { installUpdater } from './updater.mjs'
 import updater from 'electron-updater'
+import { desktopDiagnostics } from './diagnostics.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 // This identity, profile and origin are part of the data contract. Never randomize them.
@@ -16,6 +17,17 @@ let server
 let exitApproved = false
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
+  const diagnostics = desktopDiagnostics(app.getPath('userData'), `v${app.getVersion()}+local`)
+  diagnostics.start()
+  process.on('uncaughtExceptionMonitor', () => diagnostics.record('NativeCrash'))
+  app.on('render-process-gone', (_event, _contents, details) => {
+    if (details.reason === 'crashed') diagnostics.record('NativeCrash')
+    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory')
+  })
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason === 'crashed') diagnostics.record('NativeCrash')
+    if (details.reason === 'oom') diagnostics.record('NativeOutOfMemory')
+  })
   app.on('second-instance', () => { window?.restore(); window?.focus() })
   app.whenReady().then(async () => {
     server = createPortableServer({ webRoot: join(root, '../../dist') })
@@ -25,6 +37,14 @@ else {
       width: 1440, height: 960, minWidth: 800, minHeight: 600, show: false,
       autoHideMenuBar: true, title: 'StoryForge',
       webPreferences: { preload: join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true },
+    })
+    ipcMain.handle('client-diagnostics:read', event => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
+      return diagnostics.read()
+    })
+    ipcMain.handle('client-diagnostics:allowed', event => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Invalid diagnostics caller')
+      return app.isPackaged && !process.env.STORYFORGE_TEST_USER_DATA
     })
     function openExternal(url) {
       try {
@@ -54,5 +74,5 @@ else {
     app.quit()
   })
   app.on('window-all-closed', () => app.quit())
-  app.on('will-quit', () => { server?.close(); server?.closeAllConnections() })
+  app.on('will-quit', () => { diagnostics.cleanExit(); server?.close(); server?.closeAllConnections() })
 }

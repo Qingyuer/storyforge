@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App'
 import ClientUpdatePanel from './components/settings/ClientUpdatePanel'
+import ClientPrivacyPanel from './components/settings/ClientPrivacyPanel'
+import { collectNativeDiagnostics, nativeTelemetryAllowed } from './lib/platform/native-diagnostics'
+import { installClientTelemetry } from './lib/feedback/client-telemetry'
 import { IS_SHOWCASE } from './lib/showcase/policy'
 import ShowcaseShell from './components/showcase/ShowcaseShell'
 import ErrorBoundary from './components/shared/ErrorBoundary'
@@ -14,13 +17,14 @@ import { openCurrentSchema } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
 import { applyStoryForgeTheme, resolveStoryForgeTheme } from './lib/theme-bootstrap'
 import { registerStoryForgeServiceWorker } from './lib/pwa/register-service-worker'
-import { installRuntimeDiagnostics } from './lib/diagnostics/local-diagnostic-report'
+import { installRuntimeDiagnostics, recordRuntimeDiagnosticError } from './lib/diagnostics/runtime-errors'
+import FailureFeedbackPanel from './components/shared/FailureFeedbackPanel'
 import './index.css'
 
 // 从当前主题闭集恢复；未知值回到默认主题。
 applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
 if (!IS_SHOWCASE) registerStoryForgeServiceWorker()
-installRuntimeDiagnostics()
+if (!IS_SHOWCASE) installRuntimeDiagnostics()
 
 /**
  * FB-11 数据持久 · 启动期申请「持久化存储」。
@@ -46,6 +50,13 @@ async function bootstrap() {
   if (import.meta.env.MODE === 'android') {
     const { installAndroidFetch } = await import('./lib/platform/android-fetch')
     await installAndroidFetch()
+  }
+  if (!IS_SHOWCASE) {
+    // Optional diagnostics must not delay database startup or block an offline editor.
+    void nativeTelemetryAllowed().then(allowed => {
+      installClientTelemetry(allowed)
+      return collectNativeDiagnostics()
+    }).catch(() => {})
   }
   // 0. FB-11: 尽早申请持久化存储,降低 IndexedDB 被浏览器驱逐("重置")的概率。
   if (!IS_SHOWCASE) void requestPersistentStorage()
@@ -79,6 +90,7 @@ async function bootstrap() {
             <ToastProvider>
               {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <App />}
               {!IS_SHOWCASE && <ClientUpdatePanel notice />}
+              {!IS_SHOWCASE && <ClientPrivacyPanel notice />}
             </ToastProvider>
           </BrowserRouter>
         </ErrorBoundary>
@@ -88,6 +100,7 @@ async function bootstrap() {
 }
 
 void bootstrap().catch((error: unknown) => {
+  if (!IS_SHOWCASE) recordRuntimeDiagnosticError(error, 'bootstrap')
   console.error('[bootstrap] application startup blocked:', error)
   const message = error instanceof Error ? error.message : String(error)
   const root = document.getElementById('root')
@@ -100,6 +113,7 @@ void bootstrap().catch((error: unknown) => {
           当前版本只支持由当前架构创建的数据，应用已在任何 Store 初始化之前停止。
         </p>
         <pre className="mt-4 overflow-auto rounded bg-bg-elevated p-3 text-xs">{message}</pre>
+        {!IS_SHOWCASE && <FailureFeedbackPanel />}
       </div>
     </main>,
   )
