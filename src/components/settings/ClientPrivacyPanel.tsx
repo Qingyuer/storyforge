@@ -8,7 +8,7 @@ export default function ClientPrivacyPanel({ notice = false }: { notice?: boolea
   useEffect(() => subscribeTelemetryPreferences(() => setPreferences(telemetryPreferences())), [])
   if (!clientTelemetryAvailable() || (notice && preferences.decided)) return null
   const choose = (analytics: boolean, errors: boolean) => {
-    if (!setTelemetryPreferences(analytics, errors)) setMessage('无法保存选择，本次不会启用自动上传。')
+    setMessage(setTelemetryPreferences(analytics, errors) ? '' : '无法保存选择，当前会话已停止自动上传；重启后请检查设置。')
   }
   return <section aria-label="使用统计与错误报告" className={notice ? 'fixed bottom-4 left-4 z-40 max-w-sm rounded-xl border border-border bg-bg-surface p-4 shadow-xl' : 'mt-4 rounded-xl border border-border bg-bg-surface p-4'}>
     <h3 className="text-sm font-semibold">帮助改进 StoryForge</h3>

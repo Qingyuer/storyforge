@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import FailureFeedbackPanel from '../../src/components/shared/FailureFeedbackPanel'
-import { TELEMETRY_KEY, setTelemetryPreferences, recordClientActivity, recordClientError, flushClientTelemetry, deleteClientTelemetry } from '../../src/lib/feedback/client-telemetry'
+import { TELEMETRY_KEY, setTelemetryPreferences, telemetryPreferences, recordClientActivity, recordClientError, flushClientTelemetry, deleteClientTelemetry } from '../../src/lib/feedback/client-telemetry'
 import { APP_BUILD_ID } from '../../src/lib/version'
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root | undefined
@@ -44,6 +44,21 @@ it('backs off after a failed upload, keeps its event id, and forgets only after 
   fetcher.mockResolvedValue(new Response(JSON.stringify({ deleted: true }))); await deleteClientTelemetry()
   expect(JSON.parse(localStorage.getItem(TELEMETRY_KEY)!).id).not.toBe(first.id)
   expect(JSON.parse(localStorage.getItem(TELEMETRY_KEY)!).analytics).toBe(false)
+})
+it('stops this session when saving opt-out fails and does not falsely confirm durable deletion settings', async () => {
+  setTelemetryPreferences(true, true); recordClientActivity()
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ deleted: true })))
+  const storage = localStorage
+  vi.stubGlobal('localStorage', { getItem: storage.getItem.bind(storage), setItem: () => { throw new DOMException('full', 'QuotaExceededError') } })
+  try {
+    expect(setTelemetryPreferences(false, false)).toBe(false)
+    expect(telemetryPreferences()).toMatchObject({ analytics: false, errors: false })
+    recordClientActivity(Date.now() + 86_400_000)
+    recordClientError({ occurredAt: new Date().toISOString(), source: 'react', name: 'Error', build: APP_BUILD_ID, frames: [] })
+    await flushClientTelemetry(); expect(fetcher).not.toHaveBeenCalled()
+    await expect(deleteClientTelemetry()).rejects.toThrow('本机无法保存关闭选择')
+    await flushClientTelemetry(); expect(fetcher).toHaveBeenCalledTimes(1)
+  } finally { vi.unstubAllGlobals(); setTelemetryPreferences(false, false) }
 })
 async function fill(label: string, value: string) {
   const wrapper = [...container!.querySelectorAll('label')].find(node => node.textContent?.startsWith(label))!

@@ -10,6 +10,7 @@ interface Event { id: string; kind: 'active' | 'error'; occurredAt: string; clie
 interface State { id: string; analytics: boolean; errors: boolean; decided: boolean; lastActive: string; nextAttempt: number; queue: Event[] }
 const listeners = new Set<() => void>()
 let available = false
+let storageConsentBlocked = false
 export const clientTelemetryAvailable = () => available
 const notify = () => listeners.forEach(fn => fn())
 export const subscribeTelemetryPreferences = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } }
@@ -40,7 +41,7 @@ function read(): State | null {
   } catch { return null }
 }
 function write(state: State) { try { localStorage.setItem(TELEMETRY_KEY, JSON.stringify(state)); return true } catch { return false } }
-export function telemetryPreferences() { const state = read(); return { analytics: state?.analytics ?? false, errors: state?.errors ?? false, decided: state?.decided ?? false } }
+export function telemetryPreferences() { const state = read(); return { analytics: !storageConsentBlocked && (state?.analytics ?? false), errors: !storageConsentBlocked && (state?.errors ?? false), decided: state?.decided ?? false } }
 let inflight: AbortController | null = null
 export function setTelemetryPreferences(analytics: boolean, errors: boolean): boolean {
   inflight?.abort()
@@ -48,10 +49,13 @@ export function setTelemetryPreferences(analytics: boolean, errors: boolean): bo
   state.analytics = analytics; state.errors = errors; state.decided = true
   state.queue = state.queue.filter(row => row.kind === 'active' ? analytics : errors)
   const saved = write(state)
+  // A failed opt-out must still stop this session; never reread an old opt-in and resume upload.
+  storageConsentBlocked = !saved
   notify()
   return saved
 }
 export function recordClientActivity(now = Date.now()) {
+  if (storageConsentBlocked) return
   const state = read()
   if (!state?.analytics || document.visibilityState !== 'visible' || state.lastActive === day(now)) return
   state.lastActive = day(now)
@@ -59,6 +63,7 @@ export function recordClientActivity(now = Date.now()) {
   write(state)
 }
 export function recordClientError(error: FailureEvent) {
+  if (storageConsentBlocked) return
   const state = read()
   if (!state?.errors) return
   const safe = parseFailureEvent(error)
@@ -71,7 +76,7 @@ export function recordClientError(error: FailureEvent) {
   write(state)
 }
 export async function flushClientTelemetry(): Promise<void> {
-  if (inflight || !navigator.onLine) return
+  if (storageConsentBlocked || inflight || !navigator.onLine) return
   const state = read()
   if (!state || state.nextAttempt > Date.now() || !state.queue.length) return
   const batch = state.queue.filter(row => row.attempts < 5).slice(0, 10)
@@ -112,7 +117,9 @@ export async function deleteClientTelemetry(): Promise<void> {
   const receipt = await response.json().catch(() => null) as { deleted?: unknown } | null
   if (!response.ok || receipt?.deleted !== true) throw new Error('尚未确认删除。上传已关闭，请联网后重试。')
   // Retain the disabled choice while rotating the forgotten identity.
-  write({ ...state, id: crypto.randomUUID(), analytics: false, errors: false, decided: true, queue: [], lastActive: '', nextAttempt: 0 }); notify()
+  const saved = write({ ...state, id: crypto.randomUUID(), analytics: false, errors: false, decided: true, queue: [], lastActive: '', nextAttempt: 0 })
+  storageConsentBlocked = !saved; notify()
+  if (!saved) throw new Error('服务器明细已删除，但本机无法保存关闭选择。当前会话已停止自动上传；重启后请检查设置。')
 }
 let started = false
 export function installClientTelemetry(allowed: boolean) {
