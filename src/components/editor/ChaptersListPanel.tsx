@@ -4,7 +4,7 @@
  * 左侧栏：按卷分组的章节列表（从 outlineNodes 读取）
  * 右侧编辑区：场景细纲 + 正文编辑器
  */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useChapterStore } from '../../stores/chapter'
@@ -16,6 +16,8 @@ import FindReplacePanel from './FindReplacePanel'
 import { buildBestChapterByOutlineMap } from '../../lib/chapters/selectors'
 import { groupOutlineChaptersByTopLevelVolume } from '../../lib/outline/canonical-outline-walk'
 import type { Project, ChapterStatus } from '../../lib/types'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useToast } from '../shared/Toast'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -52,6 +54,21 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(initialNodeId ?? null)
   const [expandedVols, setExpandedVols] = useState<Set<number>>(new Set())
   const [showFindReplace, setShowFindReplace] = useState(false)
+  const selectionRevision = useRef(0)
+  const currentProjectId = useRef(project.id)
+  currentProjectId.current = project.id
+  const toast = useToast()
+  const selectNode = async (nodeId: number) => {
+    const revision = ++selectionRevision.current
+    if (nodeId === selectedNodeId) return
+    const sourceProjectId = project.id
+    try {
+      await flushPendingEditsV1()
+      if (revision === selectionRevision.current && currentProjectId.current === sourceProjectId) setSelectedNodeId(nodeId)
+    } catch (error) {
+      toast.error(`切换前保存失败：${error instanceof Error ? error.message : '修改已保留，请重试。'}`)
+    }
+  }
 
   useEffect(() => {
     loadOutline(project.id!)
@@ -72,7 +89,10 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
 
   // 外部传入的 initialNodeId 变化时同步
   useEffect(() => {
-    if (initialNodeId != null) setSelectedNodeId(initialNodeId)
+    if (initialNodeId != null) {
+      selectionRevision.current += 1
+      setSelectedNodeId(initialNodeId)
+    }
   }, [initialNodeId])
 
   // 按卷分组的章节列表（从 outlineNodes 读取）
@@ -157,7 +177,7 @@ export default function ChaptersListPanel({ project, initialNodeId, onOpenDetail
                     <button
                       key={ch.id}
                       {...initialRecordTargetAttributes(ch.id === initialNodeId, ch.id)}
-                      onClick={() => setSelectedNodeId(ch.id!)}
+                      onClick={() => void selectNode(ch.id!)}
                       className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all ${
                         active
                           ? 'bg-accent/10 border-l-2 border-accent'

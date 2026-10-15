@@ -9,7 +9,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
-import { buildChapterStatusPatchV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
+import { buildChapterStatusPatchV1, createChapterEditorDraftBufferV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentRequestV1, buildContinueRequestV1, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
@@ -140,7 +140,7 @@ import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
-import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   assertWorkspaceContentRevisionFreshV1,
   captureWorkspaceContentRevisionV1,
@@ -299,6 +299,46 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [savedContent, setSavedContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
   const [manualSaveError, setManualSaveError] = useState('')
+  const [hasPendingChapterDrafts, setHasPendingChapterDrafts] = useState(false)
+  const editorChapterIdRef = useRef(currentChapter?.id)
+  const loadedEditorChapterIdRef = useRef<number | null>(null)
+  editorChapterIdRef.current = currentChapter?.id
+  const chapterDraftsRef = useRef<ReturnType<typeof createChapterEditorDraftBufferV1> | null>(null)
+  if (!chapterDraftsRef.current) {
+    const projectId = project.id
+    chapterDraftsRef.current = createChapterEditorDraftBufferV1(async draft => {
+      const before = await db.chapters.get(draft.chapterId)
+      if (!before || before.projectId !== projectId) throw new Error('原章节已不存在或不属于当前作品；修改仍保留在编辑器中。')
+      const wordCount = countWords(draft.plainText)
+      if (shouldPersistChapterEditorContentV1(before, draft.html, wordCount)) {
+        await updateChapter(draft.chapterId, { content: draft.html, wordCount })
+      }
+      const saved = await db.chapters.get(draft.chapterId)
+      if (!saved || saved.content !== draft.html || saved.wordCount !== wordCount) {
+        throw new Error('正文尚未保存成功；修改已保留，请重试保存。')
+      }
+      if (editorChapterIdRef.current === draft.chapterId) setSavedContent(draft.html)
+    })
+  }
+  const chapterDrafts = chapterDraftsRef.current
+  const flushChapterDrafts = useCallback(async () => {
+    try {
+      await chapterDrafts.flush()
+      setHasPendingChapterDrafts(chapterDrafts.hasPending())
+    }
+    catch (error) {
+      setManualSaveError(error instanceof Error ? error.message : '正文保存失败；修改已保留。')
+      throw error
+    }
+  }, [chapterDrafts])
+  useEffect(() => registerPendingDraftFlusherV1(flushChapterDrafts), [flushChapterDrafts])
+  const stageEditorDraft = useCallback((html: string, plain: string) => {
+    if (currentChapter?.id) chapterDrafts.stage({ chapterId: currentChapter.id, html, plainText: plain })
+    setHasPendingChapterDrafts(chapterDrafts.hasPending())
+    setContent(html)
+    setPlainText(plain)
+    setManualSaveError('')
+  }, [chapterDrafts, currentChapter?.id])
   const [editorWorkspaceScope, setEditorWorkspaceScope] = useState<WorkspaceScope | null>(null)
   const [showContext, setShowContext] = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
@@ -634,7 +674,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const wordCount = useMemo(() => countWords(plainText), [plainText])
 
   // 有未保存内容时阻止页面关闭
-  useBeforeUnload(content !== savedContent && plainText.length > 0)
+  useBeforeUnload(hasPendingChapterDrafts || (content !== savedContent && plainText.length > 0))
 
   useEffect(() => { loadChapters(project.id!) }, [project.id, loadChapters])
   useEffect(() => { loadStateCards(project.id!) }, [project.id, loadStateCards])
@@ -826,6 +866,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [outlineNodeId, chapters, selectChapter, nodes, getOrCreateByOutlineNode, project.id])
 
   const persistCurrentEditorContent = useCallback(async (): Promise<{ html: string; plain: string; wordCount: number } | null> => {
+    await flushChapterDrafts()
     if (!currentChapter?.id) return null
     const html = editorRef.current?.getHTML() ?? content
     const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
@@ -837,7 +878,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setPlainText(plain)
     setSavedContent(html)
     return { html, plain, wordCount: wc }
-  }, [content, currentChapter, updateChapter])
+  }, [content, currentChapter, updateChapter, flushChapterDrafts])
 
   const handleManualSave = useCallback(async () => {
     if (manualSaving) return
@@ -856,6 +897,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter?.id) return
     setManualSaveError('')
     try {
+      await flushChapterDrafts()
       const html = editorRef.current?.getHTML() ?? content
       const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
       const wc = countWords(plain)
@@ -866,14 +908,38 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     } catch (error) {
       setManualSaveError(error instanceof Error ? error.message : String(error))
     }
-  }, [content, currentChapter?.id, updateChapter])
+  }, [content, currentChapter?.id, updateChapter, flushChapterDrafts])
 
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
+    const draft = currentChapter?.id == null ? null : chapterDrafts.read(currentChapter.id)
+    if (draft) {
+      setContent(draft.html)
+      setPlainText(draft.plainText)
+      return
+    }
+    if (!currentChapter && chapterDrafts.hasPending()) return
     const raw = currentChapter?.content || ''
-    setContent(raw)
-    setPlainText(htmlToPlainText(raw))
-  }, [currentChapter])
+    if (!currentChapter?.id || loadedEditorChapterIdRef.current !== currentChapter.id) {
+      loadedEditorChapterIdRef.current = currentChapter?.id ?? null
+      setContent(raw)
+      setPlainText(htmlToPlainText(raw))
+      return
+    }
+    // A list refresh may resolve with a row read before our save. Verify later
+    // store notifications against the actual record before replacing the editor.
+    let active = true
+    void db.chapters.get(currentChapter.id).then(latest => {
+      if (!active || !latest || latest.projectId !== project.id) return
+      const pending = chapterDrafts.read(latest.id!)
+      const html = pending?.html ?? latest.content ?? ''
+      setContent(html)
+      setPlainText(pending?.plainText ?? htmlToPlainText(html))
+    }).catch(error => {
+      if (active) setManualSaveError(error instanceof Error ? error.message : '正文读取失败；编辑器内容已保留。')
+    })
+    return () => { active = false }
+  }, [currentChapter, chapterDrafts, project.id])
 
   // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
@@ -898,14 +964,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [project.id, currentChapter])
 
   // 自动保存
-  useAutoSave(content, useCallback(async (html: string) => {
-    if (currentChapter?.id) {
-      const wc = countWords(htmlToPlainText(html))
-      if (!shouldPersistChapterEditorContentV1(currentChapter, html, wc)) return
-      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
-      setSavedContent(html)
-    }
-  }, [currentChapter, updateChapter]))
+  // Debounce only author-staged buffers. A cleanup's older React value must
+  // never overwrite a newer buffer that the navigation barrier already saved.
+  useAutoSave(content, useCallback(async () => {
+    await flushChapterDrafts().catch(() => undefined)
+  }, [flushChapterDrafts]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
   const chapterDisplay = useMemo(() => {
@@ -2810,8 +2873,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
       const newHtml = editorRef.current.getHTML()
-      setContent(newHtml)
-      setPlainText(editorRef.current.getPlainText())
+      stageEditorDraft(newHtml, editorRef.current.getPlainText())
     } else {
       // polish/expand/deai（选区）：替换选区（若无选区则插入在光标处）
       editorRef.current.replaceSelection(html)
@@ -3494,11 +3556,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <RichEditor
           ref={editorRef}
           value={content}
-          onChange={(html, plain) => {
-            setContent(html)
-            setPlainText(plain)
-            setManualSaveError('')
-          }}
+          onChange={stageEditorDraft}
           placeholder="开始写作..."
           minHeight={560}
           className="sf-manuscript-editor border-0 bg-transparent shadow-none"
