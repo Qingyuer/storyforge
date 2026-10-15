@@ -41,5 +41,6 @@ try {
   console.log('Native window, sandbox, boot and stable-profile restart passed. This is not a two-version installer upgrade test.')
 } finally {
   if (app) await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
-  await rm(profile, { recursive: true, force: true })
+  // Chromium's Windows child processes release profile handles shortly after exit.
+  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 }
