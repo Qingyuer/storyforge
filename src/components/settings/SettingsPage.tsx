@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BookOpen } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
+import ClientUpdatePanel from './ClientUpdatePanel'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
 import type { Project } from '../../lib/types'
@@ -40,6 +41,7 @@ export default function SettingsPage({
         aria-label="返回开放世界制作"
         onClick={() => onReturnToTextOpenWorldCreator(textOpenWorldCreatorReturn)}
       >返回开放世界制作</button>}
+      <ClientUpdatePanel />
       <AIConfigPanel />
       <div className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />

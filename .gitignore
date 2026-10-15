@@ -1,5 +1,9 @@
 node_modules
 dist/
+dist-android/
+*.jks
+*.keystore
+android/local.properties
 .DS_Store
 *.local
 *.tsbuildinfo

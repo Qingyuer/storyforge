@@ -2,6 +2,16 @@
 
 推荐从 [最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest) 获取本地便携包。v4.0.0 包含本次发布时的主干功能、界面和内置媒资，不再要求普通用户先安装开发环境。旧 Release 保留为历史版本；固定发行不会自动跟随之后的主干开发。
 
+## 开发中的 Windows / Android 客户端
+
+客户端候选实现提供 Windows 独立窗口安装器和 Android APK，尚未发布新的正式 Release，也尚未完成全部真机验收。现有 v4.0.0 便携 ZIP 不会自动变成这些客户端。
+
+客户端启动后会检查新版本，也可在设置中点“检查更新”。点“下载更新”后从项目 GitHub Release 下载；保存编辑、结束生成任务后再点“安装更新”。Windows 会退出并运行安装器，Android 还需系统确认，首次可能要求允许“安装未知应用”。更新失败时可继续使用已安装的版本。
+
+首次切换客户端，要先在原浏览器导出完整 JSON，再在客户端导入。各设备的数据不会自动同步。覆盖升级时不要卸载旧版或清除应用数据；升级前建议另存完整备份。Android 当前不支持电脑本机 Codex 登录或文件夹备份，模型服务需使用 HTTPS；长时间生成请保持应用前台。手机布局及各专用导出入口仍需逐项验收。
+
+开发构建与签名说明见[客户端工程指南](https://github.com/yuanbw2025/storyforge/blob/feat/windows-android-clients-20261015/docs/guides/CLIENT-DISTRIBUTION.md)。正式可用包以 GitHub Release 实际列出的资产为准。
+
 ## 便携包：无需安装 Node.js
 
 | 电脑 | 选择的 ZIP | 解压后的启动文件 |

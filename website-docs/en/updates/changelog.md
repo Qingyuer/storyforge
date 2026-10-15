@@ -2,6 +2,10 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.0; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## 2026-10-15 · Client candidate implementation (unreleased)
+
+Development builds now cover a standalone Windows window and an Android APK, with in-app update checks, downloads and confirmed installation. Complete JSON backups on Android use the system file-saving dialog; cancellation or a failed save blocks operations that depend on that backup. This increment remains on a development branch, with no official release or real-device upgrade acceptance on either platform yet. Existing v4.0.0 downloads do not include these capabilities. See [Installation and startup](/en/getting-started/install#windows-android-clients-in-development).
+
 ## October 14, 2026 · Knowledge-base scrolling
 
 The header and navigation now share an opaque surface that follows light and dark themes, preventing scrolling document text from showing through navigation labels. Persistent tabs remain visible on desktop and narrow screens.

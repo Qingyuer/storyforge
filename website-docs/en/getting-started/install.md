@@ -2,6 +2,16 @@
 
 Get a local portable package from the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest). Version 4.0.0 includes the main-branch features, interface and bundled media at release time; ordinary users no longer need a development setup. Older releases remain historical snapshots. A fixed release does not automatically receive later main-branch changes.
 
+## Windows / Android clients in development
+
+The client candidate adds a standalone Windows installer and an Android APK. No new official Release has been published, and full device acceptance is still pending. Existing v4.0.0 portable ZIPs do not automatically become these clients.
+
+The clients check for a new version after startup; you can also select “Check for updates” in settings. Confirm “Download update” to download from the project’s GitHub Release. Save your edits and finish generation tasks before selecting “Install update”. Windows exits and runs the installer. Android also requires confirmation in the system installer and may first ask you to allow installation from this app. A failed update leaves the installed version available.
+
+When switching from a browser for the first time, export a complete JSON backup and explicitly import it in the client. Data does not automatically sync between devices. Do not uninstall the old version or clear app data when upgrading; keep a complete backup before upgrading. Android currently does not support a desktop’s local Codex login or folder backups, requires HTTPS model endpoints, and should stay in the foreground during long generation tasks. Mobile layouts and specialized export actions still require individual device acceptance.
+
+See the [client engineering guide](https://github.com/yuanbw2025/storyforge/blob/feat/windows-android-clients-20261015/docs/guides/CLIENT-DISTRIBUTION.md) for builds and signing. Only assets actually listed in a GitHub Release are official downloadable packages.
+
 ## Portable packages: no Node.js installation
 
 | Computer | ZIP to download | Launcher after extraction |
