@@ -30,7 +30,7 @@ Continue: [Upgrade and compatibility](/en/updates/compatibility).
 
 ## Problems and failure reports in downloaded builds
 
-Builds containing this feature provide Home → General settings → Problems and failure reports (问题与故障反馈). Rendering failures and blocked startup also offer feedback without requiring the project database. Fixed v4.0.0 archives do not gain the feature automatically; it is planned for v4.0.1; check the [latest release](https://github.com/yuanbw2025/storyforge/releases/latest) for published archives.
+Builds containing this feature provide Home → General settings → Problems and failure reports (问题与故障反馈). Rendering failures and blocked startup also offer feedback without requiring the project database. Fixed v4.0.0 archives do not gain the feature automatically; the entry applies to v4.0.1 and later portable builds; check the [latest release](https://github.com/yuanbw2025/storyforge/releases/latest) for published archives.
 
 1. Choose Preview failure summary and give feedback (查看故障摘要并反馈), then inspect the local summary. It contains only the application build, operating-system/browser family, recent error types/code locations, and available launcher failure types/timestamps. It excludes error messages, manuscripts, Prompts, API keys, full URLs, disk paths, and database contents.
 2. Choose Open official feedback form with summary (带摘要打开官方反馈表单). A browser fragment carries the summary and is removed after import; the form never submits automatically.
