@@ -5,6 +5,7 @@ import { createPortableServer } from '../distribution/server.mjs'
 import { installUpdater } from './updater.mjs'
 import updater from 'electron-updater'
 import { desktopDiagnostics } from './diagnostics.mjs'
+import { createMacUpdater } from './mac-updater.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 // This identity, profile and origin are part of the data contract. Never randomize them.
@@ -65,7 +66,8 @@ else {
         message: '退出 StoryForge？', detail: '请先确认编辑已保存、生成任务已结束。退出会中断仍在运行的任务。',
       }).then(({ response }) => { if (response === 1) { exitApproved = true; app.quit() } })
     })
-    installUpdater({ app, window, ipcMain, dialog, origin, autoUpdater: updater.autoUpdater, approveExit: () => { exitApproved = true } })
+    const autoUpdater = process.platform === 'darwin' ? createMacUpdater({ app, shell }) : updater.autoUpdater
+    installUpdater({ app, window, ipcMain, dialog, origin, autoUpdater, approveExit: () => { exitApproved = true } })
     window.once('ready-to-show', () => window.show())
     await window.loadURL(origin + '/storyforge/')
   }).catch(() => {

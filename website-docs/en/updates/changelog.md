@@ -2,9 +2,9 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.1; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
-## 2026-10-15 · In-app feedback and reporting candidate (unreleased)
+## Version 4.0.2 · Desktop and Android clients
 
-A client increment adds in-app bug reports, feature suggestions and receipts, plus optional installation activity, D1/D7 retention and sanitized errors. GitHub builds use the same entry points. Backend and client delivery are verified separately; fixed existing downloads remain unchanged. See [privacy and limits](/en/guides/privacy#in-app-feedback-and-usage-reporting-in-development).
+This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus first-launch agreements, optional usage and diagnostic sharing, and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability; existing downloads remain unchanged. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
 
 ## October 15, 2026 · v4.0.1 failure-feedback builds
 

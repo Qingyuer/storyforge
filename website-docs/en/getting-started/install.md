@@ -2,15 +2,24 @@
 
 Get a local portable package from the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest). The latest portable version includes the main-branch features, interface and bundled media at release time; ordinary users no longer need a development setup. Older releases remain historical snapshots. A fixed release does not automatically receive later main-branch changes.
 
-## Windows / Android clients in development
+## Windows / macOS / Android clients {#windows-android-clients-in-development}
 
-The client candidate adds a standalone Windows installer and an Android APK. No new official Release has been published, and full device acceptance is still pending. Existing v4.0.0 portable ZIPs do not automatically become these clients.
+Version 4.0.2 adds desktop installers and an Android APK. Download only the assets listed in the [release](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2); a draft or development build is not a published release. iOS is deferred.
 
-The clients check for a new version after startup; you can also select “Check for updates” in settings. Confirm “Download update” to download from the project’s GitHub Release. Save your edits and finish generation tasks before selecting “Install update”. Windows exits and runs the installer. Android also requires confirmation in the system installer and may first ask you to allow installation from this app. A failed update leaves the installed version available.
+| Device | File | Installation |
+|---|---|---|
+| Windows x64 | `StoryForge-4.0.2-windows-x64-setup.exe` | Run the installer |
+| Apple Silicon Mac | `StoryForge-4.0.2-macos-arm64.dmg` | Drag StoryForge into Applications |
+| Intel Mac | `StoryForge-4.0.2-macos-x64.dmg` | Drag StoryForge into Applications |
+| Android | `StoryForge-4.0.2-android.apk` | Allow installation from the download source and confirm |
 
-When switching from a browser for the first time, export a complete JSON backup and explicitly import it in the client. Data does not automatically sync between devices. Do not uninstall the old version or clear app data when upgrading; keep a complete backup before upgrading. Android currently does not support a desktop’s local Codex login or folder backups, requires HTTPS model endpoints, and should stay in the foreground during long generation tasks. Mobile layouts and specialized export actions still require individual device acceptance.
+The Windows installer has no publisher certificate; macOS uses an ad-hoc signature without Apple notarization. The operating system may ask you to explicitly allow opening. Obtain the package from the official release and verify its checksum first; do not disable system-wide protections.
 
-See the [client engineering guide](https://github.com/yuanbw2025/storyforge/blob/feat/windows-android-clients-20261015/docs/guides/CLIENT-DISTRIBUTION.md) for builds and signing. Only assets actually listed in a GitHub Release are official downloadable packages.
+Read the User Agreement and Privacy Notice at first launch. Optional usage sharing and automatic error reports start off and remain independently controllable in settings. You can submit a problem or suggestion from General settings → Problems and suggestions without enabling either option.
+
+The clients check for updates after startup. Settings also provides Check for updates, Download update, and Install update. Save edits and finish generation first. Windows runs its installer; Android requires system confirmation; macOS opens the downloaded, verified DMG so you can replace the app in Applications. Failed checks or downloads leave the existing app available.
+
+Export a complete JSON backup from your original browser before switching to a client, then import it explicitly. Browsers and clients have separate storage; devices do not automatically sync. Keep a backup and replace the app without uninstalling or clearing its data. Android requires HTTPS model services, cannot use a desktop's local Codex login or folder backups, and should remain in the foreground during long generation. Mobile layouts and specialized exports retain their current limitations.
 
 ## Portable packages: no Node.js installation
 

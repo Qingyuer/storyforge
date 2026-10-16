@@ -1,10 +1,10 @@
 # 更新日志
 
-本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本为 4.0.1，正式 Release 保持其发布时内容，后续 main 变化不会自动进入已下载的压缩包。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
+本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本为 4.0.2，正式 Release 保持其发布时内容，后续 main 变化不会自动进入已下载的压缩包。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
-## 2026-10-15 · 应用内反馈与统计候选（未发布）
+## v4.0.2 · 桌面与 Android 客户端
 
-后续客户端增量提供普通 Bug、功能建议的应用内提交与回执，以及自愿开启的安装活跃、D1/D7 留存和脱敏错误采集；GitHub 自动构建复用相同入口。后台与客户端需分别验证和发布，现有固定下载包保持原样。数据范围与限制见[隐私说明](/guides/privacy#开发中的应用内反馈与使用统计)。
+本次发行准备 Windows、Mac Apple Silicon/Intel 安装包与 Android APK，加入首次启动协议、自愿的日常使用与故障反馈，以及私有的应用内问题与建议。iOS 暂缓。可下载状态以[发行页](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2)公开附件为准，已有下载包保持原样。见[安装说明](/getting-started/install)与[隐私说明](/guides/privacy)。实现依据：[PR #153](https://github.com/yuanbw2025/storyforge/pull/153)。
 
 ## 2026-10-15 · v4.0.1 故障反馈构建
 

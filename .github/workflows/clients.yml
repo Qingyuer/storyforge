@@ -1,4 +1,4 @@
-name: Build Windows and Android Clients
+name: Build Desktop and Android Clients
 on:
   pull_request:
     paths:
@@ -77,6 +77,21 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       - name: Launch packaged app in an isolated profile
         run: node scripts/desktop/smoke.mjs release/windows/win-unpacked/StoryForge.exe
+      - uses: actions/checkout@v7
+        with:
+          ref: 800843b2ce7749e94f6a2961631459153b0e7c04
+          path: previous-client
+      - name: Build the previous Windows client for a real installer upgrade
+        working-directory: previous-client
+        run: |
+          npm ci
+          npm run build:windows
+      - name: Verify Windows installer replacement and production backup restore
+        shell: bash
+        run: |
+          node scripts/desktop/build-upgrade-fixture.mjs
+          version=$(node -p "require('./package.json').version")
+          node scripts/desktop/upgrade-smoke.mjs previous-client/release/windows/StoryForge-4.0.1-windows-x64-setup.exe "release/windows/StoryForge-$version-windows-x64-setup.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: client-windows
@@ -84,6 +99,50 @@ jobs:
             release/windows/*.exe
             release/windows/*.blockmap
             release/windows/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            directory: mac-arm64
+          - os: macos-15-intel
+            arch: x64
+            directory: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:macos -- --${{ matrix.arch }}
+      - name: Launch packaged Mac application
+        run: node scripts/desktop/smoke.mjs release/macos/${{ matrix.directory }}/StoryForge.app/Contents/MacOS/StoryForge
+      - uses: actions/checkout@v7
+        with:
+          ref: 800843b2ce7749e94f6a2961631459153b0e7c04
+          path: previous-client
+      - name: Build a previous-version Mac application with the same storage identity
+        working-directory: previous-client
+        run: |
+          npm ci
+          npm run build:portable
+          node scripts/distribution/notices.mjs
+          npx electron-builder --config electron-builder.config.cjs --mac dir --${{ matrix.arch }} --publish never --config.mac.identity=- --config.mac.notarize=false
+      - name: Verify DMG replacement and production backup restore
+        run: |
+          node scripts/desktop/build-upgrade-fixture.mjs
+          version=$(node -p "require('./package.json').version")
+          node scripts/desktop/upgrade-smoke.mjs previous-client/release/windows/${{ matrix.directory }}/StoryForge.app "release/macos/StoryForge-$version-macos-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-macos-${{ matrix.arch }}
+          path: release/macos/*.dmg
           if-no-files-found: error
           retention-days: 14
   android:
@@ -113,8 +172,19 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          test -n "$ANDROID_KEYSTORE_BASE64"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            version=$(node -p "require('./package.json').version")
+            mkdir -p release/android
+            gh release download "v$version" --pattern "StoryForge-$version-android.apk" --dir release/android
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "release/android/StoryForge-$version-android.apk" > "$RUNNER_TEMP/apk-certificate.txt"
+            grep -q '4bc440d0734135945d9cc143bb45723fa750e1a6d03bfb9753c165e9c3c056f0' "$RUNNER_TEMP/apk-certificate.txt"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "release/android/StoryForge-$version-android.apk" | head -1 > "$RUNNER_TEMP/apk-version.txt"
+            grep -q "name='com.storyforge.client'" "$RUNNER_TEMP/apk-version.txt"
+            grep -q "versionName='$version'" "$RUNNER_TEMP/apk-version.txt"
+            exit 0
+          fi
           export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/storyforge-release.jks"
           trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"

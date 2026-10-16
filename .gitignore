@@ -4,6 +4,7 @@ dist-android/
 *.jks
 *.keystore
 android/local.properties
+android/app/src/androidTest/assets/native-upgrade.js
 .DS_Store
 *.local
 *.tsbuildinfo

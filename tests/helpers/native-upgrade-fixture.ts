@@ -1,0 +1,51 @@
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { db } from '../../src/lib/db/schema'
+
+// Injected by native tests only. Never included in the application bundle.
+const key = 'storyforge-native-upgrade-fixture'
+const title = '原生覆盖更新验收作品'
+const text = '海风穿过旧城。作者保存的这段正文必须在覆盖更新、重启和完整备份恢复后保持不变。'
+const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII='
+function requireValue(value: unknown, message: string): asserts value { if (!value) throw new Error(message) }
+async function seed() {
+  requireValue(!localStorage.getItem(key), 'Test profile must be fresh')
+  const created = await createWorkspace({ name: title, genres: ['other'], description: '', status: 'drafting', targetWordCount: 100000, coverImage: image }, { kind: 'novel', novelProfile: 'long', importedNovelText: text })
+  const backup = await exportProjectJSON(created.scope.projectId)
+  requireValue(JSON.stringify(backup).includes(text), 'Production export omitted manuscript')
+  requireValue(JSON.stringify(backup).includes(image), 'Production export omitted cover')
+  const root = await navigator.storage.getDirectory()
+  const file = await root.getFileHandle('native-upgrade-storage-probe.txt', { create: true })
+  const writer = await file.createWritable()
+  await writer.write(text); await writer.close()
+  localStorage.setItem(key, JSON.stringify({ projectId: created.scope.projectId, backup }))
+  return { projectId: created.scope.projectId, title, text, backup }
+}
+async function verify(restore = false) {
+  const stored = JSON.parse(localStorage.getItem(key) ?? 'null')
+  requireValue(stored, 'Upgrade lost local preferences')
+  const before = structuredClone(stored.backup)
+  const after = await exportProjectJSON(stored.projectId)
+  before.exportedAt = 0; after.exportedAt = 0
+  requireValue(JSON.stringify(before) === JSON.stringify(after), 'Upgrade changed exported work data')
+  const root = await navigator.storage.getDirectory()
+  const file = await (await root.getFileHandle('native-upgrade-storage-probe.txt')).getFile()
+  requireValue(await file.text() === text, 'Upgrade lost origin-private file storage')
+  if (restore) {
+    const count = await db.projects.count()
+    let rejected = false
+    try { await importProjectJSON({ ...stored.backup, version: -1 }) } catch { rejected = true }
+    requireValue(rejected && await db.projects.count() === count, 'Invalid backup created partial data')
+    const restoredId = await importProjectJSON(stored.backup)
+    requireValue(restoredId !== stored.projectId, 'Restore overwrote original work')
+    const recovered = JSON.stringify(await exportProjectJSON(restoredId))
+    requireValue(recovered.includes(text) && recovered.includes(image), 'Restore lost manuscript or cover')
+    stored.restoredId = restoredId
+    localStorage.setItem(key, JSON.stringify(stored))
+  } else if (stored.restoredId) {
+    const recovered = JSON.stringify(await exportProjectJSON(stored.restoredId))
+    requireValue(recovered.includes(text) && recovered.includes(image), 'Restored work did not survive restart')
+  }
+  return { projectId: stored.projectId, restoredId: stored.restoredId, title, text }
+}
+Object.assign(globalThis, { __nativeUpgrade: { seed, verify } })

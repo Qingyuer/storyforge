@@ -9,6 +9,7 @@ def releaseCode = versionParts[0] * 1000000 + versionParts[1] * 1000 + versionPa
 def signingPath = System.getenv('ANDROID_KEYSTORE_PATH')
 
 android {
+    testBuildType project.findProperty('clientTestBuildType') ?: 'debug'
     buildFeatures { buildConfig true }
     signingConfigs {
         release {

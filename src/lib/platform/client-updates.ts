@@ -1,5 +1,5 @@
 export interface ClientUpdateState {
-  platform: 'windows' | 'android'
+  platform: 'windows' | 'macos' | 'android'
   currentVersion: string
   status: 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'downloaded' | 'error'
   version?: string

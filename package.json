@@ -74,7 +74,8 @@
     "desktop:dev": "npm run build:portable && electron scripts/desktop/main.mjs",
     "build:android:web": "tsc -b && npm run build:adventure-player && vite build --mode android && node scripts/distribution/prepare-android.mjs && cap sync android",
     "build:android": "npm run build:android:web && node scripts/distribution/build-android.mjs",
-    "test:clients": "node --test scripts/desktop/*.test.mjs scripts/distribution/*.test.mjs && vitest run tests/regression/R-CLIENT-native-transport.test.ts tests/regression/R-CLIENT-updates.test.tsx tests/regression/R-CLIENT-save-file.test.ts tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx tests/regression/R-CLIENT-LEGAL1-consent.test.tsx"
+    "test:clients": "node --test scripts/desktop/*.test.mjs scripts/distribution/*.test.mjs && vitest run tests/regression/R-CLIENT-native-transport.test.ts tests/regression/R-CLIENT-updates.test.tsx tests/regression/R-CLIENT-save-file.test.ts tests/regression/R-CLIENT-SUPPORT1-feedback-telemetry.test.tsx tests/regression/R-CLIENT-LEGAL1-consent.test.tsx",
+    "build:macos": "npm run build:portable && node scripts/distribution/notices.mjs && electron-builder --config electron-builder.config.cjs --mac --publish never --config.directories.output=release/macos"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
