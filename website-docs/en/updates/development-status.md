@@ -1,5 +1,11 @@
 # Pending development and branch audit
 
+## October 16, 2026: client startup agreement (unreleased)
+
+The 4.0.2 candidate clients in [PR #153](https://github.com/yuanbw2025/storyforge/pull/153) bundle offline-readable Terms of Use and a Privacy Notice. On first launch, users read and accept the agreement; sharing everyday usage information and sending automatic fault reports are separate, optional choices, both off by default. Basic creation remains available without participating. General Settings provides the documents, preference controls, and a request to delete associated records. Manual problems and suggestions still require review and explicit submission.
+
+This is pending client development; existing v4.0.1 downloads have not changed.
+
 ## October 14, 2026 review
 
 Incremental range: last successful baseline `ce1cfd6c` → latest remote main `cfc5ed3f`. This review enumerated **51 local branches (including this maintenance branch) and 68 associated worktrees**, including detached ones. Twenty-three branch heads are not main ancestors. These are Git identities, not 23 missing features. Author worktrees were inspected read-only; the following is a point-in-time snapshot and later commits or PR states may change.

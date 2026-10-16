@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App'
 import ClientUpdatePanel from './components/settings/ClientUpdatePanel'
-import ClientPrivacyPanel from './components/settings/ClientPrivacyPanel'
+import ClientAgreement from './components/settings/ClientAgreement'
 import { collectNativeDiagnostics, nativeTelemetryAllowed } from './lib/platform/native-diagnostics'
 import { installClientTelemetry } from './lib/feedback/client-telemetry'
 import { IS_SHOWCASE } from './lib/showcase/policy'
@@ -88,9 +88,7 @@ async function bootstrap() {
         <ErrorBoundary>
           <BrowserRouter basename="/storyforge/">
             <ToastProvider>
-              {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <App />}
-              {!IS_SHOWCASE && <ClientUpdatePanel notice />}
-              {!IS_SHOWCASE && <ClientPrivacyPanel notice />}
+              {IS_SHOWCASE ? <ShowcaseShell><App /></ShowcaseShell> : <ClientAgreement><App /><ClientUpdatePanel notice /></ClientAgreement>}
             </ToastProvider>
           </BrowserRouter>
         </ErrorBoundary>

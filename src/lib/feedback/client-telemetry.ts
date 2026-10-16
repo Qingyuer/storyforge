@@ -1,3 +1,4 @@
+import { CLIENT_AGREEMENT_KEY, clientAgreementRequired, clientAgreementAccepted } from './client-legal'
 import { parseFailureEvent, type FailureEvent } from '../diagnostics/failure-summary'
 import { subscribeRuntimeDiagnostics } from '../diagnostics/runtime-errors'
 import { CLIENT_SUPPORT_URL, clientMetadata, type ClientMetadata } from './client-support'
@@ -55,7 +56,7 @@ export function setTelemetryPreferences(analytics: boolean, errors: boolean): bo
   return saved
 }
 export function recordClientActivity(now = Date.now()) {
-  if (storageConsentBlocked) return
+  if (storageConsentBlocked || (clientAgreementRequired() && !clientAgreementAccepted())) return
   const state = read()
   if (!state?.analytics || document.visibilityState !== 'visible' || state.lastActive === day(now)) return
   state.lastActive = day(now)
@@ -63,7 +64,7 @@ export function recordClientActivity(now = Date.now()) {
   write(state)
 }
 export function recordClientError(error: FailureEvent) {
-  if (storageConsentBlocked) return
+  if (storageConsentBlocked || (clientAgreementRequired() && !clientAgreementAccepted())) return
   const state = read()
   if (!state?.errors) return
   const safe = parseFailureEvent(error)
@@ -76,7 +77,7 @@ export function recordClientError(error: FailureEvent) {
   write(state)
 }
 export async function flushClientTelemetry(): Promise<void> {
-  if (storageConsentBlocked || inflight || !navigator.onLine) return
+  if ((clientAgreementRequired() && !clientAgreementAccepted()) || storageConsentBlocked || inflight || !navigator.onLine) return
   const state = read()
   if (!state || state.nextAttempt > Date.now() || !state.queue.length) return
   const batch = state.queue.filter(row => row.attempts < 5).slice(0, 10)
@@ -131,7 +132,7 @@ export function installClientTelemetry(allowed: boolean) {
   subscribeTelemetryPreferences(tick)
   window.addEventListener('online', tick)
   document.addEventListener('visibilitychange', tick)
-  window.addEventListener('storage', event => { if (event.key === TELEMETRY_KEY || event.key === null) { inflight?.abort(); notify() } })
+  window.addEventListener('storage', event => { if (event.key === TELEMETRY_KEY || event.key === CLIENT_AGREEMENT_KEY || event.key === null) { inflight?.abort(); notify() } })
   setInterval(tick, 60_000)
   tick()
 }
