@@ -391,6 +391,18 @@ describe('TOW-G5-03 · production readiness UI', () => {
     expect(JSON.stringify(onConfirmed.mock.calls[0]?.[0])).not.toContain(SECRET_KEY)
     expect(host.textContent).toContain('Build 仍为 0')
     await expect(productionCounts()).resolves.toEqual(before)
+    await act(async () => {
+      const selector = host.querySelector<HTMLSelectElement>('select[aria-label="生产预算档位"]')!
+      selector.value = 'bounded-repair-v1'
+      selector.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await waitFor(() => expect(host.textContent).toContain('374 / 400'))
+    expect(host.textContent).toContain('6,000,000')
+    expect(host.textContent).toContain('1,800,000')
+    expect(checkbox(host, '我已核对价格来源').checked).toBe(false)
+    expect(button(host, '确认当前模型与预算').disabled).toBe(true)
+    expect(onConfirmed).toHaveBeenCalledTimes(1)
+    await expect(productionCounts()).resolves.toEqual(before)
   })
 
   it('未知 provider/model 默认要求手工报价并以 blocker 关闭确认', async () => {

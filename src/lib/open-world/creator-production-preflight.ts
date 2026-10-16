@@ -7,6 +7,7 @@ import type {
   TextOpenWorldCreatorProductionPreflightConfirmationV1,
   TextOpenWorldCreatorProductionPreflightV1,
   TextOpenWorldCreatorProviderBindingV1,
+  TextOpenWorldProductionBudgetProfileV1,
 } from '../types'
 import { PROVIDER_PRESETS } from '../types'
 import { hashCanonicalValue } from '../agent/run/hash'
@@ -21,8 +22,11 @@ import {
   hashConfiguredTextEndpointRouteV1,
   TEXT_OPEN_WORLD_PRODUCTION_TEXT_CATEGORY_V1,
 } from '../product-production/capabilities'
-import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
-import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
+import { textOpenWorldProductionRecommendedCallsV1 } from './production-contract'
+import {
+  textOpenWorldProductionEstimateProfileV1,
+  textOpenWorldProductionResourceProfileV1,
+} from './production-budget'
 import { verifyTextOpenWorldCreatorBriefV1 } from './creator-brief-persistence'
 import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
 
@@ -457,12 +461,17 @@ async function parseEstimate(value: unknown): Promise<TextOpenWorldCreatorProduc
     'schema', 'version', 'recommendedModelCalls', 'maximumModelCalls', 'reservedInputTokens',
     'reservedOutputTokens', 'estimatedTextCostUsd', 'maximumCostUsd', 'maximumDurationMs',
     'maximumStorageBytes', 'mediaCostPolicy', 'estimateHash',
+    ...(row.version === 2 ? ['resourceProfile'] : []),
   ], 'estimate')
-  if (row.schema !== 'storyforge.text-open-world-creator-production-estimate' || row.version !== 1
+  if (row.schema !== 'storyforge.text-open-world-creator-production-estimate'
+    || (row.version !== 1 && row.version !== 2)
+    || (row.version === 2 && row.resourceProfile !== 'bounded-repair-v1')
     || row.mediaCostPolicy !== 'deferred-until-media-plan') preflightFail('estimate schema/version/policy 无效')
   const body = {
     schema: 'storyforge.text-open-world-creator-production-estimate' as const,
-    version: 1 as const,
+    ...(row.version === 2
+      ? { version: 2 as const, resourceProfile: 'bounded-repair-v1' as const }
+      : { version: 1 as const }),
     recommendedModelCalls: runtimeInteger(row.recommendedModelCalls, 'estimate.recommendedModelCalls'),
     maximumModelCalls: runtimeInteger(row.maximumModelCalls, 'estimate.maximumModelCalls'),
     reservedInputTokens: runtimeInteger(row.reservedInputTokens, 'estimate.reservedInputTokens'),
@@ -592,6 +601,7 @@ async function currentProviderBinding(input: TextOpenWorldCreatorPreflightRuntim
  * a boolean and are never copied into the return value or any hash input.
  */
 export async function createTextOpenWorldCreatorProductionPreflightV1(input: {
+  resourceProfile?: TextOpenWorldProductionBudgetProfileV1
   brief: TextOpenWorldCreatorBriefV1
   projectId: number
   aiConfig: AIConfig
@@ -613,21 +623,24 @@ export async function createTextOpenWorldCreatorProductionPreflightV1(input: {
     credentialValue: current.credentialValue,
     pricing: input.pricing, blockers,
   })
-  const budget = DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1.aiBudget.production
+  const resourceProfile = input.resourceProfile ?? 'standard-v1'
+  const budget = textOpenWorldProductionResourceProfileV1(resourceProfile)
   const estimatedTextCostUsd = priceQuote == null ? null
     : budget.maximumInputTokens / 1_000_000 * priceQuote.inputUsdPerMillionTokens
       + budget.maximumOutputTokens / 1_000_000 * priceQuote.outputUsdPerMillionTokens
   const estimateBody = {
     schema: 'storyforge.text-open-world-creator-production-estimate' as const,
-    version: 1 as const,
-    recommendedModelCalls: TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.recommended,
+    ...(resourceProfile === 'bounded-repair-v1'
+      ? { version: 2 as const, resourceProfile }
+      : { version: 1 as const }),
+    recommendedModelCalls: textOpenWorldProductionRecommendedCallsV1(resourceProfile),
     maximumModelCalls: budget.maximumCalls,
     reservedInputTokens: budget.maximumInputTokens,
     reservedOutputTokens: budget.maximumOutputTokens,
     estimatedTextCostUsd,
     maximumCostUsd: budget.maximumEstimatedCostUsd,
-    maximumDurationMs: TEXT_OPEN_WORLD_CREATOR_PRODUCTION_RESOURCE_LIMITS_V1.maximumDurationMs,
-    maximumStorageBytes: TEXT_OPEN_WORLD_CREATOR_PRODUCTION_RESOURCE_LIMITS_V1.maximumStorageBytes,
+    maximumDurationMs: budget.maximumDurationMs,
+    maximumStorageBytes: budget.maximumStorageBytes,
     mediaCostPolicy: 'deferred-until-media-plan' as const,
   }
   const estimate = { ...estimateBody, estimateHash: await hashCanonicalValue(estimateBody) }
@@ -713,14 +726,15 @@ export async function verifyTextOpenWorldCreatorProductionPreflightV1(
   if (await hashCanonicalValue(body) !== preflightHash) {
     preflightFail('生产前检查快照 Hash 不匹配')
   }
-  const budget = DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1.aiBudget.production
-  if (estimate.recommendedModelCalls !== TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.recommended
+  const resourceProfile = textOpenWorldProductionEstimateProfileV1(estimate)
+  const budget = textOpenWorldProductionResourceProfileV1(resourceProfile)
+  if (estimate.recommendedModelCalls !== textOpenWorldProductionRecommendedCallsV1(resourceProfile)
     || estimate.maximumModelCalls !== budget.maximumCalls
     || estimate.reservedInputTokens !== budget.maximumInputTokens
     || estimate.reservedOutputTokens !== budget.maximumOutputTokens
     || estimate.maximumCostUsd !== budget.maximumEstimatedCostUsd
-    || estimate.maximumDurationMs !== TEXT_OPEN_WORLD_CREATOR_PRODUCTION_RESOURCE_LIMITS_V1.maximumDurationMs
-    || estimate.maximumStorageBytes !== TEXT_OPEN_WORLD_CREATOR_PRODUCTION_RESOURCE_LIMITS_V1.maximumStorageBytes) {
+    || estimate.maximumDurationMs !== budget.maximumDurationMs
+    || estimate.maximumStorageBytes !== budget.maximumStorageBytes) {
     preflightFail('生产预算不符合当前产品硬保护')
   }
   if (priceQuote) {

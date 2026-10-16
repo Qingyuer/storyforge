@@ -40,7 +40,8 @@ export default function TextOpenWorldExperienceFeedback(props: { scope: Workspac
     try {
       const value = await createTextOpenWorldExperienceFeedbackV1({ summary, category, note, sourceTextExcluded: true })
       if (request.current.generation !== id) return
-      downloadTextFile(JSON.stringify(value, null, 2), `open-world-feedback-${value.feedbackHash.slice(0, 12)}.json`)
+      await downloadTextFile(JSON.stringify(value, null, 2), `open-world-feedback-${value.feedbackHash.slice(0, 12)}.json`)
+      if (request.current.generation !== id) return
       setNotice('已导出到本机文件。尚未发送给作者，也未生成试玩验收回执。')
     } catch (cause) { if (request.current.generation === id) setError(cause instanceof Error ? cause.message : '导出失败') }
     finally { if (request.current.generation === id) setBusy(false) }

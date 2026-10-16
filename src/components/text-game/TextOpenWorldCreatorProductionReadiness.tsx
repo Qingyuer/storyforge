@@ -15,6 +15,7 @@ import {
 import type {
   TextOpenWorldCreatorProductionPreflightConfirmationV1,
   TextOpenWorldCreatorProductionPreflightV1,
+  TextOpenWorldProductionBudgetProfileV1,
 } from '../../lib/types'
 import type { TextOpenWorldCreatorBriefSessionV1 } from '../../lib/open-world/creator-brief'
 import {
@@ -83,6 +84,7 @@ export function TextOpenWorldCreatorProductionReadiness(
     sourceLabel: '',
     asOf: new Date().toISOString().slice(0, 10),
   })
+  const [resourceProfile, setResourceProfile] = useState<TextOpenWorldProductionBudgetProfileV1>('standard-v1')
   const [preflight, setPreflight] = useState<Awaited<ReturnType<
     typeof createTextOpenWorldCreatorProductionPreflightV1
   >> | null>(null)
@@ -117,14 +119,14 @@ export function TextOpenWorldCreatorProductionReadiness(
     setError('')
     if (!brief) return
     void createTextOpenWorldCreatorProductionPreflightV1({
-      brief, projectId: props.session.scope.projectId, aiConfig, rememberApiKey, pricing,
+      brief, projectId: props.session.scope.projectId, aiConfig, rememberApiKey, pricing, resourceProfile,
     }).then(result => {
       if (generation.current === current) setPreflight(result)
     }).catch(() => {
       if (generation.current === current) setError('无法完成生产前检查；没有创建 Build 或发出模型请求。')
     })
     return () => { generation.current += 1 }
-  }, [aiConfig, brief, presets, pricing, props.session.scope.projectId, rememberApiKey, taskRoutes])
+  }, [aiConfig, brief, presets, pricing, props.session.scope.projectId, rememberApiKey, resourceProfile, taskRoutes])
 
   const confirmedCandidate = brief && props.session.candidate?.candidateHash === brief.candidateEvidence.candidateHash
     ? props.session.candidate : null
@@ -281,6 +283,15 @@ export function TextOpenWorldCreatorProductionReadiness(
       <section className="rounded-xl border border-border bg-bg-elevated p-5" aria-labelledby="tow-budget-heading">
         <h2 id="tow-budget-heading" className="flex items-center gap-2 text-base font-semibold"><ShieldCheck className="h-4 w-4 text-accent" />3. 单 Build 生产保护</h2>
         <p className="mt-1 text-xs leading-5 text-text-muted">下列 token 数是完整 DAG 的授权保留上界，不是承诺一定消耗；费用是按冻结单价计算的文本模型上界，不是供应商实际账单。</p>
+        <label className="mt-3 block text-xs">生产预算档位
+          <select aria-label="生产预算档位" value={resourceProfile}
+            onChange={event => setResourceProfile(event.target.value as TextOpenWorldProductionBudgetProfileV1)}
+            className="mt-1 block w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm">
+            <option value="standard-v1">标准预算</option>
+            <option value="bounded-repair-v1">预留有界修复预算</option>
+          </select>
+        </label>
+        <p className="mt-2 text-xs leading-5 text-text-muted">修复档位为每项模型任务的两次尝试预留调用与 token，并保留次数、费用和时长上限。切换后须重新确认；只用于新 Build，已有用量与旧 Build 预算不变。</p>
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="text-open-world-preflight-budget">
           <div className="rounded-lg border border-border bg-bg-base p-3"><dt className="text-[10px] text-text-muted">模型调用</dt><dd className="mt-1 text-sm font-semibold">{preflight.estimate.recommendedModelCalls} / {preflight.estimate.maximumModelCalls}</dd><small className="text-[10px] text-text-muted">计划授权 / 硬上限</small></div>
           <div className="rounded-lg border border-border bg-bg-base p-3"><dt className="text-[10px] text-text-muted">输入 token 上界</dt><dd className="mt-1 text-sm font-semibold">{formatTokens(preflight.estimate.reservedInputTokens)}</dd></div>

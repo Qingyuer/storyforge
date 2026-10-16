@@ -1,7 +1,8 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { AICompletionResponseErrorV1 } from '../../src/lib/ai/completion-response'
 import { ConfiguredProductionTextCallErrorV1 } from '../../src/lib/product-production/capabilities'
+import * as productionCapabilities from '../../src/lib/product-production/capabilities'
 import { AIError } from '../../src/lib/types'
 import {
   createTextOpenWorldSourceCurationExecutorV1,
@@ -196,6 +197,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     ['unread', /未读单元或非逐字证据/],
     ['offsets', /字段不精确/],
     ['fractional-confidence', /不是 0-100 整数/],
+    ['combined-coverage', /coverageTags\[0\] 枚举无效/],
+    ['spliced-quote', /未读单元或非逐字证据/],
     ['provider-empty', /没有可用的回答文本/],
     ['provider-transient', /暂时不可用/],
   ] as const)('V2逐字引文由系统定位，保留Unicode并拒绝无效证据：%s', async (mode, error) => {
@@ -219,14 +222,16 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
         const selected = units.find(unit => unit.content.includes(exactQuote))!
         selectedContent = selected.content
         const quote = mode === 'missing' ? '未提供的来源证据'
-          : mode === 'ambiguous' ? '共同维护潮门' : exactQuote
+          : mode === 'ambiguous' ? '共同维护潮门'
+            : mode === 'spliced-quote' ? '共同维护...潮门' : exactQuote
         return {
           output: JSON.stringify({
             schema: 'storyforge.text-open-world-source-curation-draft', version: 2,
             unitKeys: units.map(unit => unit.unitKey),
             claims: [{
               claimKind: 'theme', canonicalName: '共同维护', statement: '共同维护潮门是来源主题。',
-              entityKeys: [], coverageTags: ['story-core'], confidence: mode === 'fractional-confidence' ? 0.95 : 95,
+              entityKeys: [], coverageTags: mode === 'combined-coverage' ? ['story-core/core-conflict'] : ['story-core'],
+              confidence: mode === 'fractional-confidence' ? 0.95 : 95,
               evidence: [{
                 unitKey: mode === 'unread' ? 'source.unread' : selected.unitKey, quote,
                 ...(mode === 'offsets' ? { start: 0, end: quote.length } : {}),
@@ -262,6 +267,58 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
       expect(selectedContent.slice(anchor.start, anchor.end)).toBe(exactQuote)
       expect(anchor.end - anchor.start).toBe(exactQuote.length)
       expect(result.usage.modelCalls).toBe(1)
+    }
+  }, 30_000)
+
+  it.each(['modelCalls', 'inputTokens', 'outputTokens'] as const)(
+    'P1 剩余 %s 不足时明确记录零新增调用，不以未知用量占满预留', async exhaustedBudget => {
+      const fixture = await seedNovelFixture()
+      const task = p1Task()
+      const runModel = vi.fn(groundedRunner())
+      const executor = createTextOpenWorldSourceCurationExecutorV1({ runModel, now: () => fixture.now + 1 })
+      await expect(executor({
+        scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
+        buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
+        planHash: fixture.planHash, task, attempt: 2,
+        attemptBudgetReservation: { ...task.budgetReservation, [exhaustedBudget]: 0 },
+        idempotencyKey: HASH, contextText: '', inputArtifacts: [],
+        capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
+        signal: new AbortController().signal,
+      })).rejects.toMatchObject({
+        name: 'ProductProductionDraftRejectedErrorV1',
+        usage: { modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, durationMs: 0, storageBytes: 0 },
+      })
+      expect(runModel).not.toHaveBeenCalled()
+    }, 30_000,
+  )
+
+  it('P1 默认执行器把非思考 JSON 提取及冻结批次预算传入正式能力边界', async () => {
+    const fixture = await seedNovelFixture()
+    const controller = new AbortController()
+    const capability = vi.spyOn(productionCapabilities, 'runConfiguredProductionTextWithOutcomeV1')
+      .mockRejectedValue(new Error('adapter-probe'))
+    try {
+      const executor = createTextOpenWorldSourceCurationExecutorV1({ now: () => fixture.now + 1 })
+      await expect(executor({
+        scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
+        buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
+        planHash: fixture.planHash, task: p1Task(), attempt: 1,
+        idempotencyKey: HASH, contextText: '', inputArtifacts: [],
+        capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
+        signal: controller.signal,
+      })).rejects.toThrow('adapter-probe')
+      expect(capability).toHaveBeenCalledTimes(1)
+      expect(capability.mock.calls[0]![0]).toMatchObject({
+        category: 'text-open-world.production.source-curation',
+        expectedCapabilityHash: CAPABILITY_HASH,
+        responseFormat: 'json_object', thinkingMode: 'disabled', signal: controller.signal,
+      })
+      const budget = capability.mock.calls[0]![0].maximumOutputTokens
+      expect(Number.isInteger(budget)).toBe(true)
+      expect(budget).toBeGreaterThan(0)
+      expect(budget).toBeLessThanOrEqual(p1Task().budgetReservation.outputTokens)
+    } finally {
+      capability.mockRestore()
     }
   }, 30_000)
 

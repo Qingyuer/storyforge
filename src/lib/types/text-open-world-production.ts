@@ -491,9 +491,10 @@ export interface TextOpenWorldCreatorPriceQuoteV1 {
   quoteHash: string
 }
 
-export interface TextOpenWorldCreatorProductionEstimateV1 {
+export type TextOpenWorldProductionBudgetProfileV1 = 'standard-v1' | 'bounded-repair-v1'
+
+interface TextOpenWorldCreatorProductionEstimateBaseV1 {
   schema: 'storyforge.text-open-world-creator-production-estimate'
-  version: 1
   recommendedModelCalls: number
   maximumModelCalls: number
   reservedInputTokens: number
@@ -505,6 +506,13 @@ export interface TextOpenWorldCreatorProductionEstimateV1 {
   mediaCostPolicy: 'deferred-until-media-plan'
   estimateHash: string
 }
+
+/** V1 stays byte-for-byte readable; V2 explicitly authorizes the larger,
+ * finite reservation before any Build or provider request exists. */
+export type TextOpenWorldCreatorProductionEstimateV1 = TextOpenWorldCreatorProductionEstimateBaseV1 & (
+  | { version: 1 }
+  | { version: 2; resourceProfile: 'bounded-repair-v1' }
+)
 
 /**
  * Ephemeral G5-03 readiness snapshot. It creates no Build, SourcePlan or DB

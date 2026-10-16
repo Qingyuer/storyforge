@@ -16,6 +16,7 @@ import {
   readTextOpenWorldCreatorExecutionBriefV1,
 } from '../../src/lib/open-world/creator-production-start'
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
+import { readTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
 import {
   inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
@@ -484,7 +485,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(rebound.start.startHash).toBe(prepared.preview.start.startHash)
   }, 30_000)
 
-  it('Agnes 账户免计费报价通过正式启动并随完整备份恢复，不改变来源与计划证据', async () => {
+  it.each(['standard-v1', 'bounded-repair-v1'] as const)('Agnes %s 免计费报价与预算通过正式启动并随完整备份恢复', async resourceProfile => {
     const prepared = await prepareStart(await worldSelection(`G5-04 Agnes ${crypto.randomUUID()}`), 'agnes-free')
     const aiConfig: AIConfig = {
       ...AI_CONFIG, provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1',
@@ -492,7 +493,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     useAIConfigStore.setState({ config: aiConfig })
     const runtime = { brief: prepared.confirmed.confirmedBrief!, projectId: prepared.input.scope.projectId, aiConfig, rememberApiKey: false }
     const preflight = await createTextOpenWorldCreatorProductionPreflightV1({
-      ...runtime, pricing: { mode: 'manual', manual: {
+      ...runtime, resourceProfile, pricing: { mode: 'manual', manual: {
         inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0,
         sourceLabel: '作者确认当前 Agnes 账户本次文本调用免计费', asOf: '2026-10-16', accountZeroCostConfirmed: true,
       } },
@@ -512,9 +513,12 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     const build = await db.productBuilds.where('projectId').equals(projectId).first()
     const rebound = await readTextOpenWorldCreatorExecutionBriefV1({ briefRow: briefRow!, planJson: build!.planJson })
     expect(rebound.start.preflight.priceQuote).toEqual(preflight.priceQuote)
-    expect(rebound.start.preflight.estimate.maximumModelCalls).toBe(200)
+    expect(rebound.start.preflight.estimate).toEqual(preflight.estimate)
     expect(rebound.sourcePlan.planHash).toBe(preview.sourcePlan.planHash)
     expect(rebound.start.startHash).toBe(preview.start.startHash)
+    const scope = (await resolveWorkspaceOwnership(projectId)).scope
+    await expect(readTextOpenWorldProductionPlanAuthorityV1({ scope, productionId: build!.productionId, buildId: build!.id! }))
+      .resolves.toMatchObject({ authority: { valid: true, origin: 'creator-start-v1' } })
   })
 
   it('source/config/plan 任一 CAS 漂移都在命令 claim 前失败且生产链零写入', async () => {

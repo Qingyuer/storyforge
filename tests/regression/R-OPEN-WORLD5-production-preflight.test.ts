@@ -96,6 +96,35 @@ const ACKNOWLEDGEMENT = {
 }
 
 describe('TOW-G5-03 · creator production preflight', () => {
+  it('有界修复档位需新确认，精确冻结两次尝试与有限资源，拒绝混合预算', async () => {
+    const currentBrief = await brief()
+    const input = { brief: currentBrief, ...runtime(), pricing: { mode: 'catalog' as const } }
+    const legacy = await createTextOpenWorldCreatorProductionPreflightV1(input)
+    const confirmation = await confirmTextOpenWorldCreatorProductionPreflightV1({
+      ...input, preflight: legacy, acknowledgement: ACKNOWLEDGEMENT, confirmedAt: Date.now(),
+    })
+    const extended = await createTextOpenWorldCreatorProductionPreflightV1({ ...input, resourceProfile: 'bounded-repair-v1' })
+    expect(legacy.estimate.version).toBe(1)
+    expect(legacy.estimate).not.toHaveProperty('resourceProfile')
+    expect(extended.estimate).toMatchObject({
+      version: 2, resourceProfile: 'bounded-repair-v1', recommendedModelCalls: 374,
+      maximumModelCalls: 400, reservedInputTokens: 6_000_000, reservedOutputTokens: 1_800_000,
+      maximumDurationMs: 21_600_000, maximumStorageBytes: 200_000_000, maximumCostUsd: 100,
+    })
+    await expect(verifyTextOpenWorldCreatorProductionPreflightV1(extended, input)).resolves.toEqual(extended)
+    await expect(verifyTextOpenWorldCreatorProductionPreflightV1(legacy, input)).resolves.toEqual(legacy)
+    await expect(verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+      ...input, preflight: extended, confirmation,
+    })).rejects.toThrow()
+    const mixed = structuredClone(extended)
+    mixed.estimate.reservedInputTokens = 7_000_000
+    const { estimateHash: _estimateHash, ...estimateBody } = mixed.estimate
+    mixed.estimate.estimateHash = await hashCanonicalValue(estimateBody)
+    const { preflightHash: _preflightHash, ...preflightBody } = mixed
+    mixed.preflightHash = await hashCanonicalValue(preflightBody)
+    await expect(verifyTextOpenWorldCreatorProductionPreflightV1(mixed, input)).rejects.toThrow(/硬保护/)
+  })
+
   it('以 provider-qualified 报价形成不含 Key/完整 URL 的 187/200 文本预算快照', async () => {
     const result = await createTextOpenWorldCreatorProductionPreflightV1({
       brief: await brief(), projectId: 7, aiConfig: config(), rememberApiKey: false, pricing: { mode: 'catalog' },
