@@ -1,16 +1,16 @@
 # Changelog
 
-Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.2; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
+Feature updates, fixes, and workflow improvements are organized by user impact. See [compatibility](/en/updates/compatibility) for version information.
 
 ## Version 4.0.2 · Desktop and Android clients
 
-This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus a unified first-launch User Agreement and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability; existing downloads remain unchanged. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
+This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus a unified first-launch User Agreement and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
 
 ## October 16, 2026 · Outline Agent candidate adoption fix
 
 Automatic volume/chapter outline composition no longer incorrectly rejects valid candidates as stale because generation and adoption used different policy identities. Real source, permission, and content freshness checks remain in place; candidates are not adopted automatically. See [outlines, scene beats, and prose](/en/features/longform/writing).
 
-Evidence: [fix 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158), merged into main as `ce49309b` on October 16 in China, after the fixed v4.0.1 release. Publishing the knowledge base does not update old packages or the hosted application experience.
+Evidence: [fix 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158), merged into main as `ce49309b` on October 16 in China.
 
 ## October 15, 2026 · v4.0.1 failure-feedback builds
 

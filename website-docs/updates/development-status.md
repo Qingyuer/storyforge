@@ -4,7 +4,7 @@
 
 [PR #153](https://github.com/yuanbw2025/storyforge/pull/153) 的 4.0.2 客户端提供 Windows、Mac 和 Android 安装包、应用内更新与问题建议入口，iOS 暂缓。首次启动直接显示可离线阅读的统一《用户协议》，个人信息与隐私保护内容包含在正文内；阅读并同意后进入软件。设置中可再次查阅协议，手动问题与建议仍需检查后确认发送。
 
-安装方式与系统限制见[安装说明](/getting-started/install)，正式附件以 [v4.0.2 发行页](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2)实际公开的文件为准。旧版下载不会自动变成新版。下方核对记录保留为当时的分支快照，其中客户端待交付状态以本节及发行页为准。
+安装方式与系统限制见[安装说明](/getting-started/install)，正式附件以 [v4.0.2 发行页](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2)实际公开的文件为准。下方核对记录保留为当时的分支快照，其中客户端待交付状态以本节及发行页为准。
 
 ## 2026-10-16 本轮核对
 
