@@ -18,10 +18,10 @@ async function seed() {
   const chapterId = await db.chapters.add(stampNewRecord(f.scope, 'chapters', { projectId: f.scope.projectId, outlineNodeId, title: '签字', content: sourceHtml, wordCount: 31, status: 'draft', order: 0, notes: '', createdAt: 1, updatedAt: 1 }, { owner: 'work' })) as number
   const review = await runWholeChapterQualityReviewV1({ scope: f.scope, chapterId, outlineNodeId, worldGroupId: null, mode: 'quality', call: async (_messages, _config, result) => {
     result.completion = 'complete'; result.finishReason = 'stop'
-    return JSON.stringify({ summary: '停笔处有任务说明', strengths: ['金额和余额明确'], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '正文到此结束。', start: null, end: null, reason: '任务语言进入正文', suggestion: '移除任务说明，保留签字动作' }] })
+    return JSON.stringify({ summary: '停笔处有任务说明', strengths: ['金额和余额明确'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: 'p2-1', reason: '任务语言进入正文', suggestion: '移除任务说明，保留签字动作' }] })
   } })
   const revise = vi.fn(async (_messages, _resolution, result) => { result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '陈禾签下名字。' }] }) })
-  const recheck = vi.fn(async (_messages, _resolution, result) => { result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ review: { summary: '任务说明已移除，仍需作者判断', strengths: ['保留签字'], issues: [] }, outcomes: [{ issueId: review.report.issues[0].id, status: 'improved', quote: '陈禾签下名字。', reason: '签字事件保留且没有任务说明' }] }) })
+  const recheck = vi.fn(async (_messages, _resolution, result) => { result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ review: { summary: '任务说明已移除，仍需作者判断', strengths: ['保留签字'], issues: [] }, outcomes: [{ issueId: review.report.issues[0].id, status: 'improved', anchorId: 'p2-1', reason: '签字事件保留且没有任务说明' }] }) })
   return { ...f, chapterId, outlineNodeId, sourceHtml, review, revise, recheck }
 }
 
@@ -53,6 +53,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
     expect(result.state).toBe('awaiting_confirmation')
     expect(result.candidate?.operation).toBe('quality-revise')
+    expect(result.candidate?.qualityRevision?.recheck.outcomes[0].anchorId).toBe('p2-1')
     expect(await isProseGenerationCandidateCurrentV1(result.candidate!)).toBe(true)
     const restored = await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId })
     expect(restored?.candidate?.durable.candidateHash).toBe(result.candidate!.durable.candidateHash)
@@ -163,11 +164,12 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
   })
 
-  it.each(['fake-quote', 'wrong-id', 'truncated'] as const)('复核%s保留原响应与已收到账单，不产生可采纳候选', async failure => {
+  it.each(['fake-quote', 'fake-anchor', 'wrong-id', 'truncated'] as const)('复核%s保留原响应与已收到账单，不产生可采纳候选', async failure => {
     const f = await seed()
     f.recheck.mockImplementationOnce(async (_m, _c, result) => {
       result.completion = 'complete'; result.finishReason = failure === 'truncated' ? 'length' : 'stop'
-      return JSON.stringify({ review: { summary: '只供诊断', strengths: [], issues: [] }, outcomes: [{ issueId: failure === 'wrong-id' ? '另一报告的问题' : f.review.report.issues[0].id, status: 'improved', quote: failure === 'fake-quote' ? '不存在的改稿句子' : '陈禾签下名字。', reason: '未确证的判断' }] })
+      const location = failure === 'fake-anchor' ? { anchorId: 'p99-1' } : { quote: failure === 'fake-quote' ? '不存在的改稿句子' : '陈禾签下名字。' }
+      return JSON.stringify({ review: { summary: '只供诊断', strengths: [], issues: [] }, outcomes: [{ issueId: failure === 'wrong-id' ? '另一报告的问题' : f.review.report.issues[0].id, status: 'improved', ...location, reason: '未确证的判断' }] })
     })
     await expect(runQualityRevisionV1(input(f))).rejects.toThrow()
     const restored = await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId })

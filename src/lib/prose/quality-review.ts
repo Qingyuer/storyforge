@@ -4,8 +4,8 @@ import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 import { SCENE_REVIEW_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v5'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v6'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 
 /** Rechecks retain the version of their actual nested review request. */
 export function qualityReviewPromptVersionFromMessagesV1(messages: readonly ChatMessage[]): typeof REVIEW_PROMPT_VERSIONS[number] {
@@ -44,6 +44,31 @@ export interface QualityReviewArtifactV1 {
 
 const labels: Record<QualityReviewModeV1, string> = { quality: '章节阅读质量', style: '表达与重复', readability: '继续阅读的动力' }
 const HASH = /^[a-f0-9]{64}$/
+
+/** Exact, bounded spans of the same full input. IDs disambiguate repeated text;
+ * the model never has to reproduce punctuation or calculate UTF16 offsets. */
+export function qualityReviewAnchorsV1(chapterText: string): { anchorId: string; quote: string; start: number; end: number }[] {
+  const anchors: { anchorId: string; quote: string; start: number; end: number }[] = []
+  let paragraph = 0
+  for (const match of chapterText.matchAll(/[^\n]+/g)) {
+    if (!match[0].trim()) continue
+    paragraph++
+    const limit = match.index! + match[0].length
+    let part = 0
+    for (let start = match.index!; start < limit;) {
+      let end = Math.min(start + 160, limit)
+      const last = chapterText.charCodeAt(end - 1)
+      if (end < limit && last >= 0xD800 && last <= 0xDBFF) end--
+      anchors.push({ anchorId: `p${paragraph}-${++part}`, quote: chapterText.slice(start, end), start, end })
+      start = end
+    }
+  }
+  return anchors
+}
+
+export function formatQualityReviewAnchorsV1(chapterText: string): string {
+  return JSON.stringify(qualityReviewAnchorsV1(chapterText).map(({ anchorId, quote }) => ({ anchorId, text: quote })))
+}
 
 function paragraphNumber(text: string, start: number, promptVersion: typeof REVIEW_PROMPT_VERSIONS[number]): number {
   if (promptVersion === 'whole-chapter-quality-review-v1' || promptVersion === 'whole-chapter-quality-review-v2') return text.slice(0, start).split(/\n\s*\n/).length
@@ -84,16 +109,14 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
 先处理会改变读者对事件理解的问题，再考虑表达细节。表达建议需要说明具体影响，不为求变化修改有效动作或强行填满留白。
 ${SCENE_REVIEW_GUIDANCE_V1}
 缓冲、安静、留白、角色有意隐瞒和舒缓叙述不自动构成问题。不强制每章高潮、冲突或悬念，不将高频词等同于机器写作，不输出AI概率、平台合格结论或未校准的质量分。
-每个问题必须引用正文中的逐字片段。唯一引文的start/end填写null，由系统定位；重复引文才需给出从0开始的精确UTF16 start/end。代码会检查引文与位置，不能猜测。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
-quote必须是从正文复制的一段连续、非空字符串，绝不能填写null或改写/拼接引文。涉及多处时选一个唯一片段作定位锚点，其它依据与不确定性写在reason中；只有start/end允许同时为null。不能找到锚点的猜测不要加入issues。
-优先选单个段落内的短引文，建议6～80字；跨段问题仅引用其中一处，其余对照写在reason中。保留原标点、引号和换行，不把双引号换成单引号，不把两段合成一条quote，不用省略号代替原文。可以只引用对话前后的动作短句来定位，不必引用整段对话。
+每个问题选择下方定位目录里对应的anchorId。编号绑定当前正文的确切片段，代码取得原文与UTF16位置；不要另写quote、start或end，不得编造或改写编号。跨片段问题选择其中一个作为定位锚点，其余依据写在reason里；没有合适原文依据则不列问题。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
 章纲、细纲与作者要求是计划，不能据此认定正文已经完成动作或兑现。以正文实际描写为准；记账、总结或系统提示不能自动替代应有的关键过程。
 输出一个JSON对象，不要围栏或解释：
-{"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","quote":"正文逐字片段","start":null,"end":null,"reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
+{"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","anchorId":"定位目录中的编号","reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`
   return { targetTextHash, messages: [
     { role: 'system', content: system },
-    { role: 'user', content: `【章节】${input.chapterTitle}\n【完整正文 · hash ${targetTextHash} · UTF16长度 ${input.chapterText.length}】\n${input.chapterText}\n【正文结束】\n\n【登记的作品资料、场景任务与作者意图】\n${input.registeredContext || '（暂无）'}${input.authorRequest?.trim() ? `\n\n【本次作者评审要求 · 不属于故事事实】\n${input.authorRequest.trim()}` : ''}` },
+    { role: 'user', content: `【章节】${input.chapterTitle}\n【完整正文 · hash ${targetTextHash} · UTF16长度 ${input.chapterText.length}】\n${input.chapterText}\n【正文结束】\n【当前正文定位目录 · 只从这里选择anchorId】\n${formatQualityReviewAnchorsV1(input.chapterText)}\n\n【登记的作品资料、场景任务与作者意图】\n${input.registeredContext || '（暂无）'}${input.authorRequest?.trim() ? `\n\n【本次作者评审要求 · 不属于故事事实】\n${input.authorRequest.trim()}` : ''}` },
   ] }
 }
 
@@ -128,12 +151,16 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const summary = text(root.summary, 'summary', 3000)
   if (!Array.isArray(root.strengths) || root.strengths.length > 20 || !Array.isArray(root.issues) || root.issues.length > 40) throw new Error('评审列表超出范围或格式无效。')
   const strengths = root.strengths.map(value => text(value, 'strength', 1000))
+  const anchors = new Map(qualityReviewAnchorsV1(input.chapterText).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
-    keys(row, ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
+    const anchored = promptVersion === QUALITY_REVIEW_PROMPT_VERSION_V1 && Object.prototype.hasOwnProperty.call(row, 'anchorId')
+    keys(row, anchored ? ['dimension', 'confidence', 'anchorId', 'reason', 'suggestion'] : ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
-    const quote = text(row.quote, 'quote', 1000)
-    let start = row.start; let end = row.end
+    const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
+    if (anchored && !anchor) throw new Error('问题定位编号不属于当前正文，不能猜测引文。')
+    const quote = anchor?.quote ?? text(row.quote, 'quote', 1000)
+    let start = anchor?.start ?? row.start; let end = anchor?.end ?? row.end
     if (start === null && end === null) {
       const occurrence = input.chapterText.indexOf(quote)
       if (occurrence < 0 || input.chapterText.indexOf(quote, occurrence + 1) >= 0) throw new Error('引文不存在或重复，不能猜测问题位置。')

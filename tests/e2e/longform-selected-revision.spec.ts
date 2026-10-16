@@ -32,8 +32,8 @@ function mock(page: Page, state: { calls: any[]; gate?: Promise<void> }, recheck
       const text = body.messages[1].content
       const match = text.match(/【冻结计划 [^\n]+】\n([^\n]+)/)!
       const issueId = JSON.parse(match[1])[0].id
-      report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', quote: '陈禾签下名字。', reason: '保留签字且不再插入任务说明' }] }
-    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', quote: '正文到此结束。', start: null, end: null, reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
+      report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', anchorId: 'p2-1', reason: '保留签字且不再插入任务说明' }] }
+    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: 'p2-1', reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(report) }, finish_reason: 'stop' }] }) })
   })
 }
@@ -55,6 +55,8 @@ test('作者勾选问题→范围修订→一次复核→刷新对照→正式�
   expect(state.calls).toHaveLength(3)
   state.calls.forEach(body => { expect(body.stream).toBe(false); expect(body.response_format).toEqual({ type: 'json_object' }) })
   expect(state.calls[1].messages[1].content).toContain('余额三点，金额一百二十。')
+  expect(state.calls[1].messages[1].content).toContain('保留金额与余额')
+  expect(state.calls[2].messages[1].content).toContain('保留金额与余额')
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await expect(page.getByTestId('quality-revision-preview')).toContainText('模型认为已有改善')

@@ -26,7 +26,7 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
   const requests: any[] = []
   await page.route('https://whole-review.invalid/**', route => {
     requests.push(route.request().postDataJSON())
-    const json = { summary: '付款过程需要核对，安静章节可以保留。', strengths: ['保留必要缓冲'], issues: [{ dimension: 'causality', confidence: 'uncertain', quote, start: null, end: null, reason: '没描写付款却记录已收款。', suggestion: '核对收款过程，保留金额和签字人。' }] }
+    const json = { summary: '付款过程需要核对，安静章节可以保留。', strengths: ['保留必要缓冲'], issues: [{ dimension: 'causality', confidence: 'uncertain', anchorId: 'p2-1', reason: '没描写付款却记录已收款。', suggestion: '核对收款过程，保留金额和签字人。' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(json) }, finish_reason: 'stop' }] }) })
   })
   const target = await setup(page)
@@ -41,6 +41,7 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
     expect(requests[requests.length - 1].response_format).toEqual({ type: 'json_object' })
     expect(requests[requests.length - 1].messages[1].content).toContain(original)
     expect(requests[requests.length - 1].messages[1].content).toContain('【正文结束】')
+    expect(requests[requests.length - 1].messages[1].content).toContain('"anchorId":"p2-1"')
   }
   expect(requests).toHaveLength(3)
   await page.reload()

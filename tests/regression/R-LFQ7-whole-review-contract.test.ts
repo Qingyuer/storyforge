@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1 } from '../../src/lib/prose/quality-review'
+import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewAnchorsV1 } from '../../src/lib/prose/quality-review'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
@@ -7,6 +7,24 @@ const settings = describeResolvedAIRequestSettingsV1(resolveRequestConfig({ ...u
 const issue = (quote: string, start: number | null, end: number | null) => ({ dimension: 'causality', confidence: 'uncertain', quote, start, end, reason: '付款过程没有写出，却直接记为已收款。', suggestion: '核对付款过程，保持金额和签字人。' })
 
 describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
+  it('片段编号精确定位重复原文；长段与代理对不截断，伪造编号和混合协议仍拒绝', async () => {
+    const chapterText = '她收回绳子。\n\n她收回绳子。\n' + '甲'.repeat(159) + '😀确认回撤线。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '探路', chapterText, registeredContext: '' })
+    const anchors = qualityReviewAnchorsV1(chapterText)
+    expect(anchors.map(row => row.quote).join('')).toBe(chapterText.replace(/\n/g, ''))
+    expect(anchors.every(row => !/[\uD800-\uDBFF]$/.test(row.quote))).toBe(true)
+    expect(request.messages[1].content).toContain(chapterText)
+    const row = { dimension: 'continuity', confidence: 'suggestion', anchorId: 'p2-1', reason: '同一道具在后文重复收回，需要核对状态', suggestion: '保留一次真实收回动作' }
+    const parse = (value: unknown) => parseWholeChapterQualityReviewV1({ raw: JSON.stringify({ summary: '核对道具状态', strengths: ['保留回撤选择'], issues: [value] }), mode: 'quality', chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete', settings })
+    const report = await parse(row)
+    expect(report.issues[0].quote).toBe('她收回绳子。')
+    expect(report.issues[0].start).toBe(chapterText.lastIndexOf('她收回绳子。'))
+    expect(report.issues[0].paragraph).toBe(2)
+    expect(await verifyWholeChapterQualityReviewV1(report, chapterText, request.messages)).toBe(true)
+    await expect(parse({ ...row, anchorId: 'p99-1' })).rejects.toThrow('编号')
+    await expect(parse({ ...row, quote: '随意改写的引文' })).rejects.toThrow('契约')
+  })
+
   it('真实探针中的跨段拼接引文仍拒绝；单段定位有效，旧v3记录按原版本验签', async () => {
     const chapterText = '账本初始余额三点，操作消耗两点。\n陈禾扣除两点，余额变成八点。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '账本', chapterText, registeredContext: '初始三点，消耗两点，不凭空奖励。' })
@@ -15,7 +33,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify(root) })).rejects.toThrow('引文')
     const raw = JSON.stringify({ ...root, issues: [issue('余额变成八点。', null, null)] })
     const current = await parseWholeChapterQualityReviewV1({ ...base, raw })
-    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v5')
+    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v6')
     expect(current.issues[0].paragraph).toBe(2)
     const old = await parseWholeChapterQualityReviewV1({ ...base, raw, promptVersion: 'whole-chapter-quality-review-v3' })
     expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)
@@ -78,7 +96,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify({ summary: '猜测', strengths: [], issues: [{ ...issue('', null, null), quote: null }] }) })).rejects.toThrow('quote')
     const historical = await parseWholeChapterQualityReviewV1({ ...base, promptVersion: 'whole-chapter-quality-review-v1' })
     expect(await verifyWholeChapterQualityReviewV1(historical, chapterText, request.messages)).toBe(true)
-    expect(request.messages[0].content).toContain('只有start/end允许同时为null')
+    expect(request.messages[0].content).toContain('不要另写quote、start或end')
     expect(request.messages[0].content).toContain('章纲、细纲与作者要求是计划')
   })
 
