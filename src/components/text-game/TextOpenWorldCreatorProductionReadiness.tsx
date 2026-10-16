@@ -104,6 +104,7 @@ export function TextOpenWorldCreatorProductionReadiness(
 
   useEffect(() => {
     setPricingMode(defaultTextOpenWorldCreatorPricingModeV1(aiConfig, props.session.scope.projectId))
+    setManualPrice(current => ({ ...current, accountZeroCostConfirmed: false }))
     setAcknowledgement(EMPTY_ACKNOWLEDGEMENT)
     setConfirmation(null)
   }, [aiConfig, presets, props.session.scope.projectId, rememberApiKey, taskRoutes])
@@ -241,14 +242,27 @@ export function TextOpenWorldCreatorProductionReadiness(
           </div>}
         </div>
         {pricingMode === 'manual' && <div className="mt-4 grid gap-3 rounded-lg border border-border bg-bg-base p-4 md:grid-cols-2" data-testid="text-open-world-manual-price-fields">
+          {preflight.providerBinding.provider === 'agnes' && preflight.providerBinding.catalogPricingEligible && <label className="flex items-start gap-2 text-xs leading-5 md:col-span-2">
+            <input type="checkbox" checked={manualPrice.accountZeroCostConfirmed === true}
+              onChange={event => setManualPrice(current => ({
+                ...current,
+                accountZeroCostConfirmed: event.target.checked,
+                ...(event.target.checked ? {
+                  inputUsdPerMillionTokens: 0,
+                  outputUsdPerMillionTokens: 0,
+                  sourceLabel: current.sourceLabel || '作者确认当前 Agnes 账户的本次文本调用免计费',
+                } : {}),
+              }))} />
+            我确认当前 Agnes 账户的本次文本调用免计费，仍遵守调用与资源上限
+          </label>}
           <label className="text-xs text-text-muted" htmlFor="tow-input-price">输入价格（USD / 1M tokens）
             <input id="tow-input-price" type="number" min={0} step="0.0001" value={manualPrice.inputUsdPerMillionTokens ?? ''}
-              onChange={event => setManualPrice(current => ({ ...current, inputUsdPerMillionTokens: event.target.value === '' ? null : Number(event.target.value) }))}
+              onChange={event => setManualPrice(current => ({ ...current, accountZeroCostConfirmed: false, inputUsdPerMillionTokens: event.target.value === '' ? null : Number(event.target.value) }))}
               className="mt-1 w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-text-primary" />
           </label>
           <label className="text-xs text-text-muted" htmlFor="tow-output-price">输出价格（USD / 1M tokens）
             <input id="tow-output-price" type="number" min={0} step="0.0001" value={manualPrice.outputUsdPerMillionTokens ?? ''}
-              onChange={event => setManualPrice(current => ({ ...current, outputUsdPerMillionTokens: event.target.value === '' ? null : Number(event.target.value) }))}
+              onChange={event => setManualPrice(current => ({ ...current, accountZeroCostConfirmed: false, outputUsdPerMillionTokens: event.target.value === '' ? null : Number(event.target.value) }))}
               className="mt-1 w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-text-primary" />
           </label>
           <label className="text-xs text-text-muted" htmlFor="tow-price-source">报价来源说明（短文字，不填 URL）

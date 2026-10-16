@@ -190,7 +190,80 @@ describe('TOW-G5-03 · creator production preflight', () => {
     expect(overBudget.blockers.join('')).toContain('超过单 Build $30.00')
   })
 
-  it('只有明确本地的 Ollama/custom 可确认零 token 费用，远程空 Key 始终阻断', async () => {
+  it('Agnes 官方连接可显式冻结账户免计费报价，仍保留凭证与资源上限', async () => {
+    const confirmedBrief = await brief()
+    const agnes = config({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1' })
+    const manual = {
+      inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0,
+      sourceLabel: '作者确认当前 Agnes 账户的本次文本调用免计费', asOf: '2026-10-16',
+      accountZeroCostConfirmed: true,
+    }
+    const result = await createTextOpenWorldCreatorProductionPreflightV1({
+      brief: confirmedBrief, ...runtime(agnes), pricing: { mode: 'manual', manual },
+    })
+    expect(result).toMatchObject({
+      ready: true,
+      priceQuote: { source: 'author-confirmed-account-zero', inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0 },
+      estimate: {
+        estimatedTextCostUsd: 0, recommendedModelCalls: 187, maximumModelCalls: 200,
+        reservedInputTokens: 1_200_000, reservedOutputTokens: 360_000,
+        maximumDurationMs: 7_200_000, maximumStorageBytes: 200_000_000,
+      },
+    })
+    const confirmation = await confirmTextOpenWorldCreatorProductionPreflightV1({
+      brief: confirmedBrief, preflight: result, ...runtime(agnes), acknowledgement: ACKNOWLEDGEMENT,
+    })
+    await expect(verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+      brief: confirmedBrief, preflight: result, confirmation, ...runtime(agnes),
+    })).resolves.toEqual(confirmation)
+    expect(JSON.stringify(result)).not.toContain(agnes.apiKey)
+    for (const [current, quote] of [
+      [agnes, { ...manual, accountZeroCostConfirmed: false }],
+      [config(), manual],
+      [{ ...agnes, baseUrl: 'https://apihub.agnes-ai.com/other-tenant/v1' }, manual],
+      [{ ...agnes, apiKey: '' }, manual],
+    ] as const) {
+      const blocked = await createTextOpenWorldCreatorProductionPreflightV1({
+        brief: confirmedBrief, ...runtime(current), pricing: { mode: 'manual', manual: quote },
+      })
+      expect(blocked.ready).toBe(false)
+      await expect(verifyTextOpenWorldCreatorProductionPreflightV1(blocked, {
+        brief: confirmedBrief, ...runtime(current),
+      })).resolves.toEqual(blocked)
+    }
+    await expect(verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+      brief: confirmedBrief, preflight: result, confirmation,
+      ...runtime({ ...agnes, model: 'agnes-2.5-pro' }),
+    })).rejects.toThrow('已变化')
+  })
+
+  it('重算报价 Hash 也不能把付费供应商或中转端点伪装成 Agnes 账户免计费', async () => {
+    const confirmedBrief = await brief()
+    for (const current of [
+      config(),
+      config({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://relay.example.com/v1' }),
+    ]) {
+      const forged = await createTextOpenWorldCreatorProductionPreflightV1({
+        brief: confirmedBrief, ...runtime(current), pricing: { mode: 'manual', manual: {
+          inputUsdPerMillionTokens: 1, outputUsdPerMillionTokens: 1,
+          sourceLabel: '作者提供的报价', asOf: '2026-10-16',
+        } },
+      })
+      const quote = forged.priceQuote!
+      quote.source = 'author-confirmed-account-zero'
+      quote.inputUsdPerMillionTokens = 0
+      quote.outputUsdPerMillionTokens = 0
+      const { quoteHash: _quoteHash, ...quoteBody } = quote
+      quote.quoteHash = await hashCanonicalValue(quoteBody)
+      const { preflightHash: _preflightHash, ...body } = forged
+      forged.preflightHash = await hashCanonicalValue(body)
+      await expect(verifyTextOpenWorldCreatorProductionPreflightV1(forged, {
+        brief: confirmedBrief, ...runtime(current),
+      })).rejects.toThrow('人工报价合同')
+    }
+  })
+
+  it('本地零费用模式仅允许 Ollama/custom，远程空 Key 始终阻断', async () => {
     const local = await createTextOpenWorldCreatorProductionPreflightV1({
       brief: await brief(),
       projectId: 7,

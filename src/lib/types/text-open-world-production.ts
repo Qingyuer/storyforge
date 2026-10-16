@@ -473,6 +473,7 @@ export type TextOpenWorldCreatorPriceQuoteSourceV1 =
   | 'storyforge-catalog'
   | 'author-provided'
   | 'author-confirmed-local-zero'
+  | 'author-confirmed-account-zero'
 
 /** One author-reviewable USD text-token price snapshot. */
 export interface TextOpenWorldCreatorPriceQuoteV1 {

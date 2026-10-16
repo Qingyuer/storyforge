@@ -188,6 +188,8 @@ V3 增加精确输入集合、scope/Build/epoch/status 校验；原 schema、Has
 
 当前P1实现继续区分“已冻结”和“模型已读”：小说只通过登记Context Source向单个模型批次交付精确选择的完整私有单元；WorldRelease只通过Context Gateway读取SourcePin已经授权的冻结资源并校验交付Hash。SourceManifest记录逐单元实读状态，SourceLedger要求每项模型结论绑定可复现的逐字证据和偏移，SourceGapReport由代码从实际读集与证据覆盖生成。三件产物都属于文字开放世界Build候选，不回写世界引擎，也不建立第二套产品数据库。
 
+P1 的新模型草稿使用 v2 引文协议：模型只从已读单元复制逐字 `quote`，系统在该单元内唯一定位并计算 UTF-16 `start/end`，随后仍经原 SourceLedger 的来源 Hash、逐字切片与证据 Hash 复验。空白、缺失、重复歧义、未读单元和模型自行提供偏移均拒绝；不会修补或采纳已失败的旧响应。历史 v1 草稿继续按原精确偏移合同校验恢复。置信度保持 0～100 整数，实体键保持稳定键闭集格式。供应商已响应但正文为空、拒绝或其他不可重试错误，保留真实用量并停止自动尝试；不能因包装已付调用而丢失 Harness 的不可重试分类。原始响应、有限预算和候选采纳边界保持不变。
+
 当前P2实现把“作者确认”和“AI设计”明确分层：现有`ConfirmedProductBrief`继续负责作者授权，专属Context Source把同一次授权、SourcePin和P1证据编成完整Hash保护的输入；确定性代码据此生成GameBrief，冻结首版主线、自由度、交互、战斗、演化、媒资、预算和发布边界。模型只能补充ExperienceContract中的体验语义与ProtagonistAsset中的人物叙事，且来源角色必须引用绑定所选角色单元的Ledger事实。P2不会回读活动来源，数值型PlayerBuild也不会提前于GameplayRuleset生成。
 
 当前GameplayRuleset实现继续沿用相同分治：专属Context Source只读取同一Build已验收的体验链和它实际引用的Ledger事实；AI只为规则标题、三属性、技能资源、装备位、货币和标准难度生成符合世界语义的显示文本。代码生成并复验其余全部规则：稳定三属性键、20级和1到5级验收跨度、自动成长与G2公式、四类逐回合战斗、标准难度、有界物理结算、三装备位、单货币、确定性制作/交易上限及当前G2模块版本。Effect白名单直接引用运行时类型事实源，并进一步区分模型可提议、编译器专属和旧Release只读操作，后续内容Agent不能借“创作”生成系统结算标记。
@@ -2326,6 +2328,8 @@ Creator Brief确认后的G5-03生产准备页复用全局AI配置、任务路由
 价格快照按provider、精确已复核model与注册的官方商业端点共同匹配；中转站、同域不同基础路径、同名模型或未复核后缀一律不能套用目录价。目录没有明确条目时，作者必须录入非负、非同时为零的USD报价、短来源说明和核对日期；本地零token费用也必须显式选择，并说明不含硬件、电力和托管成本。界面把完整生产的187次建议模型调用、200次硬上限、120万输入token、36万输出token、30美元文本估算保护、2小时和200MB资源边界绑定为可校验Hash；这些都是单Build授权上界，不是实际账单。头像、背景等媒资在G5-08形成实际排产前不进入本次金额。已发生的Creator Brief会谈只展示真实请求数、provider回传或本地估算token、耗时及按已知价格推算的费用，并明确后者不是provider账单。
 
 作者逐项确认凭证政策、模型绑定、报价预算和媒资边界后，准备页只得到内存中的确认Hash，仍不创建Build、SourcePlan或任何费用。运行时Verifier不把可重算Hash当成外部真实性：确认时必须重新解析当前任务路由、AIConfig和实际凭证来源，并逐字段比对Brief、模型、端点路径Hash、报价、预算与四个精确确认键；设置页往返也携带无密钥的精确会谈、产品和来源身份，目标失效时不得误选“最近会谈”。正式启动在同一原子授权边界重新读取并CAS这些事实，不能把页面内存确认当作durable授权。全局AI日志在create/update/read/format四个出口统一脱敏：日志URL只保留HTTP(S) origin，调用方Key、认证头、常见凭证字段和嵌入式URL敏感部分全部清除；余额、欠费、授权、限流、超时、网络和未知结果只显示安全分类与显式恢复动作，不把原始供应商响应送入页面，也不隐藏重发。
+
+Agnes 官方连接另支持作者明确确认当前账户的本次文本调用免计费。该选择生成 `author-confirmed-account-zero` 报价，保留来源说明、核对日期、精确模型与端点绑定；它是作者的账户说明，不是全平台免费声明，也不能用于其他供应商或中转端点。远程凭证仍为必需项，调用、token、时长、存储及失败恢复保护不变；配置变化清除免计费确认。未选择这项说明的人工双零报价继续被拒绝，现有付费报价和本地零费用合同保持有效。该扩展不新增表，不改变来源、作品或媒资 owner；报价随既有 Creator Start/Brief 的注册生命周期导出导入。
 
 G5-04已经落地专属Creator生产启动。作者先选择`author-owned`、`licensed`或`public-domain`权利依据并填写说明；零写入预览把当前Creator Brief确定性投影为不含本地ID的便携Creator SourcePlan、共享scheduler兼容执行Brief和精确动态DAG，显示依赖、并行组、模型、预算、完成条件及Plan Hash。兼容Brief中的`worldReleaseId=1`是非定位占位值，真实读取只允许走专属SourcePlan与注册表治理的locator。正式开始再次核验Production state revision、Creator Brief revision/Hash、WorldRelease或小说版本与边界、当前AI任务路由/凭证来源、规范完整route、生成参数、模型绑定、报价、预算、四项确认和预览Plan Hash，并让实际模型调用复用同一份已核对resolution，避免下层二次解析发生TOCTOU。覆盖Production、Brief、Command、Build及来源存储的同一事务写入命令claim/receipt、授权Brief的Creator SourcePlan和Creator Start、不可变Plan与授权Build，再推进Production为`producing`。这个边界不调用provider；相同确定性command ID重放只读取已冻结receipt，不重建授权。Creator Brief仍是作者意图权威，`ProductProductionBriefV3`只是共享scheduler兼容投影，不能反向覆盖Creator Brief。
 

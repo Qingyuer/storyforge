@@ -38,6 +38,7 @@ export interface TextOpenWorldCreatorManualPriceV1 {
   outputUsdPerMillionTokens: number | null
   sourceLabel: string
   asOf: string
+  accountZeroCostConfirmed?: boolean
 }
 
 export interface TextOpenWorldCreatorPricingSelectionV1 {
@@ -207,17 +208,21 @@ async function createPriceQuote(input: {
     const asOf = manual?.asOf.trim() ?? ''
     const inputRate = manual?.inputUsdPerMillionTokens
     const outputRate = manual?.outputUsdPerMillionTokens
-    if (!validRate(inputRate) || !validRate(outputRate) || inputRate + outputRate <= 0) {
+    const accountZero = inputRate === 0 && outputRate === 0
+      && input.provider === 'agnes' && input.catalogPricingEligible
+      && manual?.accountZeroCostConfirmed === true
+    if (!validRate(inputRate) || !validRate(outputRate) || (inputRate + outputRate <= 0 && !accountZero)) {
       input.blockers.push('请填写非负且不同时为零的输入、输出 token 单价。')
     }
     if (!label) input.blockers.push('请用不含 URL、查询参数或任何凭证内容的短文字注明人工报价来源。')
     if (!isCalendarDate(asOf)) input.blockers.push('请填写真实有效的人工报价核对日期（YYYY-MM-DD）。')
-    if (!validRate(inputRate) || !validRate(outputRate) || inputRate + outputRate <= 0
+    if (!validRate(inputRate) || !validRate(outputRate) || (inputRate + outputRate <= 0 && !accountZero)
       || !label || !isCalendarDate(asOf)) return null
     body = {
       schema: 'storyforge.text-open-world-creator-price-quote', version: 1,
       provider: input.provider, model: input.model,
-      source: 'author-provided', sourceLabel: label, catalogVersion: null, asOf,
+      source: accountZero ? 'author-confirmed-account-zero' : 'author-provided',
+      sourceLabel: label, catalogVersion: null, asOf,
       currency: 'USD', inputUsdPerMillionTokens: inputRate,
       outputUsdPerMillionTokens: outputRate,
     }
@@ -399,7 +404,7 @@ async function parsePriceQuote(
   const provider = runtimeProvider(row.provider, 'priceQuote.provider')
   const model = runtimeText(row.model, 'priceQuote.model', 500, true)
   if (provider !== binding.provider || model !== binding.model) preflightFail('价格快照与模型绑定不一致')
-  if (!['storyforge-catalog', 'author-provided', 'author-confirmed-local-zero'].includes(String(row.source))) {
+  if (!['storyforge-catalog', 'author-provided', 'author-confirmed-local-zero', 'author-confirmed-account-zero'].includes(String(row.source))) {
     preflightFail('priceQuote source 无效')
   }
   const source = row.source as TextOpenWorldCreatorPriceQuoteV1['source']
@@ -418,8 +423,11 @@ async function parsePriceQuote(
       || inputRate !== known.input || outputRate !== known.output) {
       preflightFail('内置价格快照与当前版本化目录不一致')
     }
-  } else if (source === 'author-provided') {
-    if (catalogVersion !== null || inputRate + outputRate <= 0
+  } else if (source === 'author-provided' || source === 'author-confirmed-account-zero') {
+    const validAccountZero = provider === 'agnes' && binding.catalogPricingEligible
+      && inputRate === 0 && outputRate === 0
+    if (catalogVersion !== null
+      || (source === 'author-provided' ? inputRate + outputRate <= 0 : !validAccountZero)
       || safeManualSourceLabel(sourceLabel) !== sourceLabel
       || containsCredentialMaterial(sourceLabel, credentialValue)
       || containsCredentialLikeText(sourceLabel)
@@ -635,6 +643,8 @@ export async function createTextOpenWorldCreatorProductionPreflightV1(input: {
     warnings.push('人工价格由作者负责核对，StoryForge 不会把它冒充供应商实时账单。')
   } else if (priceQuote?.source === 'author-confirmed-local-zero') {
     warnings.push('零 token 费用不包含本地硬件、电力或托管基础设施成本。')
+  } else if (priceQuote?.source === 'author-confirmed-account-zero') {
+    warnings.push('零费用来自作者对当前 Agnes 账户的确认，不代表供应商对所有账户永久免费；调用、token、时长和失败恢复保护仍然生效。')
   }
   warnings.push('当前估算只覆盖文本模型；头像、背景等媒资在 G5-08 形成实际排产后必须单独报价确认。')
   if (providerBinding.credentialMode === 'remembered-browser') {
