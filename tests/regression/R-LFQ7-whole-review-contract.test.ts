@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewAnchorsV1 } from '../../src/lib/prose/quality-review'
+import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewAnchorsV1, formatQualityReviewAnchorsV1 } from '../../src/lib/prose/quality-review'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
@@ -11,10 +11,11 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     const chapterText = '她收回绳子。\n\n她收回绳子。\n' + '甲'.repeat(159) + '😀确认回撤线。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '探路', chapterText, registeredContext: '' })
     const anchors = qualityReviewAnchorsV1(chapterText)
+    expect(anchors.map(anchor => anchor.anchorId)).toEqual(['p1', 'p2', 'p3-1', 'p3-2'])
     expect(anchors.map(row => row.quote).join('')).toBe(chapterText.replace(/\n/g, ''))
     expect(anchors.every(row => !/[\uD800-\uDBFF]$/.test(row.quote))).toBe(true)
     expect(request.messages[1].content).toContain(chapterText)
-    const row = { dimension: 'continuity', confidence: 'suggestion', anchorId: 'p2-1', reason: '同一道具在后文重复收回，需要核对状态', suggestion: '保留一次真实收回动作' }
+    const row = { dimension: 'continuity', confidence: 'suggestion', anchorId: 'p2', reason: '同一道具在后文重复收回，需要核对状态', suggestion: '保留一次真实收回动作' }
     const parse = (value: unknown) => parseWholeChapterQualityReviewV1({ raw: JSON.stringify({ summary: '核对道具状态', strengths: ['保留回撤选择'], issues: [value] }), mode: 'quality', chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete', settings })
     const report = await parse(row)
     expect(report.issues[0].quote).toBe('她收回绳子。')
@@ -22,7 +23,14 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     expect(report.issues[0].paragraph).toBe(2)
     expect(await verifyWholeChapterQualityReviewV1(report, chapterText, request.messages)).toBe(true)
     await expect(parse({ ...row, anchorId: 'p99-1' })).rejects.toThrow('编号')
+    await expect(parse({ ...row, anchorId: 'p2-1' })).rejects.toThrow('编号')
+    await expect(parse({ ...row, anchorId: 'p3' })).rejects.toThrow('编号')
     await expect(parse({ ...row, quote: '随意改写的引文' })).rejects.toThrow('契约')
+    const historicalMessages = request.messages.map((message, index) => ({ ...message, content: index === 0 ? message.content.replace('全文评审契约：whole-chapter-quality-review-v7。', '全文评审契约：whole-chapter-quality-review-v6。') : message.content.replace(formatQualityReviewAnchorsV1(chapterText), formatQualityReviewAnchorsV1(chapterText, 'whole-chapter-quality-review-v6')) }))
+    const oldInput = { mode: 'quality' as const, chapterText, targetTextHash: request.targetTextHash, messages: historicalMessages, responseCompletion: 'complete' as const, settings, promptVersion: 'whole-chapter-quality-review-v6' as const }
+    const historical = await parseWholeChapterQualityReviewV1({ ...oldInput, raw: JSON.stringify({ summary: '历史段落定位', strengths: [], issues: [{ ...row, anchorId: 'p2-1' }] }) })
+    expect(await verifyWholeChapterQualityReviewV1(historical, chapterText, historicalMessages)).toBe(true)
+    await expect(parseWholeChapterQualityReviewV1({ ...oldInput, raw: JSON.stringify({ summary: '旧请求不能用新编号', strengths: [], issues: [row] }) })).rejects.toThrow('编号')
   })
 
   it('真实探针中的跨段拼接引文仍拒绝；单段定位有效，旧v3记录按原版本验签', async () => {
@@ -33,7 +41,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify(root) })).rejects.toThrow('引文')
     const raw = JSON.stringify({ ...root, issues: [issue('余额变成八点。', null, null)] })
     const current = await parseWholeChapterQualityReviewV1({ ...base, raw })
-    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v6')
+    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v7')
     expect(current.issues[0].paragraph).toBe(2)
     const old = await parseWholeChapterQualityReviewV1({ ...base, raw, promptVersion: 'whole-chapter-quality-review-v3' })
     expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)

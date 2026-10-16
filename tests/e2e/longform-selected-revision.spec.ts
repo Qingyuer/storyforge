@@ -32,8 +32,8 @@ function mock(page: Page, state: { calls: any[]; gate?: Promise<void>; removeWho
       const text = body.messages[1].content
       const match = text.match(/【冻结计划 [^\n]+】\n([^\n]+)/)!
       const issueId = JSON.parse(match[1])[0].id
-      report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', anchorId: 'p2-1', reason: '保留签字且不再插入任务说明' }] }
-    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: state.removeWholeParagraph ? 'p3-1' : 'p2-1', reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
+      report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', anchorId: 'p2', reason: '保留签字且不再插入任务说明' }] }
+    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: state.removeWholeParagraph ? 'p3' : 'p2', reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(report) }, finish_reason: 'stop' }] }) })
   })
 }

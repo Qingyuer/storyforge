@@ -5,8 +5,8 @@ import { qualityReviewSystemGuidanceV1, parseWholeChapterQualityReviewV1, verify
 import type { QualityRevisionPlanV1 } from './quality-revision'
 import { SCENE_RECHECK_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v5'
-const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', 'quality-revision-recheck-v4', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
+export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v6'
+const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', 'quality-revision-recheck-v4', 'quality-revision-recheck-v5', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
 export interface QualityRecheckArtifactV1 {
   version: 1
   promptVersion: typeof RECHECK_PROMPT_VERSIONS[number]
@@ -66,7 +66,7 @@ export async function parseQualityRecheckV1(input: {
   const reviewPromptVersion = qualityReviewPromptVersionFromMessagesV1(input.messages)
   const review = await parseWholeChapterQualityReviewV1({ raw: JSON.stringify(root.review), mode: 'quality', chapterText: input.candidateText, targetTextHash: await hashCanonicalValue(input.candidateText), messages: input.messages, settings: input.settings, responseCompletion: input.completion, createdAt: input.createdAt, promptVersion: reviewPromptVersion })
   const seen = new Set<string>()
-  const anchors = new Map(qualityReviewAnchorsV1(input.candidateText).map(anchor => [anchor.anchorId, anchor]))
+  const anchors = new Map(qualityReviewAnchorsV1(input.candidateText, reviewPromptVersion).map(anchor => [anchor.anchorId, anchor]))
   const outcomes = root.outcomes.map((row: any) => {
     const anchored = row && Object.prototype.hasOwnProperty.call(row, 'anchorId')
     if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).sort().join('|') !== (anchored ? 'anchorId|issueId|reason|status' : 'issueId|quote|reason|status')

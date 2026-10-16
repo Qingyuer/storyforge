@@ -4,8 +4,8 @@ import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 import { SCENE_REVIEW_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v6'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v7'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 
 /** Rechecks retain the version of their actual nested review request. */
 export function qualityReviewPromptVersionFromMessagesV1(messages: readonly ChatMessage[]): typeof REVIEW_PROMPT_VERSIONS[number] {
@@ -47,27 +47,31 @@ const HASH = /^[a-f0-9]{64}$/
 
 /** Exact, bounded spans of the same full input. IDs disambiguate repeated text;
  * the model never has to reproduce punctuation or calculate UTF16 offsets. */
-export function qualityReviewAnchorsV1(chapterText: string): { anchorId: string; quote: string; start: number; end: number }[] {
+export function qualityReviewAnchorsV1(chapterText: string, promptVersion: typeof REVIEW_PROMPT_VERSIONS[number] = QUALITY_REVIEW_PROMPT_VERSION_V1): { anchorId: string; quote: string; start: number; end: number }[] {
   const anchors: { anchorId: string; quote: string; start: number; end: number }[] = []
   let paragraph = 0
   for (const match of chapterText.matchAll(/[^\n]+/g)) {
     if (!match[0].trim()) continue
     paragraph++
     const limit = match.index! + match[0].length
+    // v6 advertised a segment suffix even for short paragraphs. Preserve it
+    // only for those historical requests; v7 names an unsplit paragraph directly.
+    const paragraphOnlyId = Number(promptVersion.match(/-v(\d+)$/)?.[1]) >= 7 && match[0].length <= 160
     let part = 0
     for (let start = match.index!; start < limit;) {
       let end = Math.min(start + 160, limit)
       const last = chapterText.charCodeAt(end - 1)
       if (end < limit && last >= 0xD800 && last <= 0xDBFF) end--
-      anchors.push({ anchorId: `p${paragraph}-${++part}`, quote: chapterText.slice(start, end), start, end })
+      part++
+      anchors.push({ anchorId: paragraphOnlyId ? `p${paragraph}` : `p${paragraph}-${part}`, quote: chapterText.slice(start, end), start, end })
       start = end
     }
   }
   return anchors
 }
 
-export function formatQualityReviewAnchorsV1(chapterText: string): string {
-  return JSON.stringify(qualityReviewAnchorsV1(chapterText).map(({ anchorId, quote }) => ({ anchorId, text: quote })))
+export function formatQualityReviewAnchorsV1(chapterText: string, promptVersion: typeof REVIEW_PROMPT_VERSIONS[number] = QUALITY_REVIEW_PROMPT_VERSION_V1): string {
+  return JSON.stringify(qualityReviewAnchorsV1(chapterText, promptVersion).map(({ anchorId, quote }) => ({ anchorId, text: quote })))
 }
 
 function paragraphNumber(text: string, start: number, promptVersion: typeof REVIEW_PROMPT_VERSIONS[number]): number {
@@ -155,10 +159,10 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const summary = text(root.summary, 'summary', 3000)
   if (!Array.isArray(root.strengths) || root.strengths.length > 20 || !Array.isArray(root.issues) || root.issues.length > 40) throw new Error('评审列表超出范围或格式无效。')
   const strengths = root.strengths.map(value => text(value, 'strength', 1000))
-  const anchors = new Map(qualityReviewAnchorsV1(input.chapterText).map(anchor => [anchor.anchorId, anchor]))
+  const anchors = new Map(qualityReviewAnchorsV1(input.chapterText, promptVersion).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
-    const anchored = promptVersion === QUALITY_REVIEW_PROMPT_VERSION_V1 && Object.prototype.hasOwnProperty.call(row, 'anchorId')
+    const anchored = ['whole-chapter-quality-review-v6', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
     keys(row, anchored ? ['dimension', 'confidence', 'anchorId', 'reason', 'suggestion'] : ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
