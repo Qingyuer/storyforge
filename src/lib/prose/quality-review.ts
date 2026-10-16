@@ -91,6 +91,18 @@ function text(value: unknown, label: string, max: number): string {
   return value
 }
 
+export function qualityReviewSystemGuidanceV1(mode: QualityReviewModeV1): string {
+  return `全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。
+你提供${labels[mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
+维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
+优先核对关键过程与结果：交付、验收、付款、调整、试验、签字是否跳过必要行动；前态—动作—后态的数量、时间、资源和状态是否相互吻合；结尾是否混入写作要求、停笔说明或任务自评。必须区分角色的有意隐瞒、推测与叙述事实，无法确定则标为uncertain。
+先处理会改变读者对事件理解的问题，再考虑表达细节。表达建议需要说明具体影响，不为求变化修改有效动作或强行填满留白。
+${SCENE_REVIEW_GUIDANCE_V1}
+缓冲、安静、留白、角色有意隐瞒和舒缓叙述不自动构成问题。不强制每章高潮、冲突或悬念，不将高频词等同于机器写作，不输出AI概率、平台合格结论或未校准的质量分。
+每个问题选择下方定位目录里对应的anchorId。编号绑定当前正文的确切片段，代码取得原文与UTF16位置；不要另写quote、start或end，不得编造或改写编号。跨片段问题选择其中一个作为定位锚点，其余依据写在reason里；没有合适原文依据则不列问题。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
+章纲、细纲与作者要求是计划，不能据此认定正文已经完成动作或兑现。以正文实际描写为准；记账、总结或系统提示不能自动替代应有的关键过程。`
+}
+
 export async function buildWholeChapterQualityReviewRequestV1(input: {
   mode: QualityReviewModeV1
   chapterTitle: string
@@ -102,15 +114,7 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
   if (!input.chapterText.trim()) throw new Error('正文为空，不能进行全文评审。')
   if (input.authorRequest && input.authorRequest.length > 16000) throw new Error('本次评审要求过长，请精简后再开始。')
   const targetTextHash = await hashCanonicalValue(input.chapterText)
-  const system = `全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。
-你提供${labels[input.mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
-维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
-优先核对关键过程与结果：交付、验收、付款、调整、试验、签字是否跳过必要行动；前态—动作—后态的数量、时间、资源和状态是否相互吻合；结尾是否混入写作要求、停笔说明或任务自评。必须区分角色的有意隐瞒、推测与叙述事实，无法确定则标为uncertain。
-先处理会改变读者对事件理解的问题，再考虑表达细节。表达建议需要说明具体影响，不为求变化修改有效动作或强行填满留白。
-${SCENE_REVIEW_GUIDANCE_V1}
-缓冲、安静、留白、角色有意隐瞒和舒缓叙述不自动构成问题。不强制每章高潮、冲突或悬念，不将高频词等同于机器写作，不输出AI概率、平台合格结论或未校准的质量分。
-每个问题选择下方定位目录里对应的anchorId。编号绑定当前正文的确切片段，代码取得原文与UTF16位置；不要另写quote、start或end，不得编造或改写编号。跨片段问题选择其中一个作为定位锚点，其余依据写在reason里；没有合适原文依据则不列问题。无法确定问题则confidence=uncertain。问题是阅读建议；事实冲突的正式阻断由已有证据型审修处理。
-章纲、细纲与作者要求是计划，不能据此认定正文已经完成动作或兑现。以正文实际描写为准；记账、总结或系统提示不能自动替代应有的关键过程。
+  const system = `${qualityReviewSystemGuidanceV1(input.mode)}
 输出一个JSON对象，不要围栏或解释：
 {"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","anchorId":"定位目录中的编号","reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`

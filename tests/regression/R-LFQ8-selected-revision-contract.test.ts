@@ -16,6 +16,25 @@ async function seed() {
 }
 
 describe('LFQ8 · 作者选题与限定文字范围', () => {
+  it('复核只给一套完整输出结构；无新问题必须明确返回空列表，漏字段仍拒绝', async () => {
+    const f = await seed()
+    const plan = await freezeQualityRevisionPlanV1(f)
+    const candidateText = '已确认事实：余额3点。\n陈禾收款并开收条。\n两人关灯，停笔。'
+    const messages = await buildQualityRecheckRequestV1({ plan, originalReport: f.report, chapterTitle: '交付', candidateText, registeredContext: f.originalText })
+    const [instructions, shape] = messages[0].content.split('【唯一输出结构】\n')
+    expect(instructions).not.toContain('{"summary"')
+    expect(instructions).not.toContain('替代上一段的外层契约')
+    const example = JSON.parse(shape)
+    expect(Object.keys(example).sort()).toEqual(['outcomes', 'review'])
+    expect(Object.keys(example.review).sort()).toEqual(['issues', 'strengths', 'summary'])
+    expect(example.outcomes.map((item: { issueId: string }) => item.issueId)).toEqual(plan.issueIds)
+    const outcome = { issueId: plan.issueIds[0], status: 'improved', anchorId: 'p2-1', reason: '收款过程已写出' }
+    const input = { plan, candidateText, messages, settings: f.report.reviewer.settings, completion: 'complete' as const }
+    await expect(parseQualityRecheckV1({ ...input, raw: JSON.stringify({ review: { summary: '已修复', strengths: [] }, outcomes: [outcome] }) })).rejects.toThrow('字段')
+    await expect(parseQualityRecheckV1({ ...input, raw: JSON.stringify({ review: { summary: '已修复', strengths: [], issues: [] } }) })).rejects.toThrow('逐项覆盖')
+    await expect(buildQualityRecheckRequestV1({ plan, originalReport: f.report, chapterTitle: '交付', candidateText: '  ', registeredContext: '' })).rejects.toThrow('为空')
+  })
+
   it('复核明确旧稿只作比较，全文候选放在资料之后；拒绝旧稿引文，旧版历史仍可验签', async () => {
     const f = await seed()
     const plan = await freezeQualityRevisionPlanV1(f)
@@ -27,10 +46,10 @@ describe('LFQ8 · 作者选题与限定文字范围', () => {
     const outcome = { issueId: plan.issueIds[0], status: 'improved', quote: '赵经理递来一百二十元；陈禾点清后开了收条。', reason: '实际付款过程可见' }
     const raw = JSON.stringify({ review: { summary: '复核修订后正文', strengths: [], issues: [] }, outcomes: [outcome] })
     const checked = await parseQualityRecheckV1({ raw, plan, candidateText, messages, settings, completion: 'complete' })
-    expect(checked.promptVersion).toBe('quality-revision-recheck-v4')
+    expect(checked.promptVersion).toBe('quality-revision-recheck-v5')
     expect(await verifyQualityRecheckV1(checked, plan, candidateText, messages)).toBe(true)
     await expect(parseQualityRecheckV1({ raw: JSON.stringify({ review: { summary: '误看旧稿', strengths: [], issues: [] }, outcomes: [{ ...outcome, quote: f.report.issues[0].quote }] }), plan, candidateText, messages, settings, completion: 'complete' })).rejects.toThrow('引文')
-    const legacyMessages = messages.map((message, i) => i === 0 ? { ...message, content: message.content.replace('复核契约：quality-revision-recheck-v4。', '') } : message)
+    const legacyMessages = messages.map((message, i) => i === 0 ? { ...message, content: message.content.replace('复核契约：quality-revision-recheck-v5。', '') } : message)
     const historical = await parseQualityRecheckV1({ raw, plan, candidateText, messages: legacyMessages, settings, completion: 'complete' })
     expect(historical.promptVersion).toBe('quality-revision-recheck-v1')
     expect(await verifyQualityRecheckV1(historical, plan, candidateText, legacyMessages)).toBe(true)

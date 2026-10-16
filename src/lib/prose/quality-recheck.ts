@@ -1,12 +1,12 @@
 import type { ChatMessage } from '../types'
 import type { AIRequestSettingsV1 } from '../ai/client'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewPromptVersionFromMessagesV1, qualityReviewAnchorsV1, formatQualityReviewAnchorsV1, type QualityReviewArtifactV1 } from './quality-review'
+import { qualityReviewSystemGuidanceV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewPromptVersionFromMessagesV1, qualityReviewAnchorsV1, formatQualityReviewAnchorsV1, type QualityReviewArtifactV1 } from './quality-review'
 import type { QualityRevisionPlanV1 } from './quality-revision'
 import { SCENE_RECHECK_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v4'
-const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
+export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v5'
+const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', 'quality-revision-recheck-v4', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
 export interface QualityRecheckArtifactV1 {
   version: 1
   promptVersion: typeof RECHECK_PROMPT_VERSIONS[number]
@@ -24,22 +24,28 @@ export async function buildQualityRecheckRequestV1(input: {
   registeredContext: string
 }): Promise<ChatMessage[]> {
   if (input.originalReport.artifactHash !== input.plan.reportHash) throw new Error('复核的初审报告与冻结计划不一致。')
-  const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: input.chapterTitle, chapterText: input.candidateText, registeredContext: input.registeredContext })
-  request.messages[0].content += `\n复核契约：${QUALITY_RECHECK_PROMPT_VERSION_V1}。
+  if (!input.candidateText.trim()) throw new Error('修订候选为空，不能进行全文复核。')
+  const targetTextHash = await hashCanonicalValue(input.candidateText)
+  const outputShape = { review: { summary: '阅读情况及不确定性', strengths: ['保留的有效写法'], issues: [] }, outcomes: input.plan.issueIds.map(issueId => ({ issueId, status: 'improved|unchanged|uncertain', anchorId: '当前候选定位目录中的编号', reason: '改善、未解决或不确定的依据' })) }
+  const system = `${qualityReviewSystemGuidanceV1('quality')}
+复核契约：${QUALITY_RECHECK_PROMPT_VERSION_V1}。
 本轮只复核一次，不再改写。资料里的已保存正文和初审引文属于旧稿，只用于比较；最后“当前修订候选全文”才是本次唯一审查对象。不能把旧稿误当作当前候选，所有anchorId只从当前候选定位目录选择。逐字核对修订后是否仍有原问题，不能仅复述初审结论。
 除检查新问题，还逐项说明作者选中的原问题是improved、unchanged或uncertain。每项outcomes.anchorId必须指向当前修订候选；代码取得准确引文与位置。改善是模型建议，不是文学认证。不要替作者选择继续循环。
 ${SCENE_RECHECK_GUIDANCE_V1}
-本轮输出外层JSON契约替代上一段的外层契约：{"review":{"summary":"阅读情况","strengths":[],"issues":[]},"outcomes":[{"issueId":"选中问题id","status":"improved|unchanged|uncertain","anchorId":"当前候选定位目录中的编号","reason":"改善/未解决/不确定的依据"}]}。review内的issues也使用anchorId。`
-  request.messages[1].content = `【登记的作品资料与作者意图 · 正文快照属于修订前版本】\n${input.registeredContext || '（暂无）'}
+只输出一个完整的复核JSON对象，外层必须同时有review和outcomes。review必须含summary、strengths、issues三个键；没有新问题也要写issues:[]，没有保留点写strengths:[]，均不得省略。新问题每项只含dimension、confidence、anchorId、reason、suggestion，dimension取前述维度，confidence为suggestion或uncertain。
+outcomes必须逐项覆盖下面已填入的全部issueId，每个恰好一次；status从improved、unchanged、uncertain选择一个，anchorId只从当前候选目录选择。不要照抄占位说明。
+【唯一输出结构】
+${JSON.stringify(outputShape)}`
+  const user = `【登记的作品资料与作者意图 · 正文快照属于修订前版本】\n${input.registeredContext || '（暂无）'}
 【冻结计划 ${input.plan.planHash} · 初审旧稿问题，仅用于前后比较】\n${JSON.stringify(input.originalReport.issues.filter(issue => input.plan.issueIds.includes(issue.id)))}
 【初审保留点 · 只供比较，不是新增事实】\n${JSON.stringify(input.originalReport.strengths)}${input.plan.authorRequest ? `\n【本轮作者要求 · 只适用于冻结范围】\n${input.plan.authorRequest}` : ''}
 【受保护文字】\n${JSON.stringify(input.plan.protectedQuotes)}
 【章节】${input.chapterTitle}
-【当前修订候选全文 · 唯一审查对象 · hash ${request.targetTextHash} · UTF16长度 ${input.candidateText.length}】\n${input.candidateText}
+【当前修订候选全文 · 唯一审查对象 · hash ${targetTextHash} · UTF16长度 ${input.candidateText.length}】\n${input.candidateText}
 【当前修订候选全文结束】
 【当前候选定位目录】\n${formatQualityReviewAnchorsV1(input.candidateText)}
 现在逐字检查上方当前候选。所有定位必须来自当前候选，不得引用资料或初审中的旧句。只输出复核JSON。`
-  return request.messages
+  return [{ role: 'system', content: system }, { role: 'user', content: user }]
 }
 
 export async function parseQualityRecheckV1(input: {
