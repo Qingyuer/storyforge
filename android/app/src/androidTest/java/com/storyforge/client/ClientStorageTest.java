@@ -34,8 +34,8 @@ public class ClientStorageTest {
     @Test public void bundledAppBootsAndRetainsLocalStorageAndDatabaseAcrossWindows() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             ready(scenario);
-            evaluate(scenario, "localStorage.removeItem('storyforge-client-agreement-v1'); location.reload(); true");
-            awaitTrue(scenario, "!!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续')");
+            evaluate(scenario, "localStorage.removeItem('storyforge-client-agreement-v1'); window.__consentReloadPending = true; location.reload(); true");
+            awaitTrue(scenario, "!window.__consentReloadPending && !!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续')");
             assertEquals("true", evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').disabled && Array.from(document.querySelectorAll('input[type=checkbox]')).every(i => !i.checked)"));
             evaluate(scenario, "Array.from(document.querySelectorAll('label')).find(l => l.textContent.includes('我已阅读并同意')).querySelector('input').click(); true");
             awaitTrue(scenario, "!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').disabled");
