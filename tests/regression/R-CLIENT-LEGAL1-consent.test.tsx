@@ -19,7 +19,8 @@ const check = (index: number) => act(async () => (container.querySelectorAll('in
 it('gates the editor with one offline agreement and no separate reporting controls', async () => {
   const fetcher = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
   await render(); expect(container.querySelector('[data-editor]')).toBeNull()
-  expect(container.querySelectorAll('details')).toHaveLength(1)
+  expect(container.querySelectorAll('details')).toHaveLength(0)
+  expect(container.querySelectorAll('[aria-label="用户协议正文"]')).toHaveLength(1)
   expect(container.textContent).toContain('API 密钥')
   expect(container.querySelectorAll('input')).toHaveLength(1)
   expect(container.textContent).not.toContain('帮助改进软件')
