@@ -8,7 +8,7 @@
 
 ## 2026-10-15 · v4.0.1 故障反馈构建
 
-通用设置、渲染报错页和启动失败页增加摘要预览与官方反馈入口。浏览器错误刷新后保留，便携启动器记录有限启动故障与待核对中断。用户检查后才带入官网表单，表单不自动提交；作品、提示词和密钥不自动上传。操作与限制见[故障排查](/guides/troubleshooting#下载版的问题与故障反馈)。适用于 v4.0.1 及之后的便携构建；正式附件以[最新发行页](https://github.com/yuanbw2025/storyforge/releases/latest)为准；固定 v4.0.0 下载保持原样，也不等于上线启动/活跃/留存统计。
+通用设置、渲染报错页和启动失败页增加摘要预览与官方反馈入口。浏览器错误刷新后保留，便携启动器记录有限启动故障与待核对中断。用户检查后才带入官网表单，表单不自动提交；作品、提示词和密钥不自动上传。操作与限制见[故障排查](/guides/troubleshooting#下载版的问题与故障反馈)。适用于 v4.0.1 及之后的便携构建；正式附件以[最新发行页](https://github.com/yuanbw2025/storyforge/releases/latest)为准；固定 v4.0.0 下载保持原样。
 
 依据：[故障反馈实现 80e48bc9](https://github.com/yuanbw2025/storyforge/commit/80e48bc9) · [PR #144](https://github.com/yuanbw2025/storyforge/pull/144)。
 

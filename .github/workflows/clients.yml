@@ -146,6 +146,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android:
+    permissions:
+      contents: write # Read maintainer-signed APKs from the unpublished release.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
