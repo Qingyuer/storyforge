@@ -1,5 +1,5 @@
 import { _electron as electron, expect } from '@playwright/test'
-import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -16,13 +16,13 @@ const executablePath = process.platform === 'win32' ? join(installation, 'StoryF
 let app
 async function install(path) {
   if (process.platform === 'win32') execFileSync(path, ['/S', `/D=${installation}`], { timeout: 180000 })
-  else if (path.endsWith('.app')) await cp(path, join(installation, 'StoryForge.app'), { recursive: true })
+  else if (path.endsWith('.app')) execFileSync('/usr/bin/ditto', [path, join(installation, 'StoryForge.app')], { timeout: 60000 })
   else {
     const mount = join(root, 'mount')
     execFileSync('hdiutil', ['attach', path, '-nobrowse', '-mountpoint', mount], { timeout: 60000 })
     try {
       await rm(join(installation, 'StoryForge.app'), { recursive: true, force: true })
-      await cp(join(mount, 'StoryForge.app'), join(installation, 'StoryForge.app'), { recursive: true })
+      execFileSync('/usr/bin/ditto', [join(mount, 'StoryForge.app'), join(installation, 'StoryForge.app')], { timeout: 60000 })
     } finally { execFileSync('hdiutil', ['detach', mount], { timeout: 60000 }) }
   }
 }

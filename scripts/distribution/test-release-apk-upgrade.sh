@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+sha256sum release-test/*.apk | tee release-test/package-checksums.txt
 for file in release-test/*.apk; do
   "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$file" | tee "$file.certificate.txt"
   grep -q '4bc440d0734135945d9cc143bb45723fa750e1a6d03bfb9753c165e9c3c056f0' "$file.certificate.txt"

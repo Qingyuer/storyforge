@@ -8,6 +8,14 @@ const title = '原生覆盖更新验收作品'
 const text = '海风穿过旧城。作者保存的这段正文必须在覆盖更新、重启和完整备份恢复后保持不变。'
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII='
 function requireValue(value: unknown, message: string): asserts value { if (!value) throw new Error(message) }
+function differences(before: unknown, after: unknown, path = '$'): string[] {
+  if (Object.is(before, after)) return []
+  if (before && after && typeof before === 'object' && typeof after === 'object' && Array.isArray(before) === Array.isArray(after)) {
+    const left = before as Record<string, unknown>, right = after as Record<string, unknown>
+    return [...new Set([...Object.keys(left), ...Object.keys(right)])].sort().flatMap(key => differences(left[key], right[key], `${path}.${key}`)).slice(0, 10)
+  }
+  return [`${path}: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`]
+}
 async function seed() {
   requireValue(!localStorage.getItem(key), 'Test profile must be fresh')
   const created = await createWorkspace({ name: title, genres: ['other'], description: '', status: 'drafting', targetWordCount: 100000, coverImage: image }, { kind: 'novel', novelProfile: 'long', importedNovelText: text })
@@ -27,7 +35,9 @@ async function verify(restore = false, externalBackup?: ProjectExportData) {
   const before = structuredClone(stored.backup)
   const after = await exportProjectJSON(stored.projectId)
   before.exportedAt = 0; after.exportedAt = 0
-  requireValue(JSON.stringify(before) === JSON.stringify(after), 'Upgrade changed exported work data')
+  // JSON object key order is not part of the backup contract; array order and every value are.
+  const changed = differences(JSON.parse(JSON.stringify(before)), JSON.parse(JSON.stringify(after)))
+  requireValue(changed.length === 0, `Upgrade changed exported work data: ${changed.join('; ')}`)
   const root = await navigator.storage.getDirectory()
   const file = await (await root.getFileHandle('native-upgrade-storage-probe.txt')).getFile()
   requireValue(await file.text() === text, 'Upgrade lost origin-private file storage')

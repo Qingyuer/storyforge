@@ -47,7 +47,7 @@ public class ClientUpgradeTest {
                 evaluate(scenario, "window.__nativeFixtureParts.push(" + JSONObject.quote(fixture.substring(i, Math.min(i + 30000, fixture.length()))) + "); true");
             }
             evaluate(scenario, "(0,eval)(window.__nativeFixtureParts.join('')); window.__nativeFixtureParts = []; true");
-            java.io.File backupFile = new java.io.File(InstrumentationRegistry.getInstrumentation().getContext().getFilesDir(), "upgrade-backup.json");
+            java.io.File backupFile = new java.io.File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), "native-upgrade-test/backup.json");
             String operation = phase.equals("seed") ? "seed()" : "verify(false)";
             if (phase.equals("restore")) {
                 String backup = new String(java.nio.file.Files.readAllBytes(backupFile.toPath()), StandardCharsets.UTF_8);
@@ -58,6 +58,7 @@ public class ClientUpgradeTest {
             assertEquals(evaluate(scenario, "JSON.stringify(window.__nativeUpgradeResult)"), "true", evaluate(scenario, "window.__nativeUpgradeResult.ok"));
             if (phase.equals("seed")) {
                 String backup = (String) new JSONTokener(evaluate(scenario, "JSON.stringify(window.__nativeUpgradeResult.value.backup)")).nextValue();
+                java.nio.file.Files.createDirectories(backupFile.getParentFile().toPath());
                 java.nio.file.Files.write(backupFile.toPath(), backup.getBytes(StandardCharsets.UTF_8));
             }
         }
