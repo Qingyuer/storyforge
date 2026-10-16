@@ -11,6 +11,9 @@ import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevision
 import { isProseGenerationCandidateCurrentV1 } from '../../src/lib/agent/run/prose-generation-durable'
 
 const old = useAIConfigStore.getState()
+// These cases verify multi-transaction durability, not latency. Keep a bounded
+// allowance under coverage so a premature timeout cannot strand a DB operation.
+const DURABLE_TEST_TIMEOUT = 15_000
 async function seed() {
   const f = await seedCurrentWorkspace('按问题修稿', { genres: ['realism'] })
   const outlineNodeId = await db.outlineNodes.add(stampNewRecord(f.scope, 'outlineNodes', { projectId: f.scope.projectId, parentId: null, type: 'chapter', title: '签字', summary: '金额一百二十，余额三点，签字处停笔', order: 0, createdAt: 1, updatedAt: 1 }, { owner: 'work' })) as number
@@ -63,7 +66,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect((await db.chapters.get(f.chapterId))!.content).toBe('<p><strong>余额三点，金额一百二十。</strong></p><p>陈禾签下名字。</p>')
     expect(adopted.receipt?.criteria.map(item => item.id)).toContain('quality-revision.scope')
     expect(adopted.receipt?.contextManifestHashes).toContain(result.candidate!.qualityRevision!.recheckManifestHash)
-  }, 15_000) // Full durable lifecycle includes recovery, freshness and adoption transactions.
+  }, DURABLE_TEST_TIMEOUT)
 
   it('候选篡改和原稿变化都不能采纳，原作者改稿保持不变', async () => {
     const f = await seed(); const result = await runQualityRevisionV1(input(f))
@@ -73,7 +76,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     await db.chapters.update(f.chapterId, { content: f.sourceHtml + '<p>作者补写。</p>', updatedAt: Date.now() })
     await expect(adoptQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })).rejects.toThrow('过期')
     expect((await db.chapters.get(f.chapterId))!.content).toContain('作者补写')
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('越界补丁只有一次请求；复核失败保留只读预演，无候选且不循环', async () => {
     const f = await seed()
@@ -89,7 +92,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect(recovered?.draft.outputText).toContain('陈禾签下名字。')
     expect(recovered?.state).toBe('failed')
     expect(second.revise).toHaveBeenCalledTimes(1); expect(second.recheck).toHaveBeenCalledTimes(1)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('作者拒绝不改原稿，另一个作品不能读取或采纳', async () => {
     const f = await seed(); const result = await runQualityRevisionV1(input(f))
@@ -98,7 +101,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     await expect(adoptQualityRevisionV1({ scope: foreign.scope, candidate: result.candidate! })).rejects.toThrow()
     await rejectQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it.each(['unchanged', 'uncertain'] as const)('复核%s仍由作者决定，不循环重写', async status => {
     const f = await seed()
@@ -110,7 +113,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect(result.candidate?.qualityRevision?.recheck.outcomes[0].status).toBe(status)
     await adoptQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })
     expect(f.revise).toHaveBeenCalledTimes(1); expect(f.recheck).toHaveBeenCalledTimes(1)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('受保护原句在问题所在段也逐字保留；输出预算不足零模型请求', async () => {
     const f = await seed()
@@ -121,7 +124,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, maxTokens: 20000 } })
     await expect(runQualityRevisionV1(input(second))).rejects.toThrow('预算')
     expect(second.revise).not.toHaveBeenCalled(); expect(second.recheck).not.toHaveBeenCalled()
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('作者取消保留一次已收到预演，禁止复核重发；并发占用不派第二次模型调用', async () => {
     const f = await seed(); const controller = new AbortController()
@@ -129,15 +132,19 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     await expect(runQualityRevisionV1({ ...input(f), signal: controller.signal })).rejects.toThrow('停止')
     expect(f.recheck).not.toHaveBeenCalled()
     expect((await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId }))?.state).toBe('cancelled')
-    const second = await seed(); let release!: () => void
+    const second = await seed(); let release!: () => void; let entered!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
-    second.revise.mockImplementationOnce(async (_m, _c, result) => { await gate; result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '陈禾签下名字。' }] }) })
+    const started = new Promise<void>(resolve => { entered = resolve })
+    second.revise.mockImplementationOnce(async (_m, _c, result) => { entered(); await gate; result.completion = 'complete'; result.finishReason = 'stop'; return JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '陈禾签下名字。' }] }) })
     const running = runQualityRevisionV1(input(second))
-    await vi.waitFor(() => expect(second.revise).toHaveBeenCalledTimes(1))
-    await expect(runQualityRevisionV1(input(second))).rejects.toThrow('另一页面')
-    release(); await running
+    try {
+      await Promise.race([started, running.then(() => { throw new Error('修订未进入受控阶段') })])
+      expect(second.revise).toHaveBeenCalledTimes(1)
+      await expect(runQualityRevisionV1(input(second))).rejects.toThrow('另一页面')
+    } finally { release() }
+    await running
     expect(second.revise).toHaveBeenCalledTimes(1); expect(second.recheck).toHaveBeenCalledTimes(1)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('上游改变旧候选失效；备份保留原证据，导入不复活物理身份，删除副本隔离', async () => {
     const f = await seed(); const result = await runQualityRevisionV1(input(f))
@@ -153,7 +160,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     await db.works.update(f.scope.workId, { description: '作者改变场景方向', updatedAt: Date.now() })
     expect(await isProseGenerationCandidateCurrentV1(result.candidate!)).toBe(false)
     await expect(adoptQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })).rejects.toThrow()
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it('复核原响应或请求工件损坏不能靠候选内副本绕过检查', async () => {
     const f = await seed(); const result = await runQualityRevisionV1(input(f))
@@ -162,7 +169,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect(await isProseGenerationCandidateCurrentV1(result.candidate!)).toBe(false)
     await expect(adoptQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })).rejects.toThrow()
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 
   it.each(['fake-quote', 'fake-anchor', 'wrong-id', 'truncated'] as const)('复核%s保留原响应与已收到账单，不产生可采纳候选', async failure => {
     const f = await seed()
@@ -177,5 +184,5 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect(f.revise).toHaveBeenCalledTimes(1); expect(f.recheck).toHaveBeenCalledTimes(1)
     expect((await db.agentRunArtifacts.toArray()).some(row => row.content?.includes('quality-recheck-received-v1'))).toBe(true)
     expect((await db.agentRunEvents.toArray()).filter(row => row.type === 'budget.settled')).toHaveLength(2)
-  })
+  }, DURABLE_TEST_TIMEOUT)
 })
