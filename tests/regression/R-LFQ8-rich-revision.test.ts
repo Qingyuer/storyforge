@@ -16,6 +16,22 @@ async function setup(sourceHtml: string, quote: string, protectedQuotes: string[
 }
 
 describe('LFQ8 · 富文本范围修订', () => {
+  it.each([
+    ['<p><strong>绳索总长八米。</strong></p><p></p><p>多余总结。</p>', '绳索总长八米。'],
+    ['<p><strong>绳索总长八米。</strong></p><p></p><p>多余总结。</p><p></p><p>两人撤回。</p>', '绳索总长八米。\n\n两人撤回。'],
+  ])('删除末段或相邻空段中的完整段落时按既有文字投影验范围：%s', async (html, expectedText) => {
+    const sourceHtml = normalizeRichEditorHTMLV1(html)
+    const plan = await setup(sourceHtml, '多余总结。')
+    const result = await previewQualityRevisionHTMLV1({ sourceHtml, plan, raw: JSON.stringify({ edits: [{ spanId: plan.allowedSpans[0].id, replacement: '' }] }), normalize: normalizeRichEditorHTMLV1 })
+    expect(result.outputText).toBe(expectedText)
+    expect(result.outputText).toBe(htmlToPlainText(result.contentHtml))
+    expect(result.contentHtml).toContain('<strong>绳索总长八米。</strong>')
+    expect(result.contentHtml).not.toContain('多余总结。')
+    expect(result.contentHtml).toBe(normalizeRichEditorHTMLV1(result.contentHtml))
+    expect(sourceHtml).toContain('多余总结。')
+    await expect(previewQualityRevisionHTMLV1({ sourceHtml, plan, raw: JSON.stringify({ edits: [{ spanId: 'p1.1', replacement: '绳索变为八十米。' }] }), normalize: normalizeRichEditorHTMLV1 })).rejects.toThrow('授权')
+  })
+
   it('未选段落的字色、加粗与链接不变，保护文字扣除；模型HTML作为字面文本', async () => {
     const sourceHtml = '<p style="color: red"><strong>余额三点。</strong><a href="https://example.com">查看约定</a></p><p>她签下名字。<em>正文到此结束。</em></p><p>下一章暂未写。</p>'
     const plan = await setup(sourceHtml, '正文到此结束。', ['她签下名字。'])

@@ -1,19 +1,19 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 
-async function setup(page: Page) {
+async function setup(page: Page, includeSummary = false) {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://quality-revision.invalid/v1', model: 'quality-revision-test', maxTokens: 4000, temperature: 0, contextWindow: 128000 })))
   await createLongform(page, '作者选题修订')
-  const target = await page.evaluate(async () => {
+  const target = await page.evaluate(async includeSummary => {
     const imp = new Function('path', 'return import(path)')
     const [{ db }, { resolveScope, stampNewRecord }, { normalizeRichEditorHTMLV1 }] = await Promise.all([imp('/storyforge/src/lib/db/schema.ts'), imp('/storyforge/src/lib/workspace/scope.ts'), imp('/storyforge/src/lib/editor/rich-editor-schema.ts')])
     const project = await db.projects.toCollection().first(); const scope = await resolveScope({ projectId: project.id })
     const root = { projectId: project.id, createdAt: Date.now(), updatedAt: Date.now() }
     const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', { ...root, type: 'chapter', parentId: null, title: '签字', summary: '保留余额三点、金额一百二十，签字处停笔', order: 0 }, { owner: 'work' }))
-    const sourceHtml = normalizeRichEditorHTMLV1('<p><strong>余额三点，金额一百二十。</strong></p><p>陈禾签下名字，正文到此结束。</p>')
+    const sourceHtml = normalizeRichEditorHTMLV1('<p><strong>余额三点，金额一百二十。</strong></p><p>陈禾签下名字，正文到此结束。</p>' + (includeSummary ? '<p>这是多余的总结段。</p>' : ''))
     const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', { ...root, outlineNodeId, title: '签字', content: sourceHtml, wordCount: 32, order: 0, status: 'draft', notes: '' }, { owner: 'work' }))
     return { projectId: project.id, chapterId, outlineNodeId, sourceHtml }
-  })
+  }, includeSummary)
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
   await page.locator('[data-workspace-ready=longform]').waitFor()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
@@ -21,19 +21,19 @@ async function setup(page: Page) {
   return target
 }
 
-function mock(page: Page, state: { calls: any[]; gate?: Promise<void> }, recheckFails = false) {
+function mock(page: Page, state: { calls: any[]; gate?: Promise<void>; removeWholeParagraph?: boolean }, recheckFails = false) {
   return page.route('https://quality-revision.invalid/**', async route => {
     const body = route.request().postDataJSON(); state.calls.push(body)
     const system = body.messages[0].content
     let report: any
-    if (system.includes('你只能替换允许范围')) { await state.gate; report = { edits: [{ spanId: 'p2.1', replacement: '陈禾签下名字。' }] } }
+    if (system.includes('你只能替换允许范围')) { await state.gate; report = { edits: [{ spanId: state.removeWholeParagraph ? 'p3.1' : 'p2.1', replacement: state.removeWholeParagraph ? '' : '陈禾签下名字。' }] } }
     else if (system.includes('本轮只复核一次')) {
       if (recheckFails) return route.fulfill({ status: 503, body: '复核暂时不可用' })
       const text = body.messages[1].content
       const match = text.match(/【冻结计划 [^\n]+】\n([^\n]+)/)!
       const issueId = JSON.parse(match[1])[0].id
       report = { review: { summary: '保留事实和签字，任务说明移除', strengths: ['自然停笔'], issues: [] }, outcomes: [{ issueId, status: 'improved', anchorId: 'p2-1', reason: '保留签字且不再插入任务说明' }] }
-    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: 'p2-1', reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
+    } else report = { summary: '结尾有任务说明', strengths: ['保留金额与余额'], issues: [{ dimension: 'voice', confidence: 'suggestion', anchorId: state.removeWholeParagraph ? 'p3-1' : 'p2-1', reason: '写作任务语言混入正文', suggestion: '移除说明，保留签字事件' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(report) }, finish_reason: 'stop' }] }) })
   })
 }
@@ -68,6 +68,30 @@ test('作者勾选问题→范围修订→一次复核→刷新对照→正式�
   expect(saved).toBe('<p><strong>余额三点，金额一百二十。</strong></p><p>陈禾签下名字。</p>')
   await page.reload()
   await expect(page.locator('.tiptap-editor')).toContainText('陈禾签下名字。')
+  expect(state.calls).toHaveLength(3)
+})
+
+test('删除完整末段后复核、刷新和采纳可用，未选原文与加粗不变', async ({ page }) => {
+  const state = { calls: [] as any[], removeWholeParagraph: true }
+  await mock(page, state)
+  const target = await setup(page, true)
+  await page.getByRole('button', { name: '开始检测', exact: true }).click()
+  await expect(page.getByTestId('whole-chapter-quality-report')).toContainText('结尾有任务说明')
+  await page.getByRole('checkbox', { name: '处理第3段问题', exact: true }).check()
+  await page.getByRole('button', { name: '生成修订并复核', exact: true }).click()
+  await expect(page.getByTestId('quality-revision-preview')).toContainText('模型认为已有改善')
+  await expect(page.locator('.tiptap-editor')).toContainText('这是多余的总结段。')
+  await page.reload()
+  await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await expect(page.getByTestId('quality-revision-preview')).toContainText('模型认为已有改善')
+  await page.getByRole('button', { name: '确认采纳修订', exact: true }).click()
+  await expect(page.locator('.tiptap-editor')).not.toContainText('这是多余的总结段。')
+  await expect(page.locator('.tiptap-editor')).toContainText('陈禾签下名字，正文到此结束。')
+  await expect(page.locator('.tiptap-editor strong')).toHaveText('余额三点，金额一百二十。')
+  const saved = await page.evaluate(async id => { const { db } = await import('/storyforge/src/lib/db/schema.ts'); return (await db.chapters.get(id)).content }, target.chapterId)
+  expect(saved).toContain('<p>陈禾签下名字，正文到此结束。</p>')
+  await page.reload()
+  await expect(page.locator('.tiptap-editor')).not.toContainText('这是多余的总结段。')
   expect(state.calls).toHaveLength(3)
 })
 

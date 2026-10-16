@@ -1,4 +1,4 @@
-import { htmlToPlainText } from '../utils/html'
+import { htmlToPlainText, plainTextToHtml } from '../utils/html'
 import { applyQualityRevisionPatchesV1, type QualityRevisionPlanV1 } from './quality-revision'
 
 interface Point { node: Node; offset: number }
@@ -64,6 +64,11 @@ export async function previewQualityRevisionHTMLV1(input: {
     range.insertNode(fragment)
   }
   const contentHtml = input.normalize ? input.normalize(root.innerHTML) : root.innerHTML
-  if (htmlToPlainText(contentHtml) !== result.outputText) throw new Error('富文本预演超出了授权文字范围。')
-  return { contentHtml, ...result }
+  const outputText = htmlToPlainText(contentHtml)
+  // Removing an entire paragraph can leave leading/trailing or adjacent blank
+  // blocks. Compare with the same text projection used for the source, without
+  // relaxing the patch scope or changing any unselected visible text.
+  const expectedText = htmlToPlainText(plainTextToHtml(result.outputText))
+  if (outputText !== expectedText) throw new Error('富文本预演超出了授权文字范围。')
+  return { ...result, contentHtml, outputText }
 }

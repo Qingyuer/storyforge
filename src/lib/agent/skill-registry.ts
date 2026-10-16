@@ -3051,7 +3051,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '作者选题的范围修订',
     owner: 'prose-agent',
-    promptVersion: 'quality-revision-patches-v2',
+    promptVersion: 'quality-revision-patches-v3',
     executionMode: 'quality-revise',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

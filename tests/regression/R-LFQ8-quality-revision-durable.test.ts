@@ -63,7 +63,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     expect((await db.chapters.get(f.chapterId))!.content).toBe('<p><strong>余额三点，金额一百二十。</strong></p><p>陈禾签下名字。</p>')
     expect(adopted.receipt?.criteria.map(item => item.id)).toContain('quality-revision.scope')
     expect(adopted.receipt?.contextManifestHashes).toContain(result.candidate!.qualityRevision!.recheckManifestHash)
-  })
+  }, 15_000) // Full durable lifecycle includes recovery, freshness and adoption transactions.
 
   it('候选篡改和原稿变化都不能采纳，原作者改稿保持不变', async () => {
     const f = await seed(); const result = await runQualityRevisionV1(input(f))
