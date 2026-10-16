@@ -1,6 +1,7 @@
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../../src/lib/export/json-export'
 import { db } from '../../src/lib/db/schema'
+import { useWorldRulesStore } from '../../src/stores/world-rules'
 
 // Injected by native tests only. Never included in the application bundle.
 const key = 'storyforge-native-upgrade-fixture'
@@ -19,6 +20,9 @@ function differences(before: unknown, after: unknown, path = '$'): string[] {
 async function seed() {
   requireValue(!localStorage.getItem(key), 'Test profile must be fresh')
   const created = await createWorkspace({ name: title, genres: ['other'], description: '', status: 'drafting', targetWordCount: 100000, coverImage: image }, { kind: 'novel', novelProfile: 'long', importedNovelText: text })
+  // WorkspacePage initializes this empty profile on first entry. Include it in
+  // the baseline instead of treating normal first-entry initialization as loss.
+  await useWorldRulesStore.getState().loadProfile(created.scope)
   const backup = await exportProjectJSON(created.scope.projectId)
   requireValue(JSON.stringify(backup).includes(text), 'Production export omitted manuscript')
   requireValue(JSON.stringify(backup).includes(image), 'Production export omitted cover')
