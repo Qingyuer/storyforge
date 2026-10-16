@@ -42,8 +42,14 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
 
   it('一次修订加一次复核，原稿与加粗不变；恢复后作者采纳才正式写回，禁止同轮重复调用', async () => {
     const f = await seed()
-    const result = await runQualityRevisionV1(input(f))
+    const result = await runQualityRevisionV1({ ...input(f), authorRequest: '保留签字，只移除任务说明' })
     expect(f.revise).toHaveBeenCalledTimes(1); expect(f.recheck).toHaveBeenCalledTimes(1)
+    const writerMessages = f.revise.mock.calls[0][0] as { content: string }[]
+    const checkerMessages = f.recheck.mock.calls[0][0] as { content: string }[]
+    expect(writerMessages[1].content).toContain(JSON.stringify(f.review.report.strengths))
+    expect(checkerMessages[1].content).toContain(JSON.stringify(f.review.report.strengths))
+    expect(writerMessages[1].content).toContain('保留签字，只移除任务说明')
+    expect(checkerMessages[1].content).toContain('保留签字，只移除任务说明')
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
     expect(result.state).toBe('awaiting_confirmation')
     expect(result.candidate?.operation).toBe('quality-revise')

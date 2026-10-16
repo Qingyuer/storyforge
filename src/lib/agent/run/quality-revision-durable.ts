@@ -9,7 +9,7 @@ import { normalizeRichEditorHTMLV1 } from '../../editor/rich-editor-schema'
 import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import { captureWorkspaceContentRevisionV1, assertWorkspaceContentRevisionFreshV1 } from '../../authoring/content-revision'
 import { prepareProseGatewayAssemblyV1 } from '../../prose/gateway-context'
-import { freezeQualityRevisionPlanV1, type QualityRevisionPlanV1 } from '../../prose/quality-revision'
+import { buildQualityRevisionRequestV1, freezeQualityRevisionPlanV1, QUALITY_REVISION_PROMPT_VERSION_V1, type QualityRevisionPlanV1 } from '../../prose/quality-revision'
 import { previewQualityRevisionHTMLV1 } from '../../prose/quality-revision-html'
 import { buildQualityRecheckRequestV1, parseQualityRecheckV1 } from '../../prose/quality-recheck'
 import { QUALITY_RECHECK_STEP_V1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
@@ -77,6 +77,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   const revision = await captureWorkspaceContentRevisionV1({ scope: input.scope, worldGroupId: input.worldGroupId })
   const boundary = await buildChapterInformationBoundaryV1({ scope: input.scope, chapterId: input.chapterId, outlineNodeId: input.outlineNodeId, worldGroupId: input.worldGroupId, perspectiveCharacterId: chapter.perspectiveCharacterId ?? null })
   const writer = getAgentSkillV1('prose.quality-revise', 'prose')
+  if (writer.promptVersion !== QUALITY_REVISION_PROMPT_VERSION_V1) throw new Error('范围修订 Skill 与请求版本不一致。')
   const checker = getAgentSkillV1('prose.quality-recheck', 'prose')
   const writerBinding = await createAgentSkillExecutionBindingV2(writer, { optionalContextActivations: [], writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'], mode: 'author-confirmed' }] })
   const checkerBinding = await createAgentSkillExecutionBindingV2(checker, { optionalContextActivations: [], writeTargets: [] })
@@ -84,10 +85,7 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
   const settings = describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' })
   if (resolution.config.maxTokens > writer.maxOutputTokens) throw new Error('修订输出上限超过本轮预算。')
   const assembly = await prepareProseGatewayAssemblyV1({ ...input, projectId: input.scope.projectId, operation: 'revise', qualityRevision: true, authorRequest: `只处理作者选中的问题，保留保护文字、其它段落和停笔位置。${plan.authorRequest ? `\n${plan.authorRequest}` : ''}`, config: resolution.config, allowOutlineOnlyAgentDraft: true })
-  const messages: ChatMessage[] = [
-    { role: 'system', content: `只处理作者明确选中的阅读问题。你只能替换允许范围，不能修改保护文字、其它段落、人物事实、奖励与停笔位置。不要额外改写全文，也不要把范围或任务说明写进小说。输出单个JSON：{"edits":[{"spanId":"允许范围的id","replacement":"该范围的替换文字，可为空以删除"}]}。每个spanId最多一次，总替换字符不超过${plan.maxReplacementChars}。` },
-    { role: 'user', content: `【完整原稿】\n${originalText}\n【作者选中的问题】\n${JSON.stringify(review.report.issues.filter(issue => plan.issueIds.includes(issue.id)))}\n【允许替换的文字范围】\n${JSON.stringify(plan.allowedSpans)}\n【保护文字】\n${JSON.stringify(plan.protectedQuotes)}\n【登记资料与作者要求】\n${assembly.text}${plan.authorRequest ? `\n【本轮作者补充要求 · 只适用于已授权范围】\n${plan.authorRequest}` : ''}` },
-  ]
+  const messages = buildQualityRevisionRequestV1({ plan, report: review.report, originalText, registeredContext: assembly.text })
   const base = await buildProseGenerationRunContractV3({ projectId: input.scope.projectId, worldGroupId: input.worldGroupId, chapterId: input.chapterId, operation: 'quality-revise', generationBinding: writerBinding, formalEntry: await freezeFormalAIEntryBindingV1('prose.chapter.quality-revise') })
   const contract: AgentRunContractV3 = { ...base, objective: `定向修订章节 #${input.chapterId}，报告 ${input.reportHash}，一次修订与一次复核后等待作者`, runtimeBindingHash: plan.planHash,
     executionBindings: [...base.executionBindings, { stepId: QUALITY_RECHECK_STEP_V1, ...checkerBinding, formalEntry: await freezeFormalAIEntryBindingV1('prose.review.recheck') }],

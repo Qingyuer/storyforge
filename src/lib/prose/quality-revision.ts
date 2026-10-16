@@ -1,6 +1,9 @@
 import type { ChatMessage, WorkspaceScope } from '../types'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { verifyWholeChapterQualityReviewV1, type QualityReviewArtifactV1 } from './quality-review'
+import { SCENE_REVISION_GUIDANCE_V1 } from './scene-craft'
+
+export const QUALITY_REVISION_PROMPT_VERSION_V1 = 'quality-revision-patches-v2'
 
 export interface QualityRevisionSpanV1 {
   id: string
@@ -27,6 +30,21 @@ export interface QualityRevisionPlanV1 {
   budget: { previousCalls: number; maxTotalCalls: 4; maxRevisionCalls: 1; maxRecheckCalls: 1 }
   maxReplacementChars: number
   planHash: string
+}
+
+/** The same frozen author selection and original strengths reach the writer. */
+export function buildQualityRevisionRequestV1(input: {
+  plan: QualityRevisionPlanV1
+  report: QualityReviewArtifactV1
+  originalText: string
+  registeredContext: string
+}): ChatMessage[] {
+  if (input.report.artifactHash !== input.plan.reportHash) throw new Error('修订的初审报告与冻结计划不一致。')
+  const { plan, report } = input
+  return [
+    { role: 'system', content: `范围修订契约：${QUALITY_REVISION_PROMPT_VERSION_V1}。\n只处理作者明确选中的阅读问题。你只能替换允许范围，不能修改保护文字、其它段落、人物事实、奖励与停笔位置。不要额外改写全文，也不要把范围或任务说明写进小说。\n${SCENE_REVISION_GUIDANCE_V1}\n输出单个JSON：{"edits":[{"spanId":"允许范围的id","replacement":"该范围的替换文字，可为空以删除"}]}。每个spanId最多一次，总替换字符不超过${plan.maxReplacementChars}。` },
+    { role: 'user', content: `【完整原稿】\n${input.originalText}\n【作者选中的问题】\n${JSON.stringify(report.issues.filter(issue => plan.issueIds.includes(issue.id)))}\n【初审保留点 · 编辑建议，不是新增事实】\n${JSON.stringify(report.strengths)}\n【允许替换的文字范围】\n${JSON.stringify(plan.allowedSpans)}\n【保护文字】\n${JSON.stringify(plan.protectedQuotes)}\n【登记资料与作者要求】\n${input.registeredContext}${plan.authorRequest ? `\n【本轮作者补充要求 · 只适用于已授权范围】\n${plan.authorRequest}` : ''}` },
+  ]
 }
 
 function paragraphs(text: string): QualityRevisionSpanV1[] {

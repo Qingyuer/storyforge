@@ -15,7 +15,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify(root) })).rejects.toThrow('引文')
     const raw = JSON.stringify({ ...root, issues: [issue('余额变成八点。', null, null)] })
     const current = await parseWholeChapterQualityReviewV1({ ...base, raw })
-    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v4')
+    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v5')
     expect(current.issues[0].paragraph).toBe(2)
     const old = await parseWholeChapterQualityReviewV1({ ...base, raw, promptVersion: 'whole-chapter-quality-review-v3' })
     expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)

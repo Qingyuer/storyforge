@@ -7,6 +7,7 @@ import {
 } from '../chapter-memory/continuity-envelope'
 import { appendSimplifiedChineseOutputConstraint } from './prompt-guards'
 import { proseLengthExpectationV1 } from '../../prose/length-observation'
+import { SCENE_EXECUTION_GUIDANCE_V1 } from '../../prose/scene-craft'
 
 export interface RunOptions {
   parameterValues?: Record<string, unknown>
@@ -90,6 +91,7 @@ function buildContinuityEnvelope(args: {
   }
   parts.push(
     '连续性执行协议：核对已发生事实、禁令与人物认知，按章纲和场景规定的次序安排目标、行动、选择与兑现；后段重点保留在对应场景，不提前结算奖励。缓冲、留白与悬念以作者任务为准，不强制每段发生冲突。规划的退出状态与奖励不代表已经发生。',
+    SCENE_EXECUTION_GUIDANCE_V1,
     '篇幅纪律：优先完成本章任务终点与全部硬约束，再补充氛围和细节；不得在关键动作完成前耗尽篇幅。',
     '以上内容是最低连续性约束；不得用未来章或其他世界资料覆盖。',
     CONTINUITY_CORE_END,
