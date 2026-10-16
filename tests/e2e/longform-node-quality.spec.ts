@@ -53,8 +53,12 @@ test('节点全文审校→共享选题修订→刷新→采纳，分步骤回�
   await page.getByRole('button', { name: '查看问题并修订本章', exact: true }).click()
   await expect(page.getByTestId('whole-chapter-quality-report')).toContainText('结尾混入任务说明')
   await page.getByRole('checkbox', { name: '处理第2段问题', exact: true }).check()
+  const revisionRequest = '保留签字和金额，仅移除选中段的任务说明。'
+  await page.getByRole('textbox', { name: '本轮修稿要求', exact: true }).fill(revisionRequest)
   await page.getByRole('button', { name: '生成修订并复核', exact: true }).click()
   await expect(page.getByTestId('quality-revision-preview')).toContainText('模型认为已有改善')
+  expect(calls[1].messages[1].content).toContain(revisionRequest)
+  expect(calls[2].messages[1].content).toContain(revisionRequest)
   expect(await page.evaluate(async id => { const imp = new Function('p', 'return import(p)'); const { db } = await imp('/storyforge/src/lib/db/schema.ts'); return (await db.chapters.get(id)).content }, target.chapterId)).toBe(target.sourceHtml)
   await page.getByRole('button', { name: '确认采纳修订', exact: true }).click()
   await expect(page.getByTestId('quality-revision-preview')).toContainText('已采纳，记录只读')

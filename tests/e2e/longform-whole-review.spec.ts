@@ -32,6 +32,8 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
   const target = await setup(page)
   for (const mode of ['审校', '表达与重复', '追读力']) {
     await page.getByRole('button', { name: mode, exact: true }).click()
+    const authorRequest = `本轮${mode}：检查结尾付款依据，保留安静清点。`
+    await page.getByRole('textbox', { name: '本轮评审补充要求', exact: true }).fill(authorRequest)
     await page.getByRole('button', { name: '开始检测', exact: true }).click()
     const report = page.getByTestId('whole-chapter-quality-report')
     await expect(report).toContainText('付款过程需要核对')
@@ -42,8 +44,11 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
     expect(requests[requests.length - 1].messages[1].content).toContain(original)
     expect(requests[requests.length - 1].messages[1].content).toContain('【正文结束】')
     expect(requests[requests.length - 1].messages[1].content).toContain('"anchorId":"p2-1"')
+    expect(requests[requests.length - 1].messages[1].content).toContain(authorRequest)
   }
   expect(requests).toHaveLength(3)
+  await page.getByRole('button', { name: '审校', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: '本轮评审补充要求', exact: true })).toHaveValue('本轮审校：检查结尾付款依据，保留安静清点。')
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await page.getByRole('button', { name: '审校', exact: true }).click()

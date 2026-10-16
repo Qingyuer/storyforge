@@ -119,6 +119,11 @@ export default function ReviewPanel(props: Props) {
     return () => { active = false; unsubscribe?.() }
   }, [projectId, worldGroupId])
   const mode: QualityReviewModeV1 = activeTab === 'antiAI' ? 'style' : activeTab === 'readability' ? 'readability' : 'quality'
+  const reviewRequestKey = `${projectId}:${chapterId}:${mode}`
+  const reviewRequestSource = props.qualityAuthorRequest ?? ''
+  const [reviewRequests, setReviewRequests] = useState<Record<string, { source: string; text: string }>>({})
+  const reviewRequestDraft = reviewRequests[reviewRequestKey]
+  const reviewAuthorRequest = reviewRequestDraft?.source === reviewRequestSource ? reviewRequestDraft.text : reviewRequestSource
   const [selectedIssues, setSelectedIssues] = useState<string[]>([])
   const [extraParagraphs, setExtraParagraphs] = useState<number[]>([])
   const [protectedText, setProtectedText] = useState('')
@@ -126,6 +131,9 @@ export default function ReviewPanel(props: Props) {
   const [revisionBusy, setRevisionBusy] = useState(false)
   const [revisionError, setRevisionError] = useState('')
   const selectedReportHash = qualityReports[mode]?.report.artifactHash
+  const revisionRequestKey = `${reviewRequestKey}:${selectedReportHash ?? ''}`
+  const [revisionRequests, setRevisionRequests] = useState<Record<string, string>>({})
+  const revisionAuthorRequest = revisionRequests[revisionRequestKey] ?? ''
   useEffect(() => { setSelectedIssues([]); setExtraParagraphs([]); setProtectedText('') }, [chapterId, selectedReportHash])
   useEffect(() => {
     if (revisionBusy) return
@@ -161,7 +169,7 @@ export default function ReviewPanel(props: Props) {
       if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
       const result = await runWholeChapterQualityReviewV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode,
-        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: props.qualityAuthorRequest, signal: controller.signal,
+        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: reviewAuthorRequest, signal: controller.signal,
         call: createWholeChapterQualityCallV1(projectId, mode, controller.signal),
       })
       if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityReports(value => ({ ...value, [mode]: result }))
@@ -224,7 +232,7 @@ export default function ReviewPanel(props: Props) {
       await props.onBeforeConsistencyRun?.()
       if (qualityTarget.current !== target || controller.signal.aborted) return
       const scope = await resolveScopeLike(projectId)
-      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), signal: controller.signal, configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides,
+      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), authorRequest: revisionAuthorRequest, signal: controller.signal, configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides,
         revise: createQualityRevisionCallV1(projectId, 'revision', controller.signal),
         recheck: createQualityRevisionCallV1(projectId, 'recheck', controller.signal),
       })
@@ -284,6 +292,9 @@ export default function ReviewPanel(props: Props) {
 
       {/* 内容区 */}
       <div className="p-4 max-h-[50vh] overflow-y-auto">
+        {activeTab !== 'consistency' && <label className="mb-3 block text-xs">本轮评审补充要求（可选）
+          <textarea aria-label="本轮评审补充要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={reviewAuthorRequest} disabled={qualityRunning || revisionBusy} placeholder="写下你担心的问题、评审重点或希望保留的写法。" onChange={event => setReviewRequests(value => ({ ...value, [reviewRequestKey]: { source: reviewRequestSource, text: event.target.value } }))} />
+        </label>}
         {activeTab === 'consistency' && (
           <div className="mb-3 flex gap-2">
             {([
@@ -359,6 +370,9 @@ export default function ReviewPanel(props: Props) {
             <p className="text-sm font-medium">按选中问题修稿</p>
             <p className="text-xs text-text-muted">默认只允许修改问题所在段落。你可以增加相关段落，并保护要保留的原句；本轮再调用最多两次模型，先看修订与复核结果，再确认写回。</p>
             <QualityRevisionScopeControls chapterText={chapterContent} extraParagraphs={extraParagraphs} protectedText={protectedText} disabled={revisionBusy} setExtraParagraphs={setExtraParagraphs} setProtectedText={setProtectedText} />
+            <label className="block text-xs">本轮修稿要求（可选）
+              <textarea aria-label="本轮修稿要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={revisionAuthorRequest} disabled={revisionBusy || qualityRunning} placeholder="说明选中问题要怎样修改，以及要保留的动作、人物表达或收尾。" onChange={event => setRevisionRequests(value => ({ ...value, [revisionRequestKey]: event.target.value }))} />
+            </label>
             <button className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" disabled={revisionBusy || qualityRunning || !selectedIssues.length} onClick={() => void handleRevision()}>{revisionBusy ? '修订与复核中…' : '生成修订并复核'}</button>
           </div>}
         </>}

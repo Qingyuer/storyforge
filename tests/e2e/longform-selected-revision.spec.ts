@@ -38,28 +38,39 @@ function mock(page: Page, state: { calls: any[]; gate?: Promise<void>; removeWho
   })
 }
 
-async function reviewAndRevise(page: Page) {
+async function reviewAndRevise(page: Page, requests: { review?: string; revision?: string } = {}) {
+  if (requests.review) await page.getByRole('textbox', { name: '本轮评审补充要求', exact: true }).fill(requests.review)
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByTestId('whole-chapter-quality-report')).toContainText('结尾有任务说明')
   await page.getByRole('checkbox', { name: '处理第2段问题', exact: true }).check()
+  if (requests.revision) await page.getByRole('textbox', { name: '本轮修稿要求', exact: true }).fill(requests.revision)
   await page.getByRole('button', { name: '生成修订并复核', exact: true }).click()
 }
 
 test('作者勾选问题→范围修订→一次复核→刷新对照→正式采纳，原稿格式和预算真实生效', async ({ page }) => {
   const state = { calls: [] as any[] }; await mock(page, state)
   const target = await setup(page)
-  await reviewAndRevise(page)
+  const reviewRequest = '核对结尾任务说明，保留签字事件和当前金额。'
+  const revisionRequest = '只移除选中段的任务说明，保留签字动作和第一段加粗。'
+  await reviewAndRevise(page, { review: reviewRequest, revision: revisionRequest })
   const preview = page.getByTestId('quality-revision-preview')
   await expect(preview).toContainText('模型认为已有改善')
   await expect(page.locator('.tiptap-editor')).toContainText('正文到此结束')
   expect(state.calls).toHaveLength(3)
+  expect(state.calls[0].messages[1].content).toContain(reviewRequest)
   state.calls.forEach(body => { expect(body.stream).toBe(false); expect(body.response_format).toEqual({ type: 'json_object' }) })
   expect(state.calls[1].messages[1].content).toContain('余额三点，金额一百二十。')
   expect(state.calls[1].messages[1].content).toContain('保留金额与余额')
   expect(state.calls[2].messages[1].content).toContain('保留金额与余额')
+  expect(state.calls[1].messages[1].content).toContain(revisionRequest)
+  expect(state.calls[2].messages[1].content).toContain(revisionRequest)
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await expect(page.getByTestId('quality-revision-preview')).toContainText('模型认为已有改善')
+  await page.getByText('这份报告使用的作者要求', { exact: true }).click()
+  await expect(page.getByTestId('whole-chapter-quality-report').getByText(reviewRequest, { exact: true })).toBeVisible()
+  await page.getByText('这次修订使用的作者要求', { exact: true }).click()
+  await expect(page.getByTestId('quality-revision-preview').getByText(revisionRequest, { exact: true })).toBeVisible()
   expect(state.calls).toHaveLength(3)
   await page.getByRole('button', { name: '确认采纳修订', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).not.toContainText('正文到此结束')
