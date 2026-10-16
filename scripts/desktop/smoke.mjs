@@ -19,11 +19,11 @@ try {
   const consent = page.getByRole('button', { name: '同意协议并继续', exact: true })
   await consent.waitFor()
   assert.equal(await consent.isDisabled(), true)
-  assert.equal(await page.getByLabel('分享日常使用情况', { exact: true }).isChecked(), false)
-  assert.equal(await page.getByLabel('自动发送故障报告', { exact: true }).isChecked(), false)
+  assert.equal(await page.getByRole('checkbox').count(), 1)
+  assert.equal(await page.getByText('隐私说明', { exact: true }).count(), 0)
   await page.getByText('用户协议', { exact: true }).click()
   await page.getByText('五、内容与行为规范', { exact: true }).waitFor()
-  await page.getByLabel('我已阅读并同意《用户协议》，并已阅读《隐私说明》').check()
+  await page.getByLabel('我已阅读并同意《用户协议》').check()
   await consent.click()
   await consent.waitFor({ state: 'hidden' })
   await page.evaluate(async () => {
@@ -50,7 +50,7 @@ try {
     return new Promise((resolve, reject) => { read.onsuccess = () => resolve(read.result); read.onerror = reject })
   })
   assert.equal(content, 'manuscript-probe')
-  console.log('Native window, sandbox, agreement, optional choices and stable-profile restart passed. This is not a two-version installer upgrade test.')
+  console.log('Native window, sandbox, unified agreement and stable-profile restart passed. This is not a two-version installer upgrade test.')
 } finally {
   if (app) await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
   // Chromium's Windows child processes release profile handles shortly after exit.

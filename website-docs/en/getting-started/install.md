@@ -15,7 +15,7 @@ Version 4.0.2 adds desktop installers and an Android APK. Download only the asse
 
 The Windows installer has no publisher certificate; macOS uses an ad-hoc signature without Apple notarization. The operating system may ask you to explicitly allow opening. Obtain the package from the official release and verify its checksum first; do not disable system-wide protections.
 
-Read the User Agreement and Privacy Notice at first launch. Optional usage sharing and automatic error reports start off and remain independently controllable in settings. You can submit a problem or suggestion from General settings → Problems and suggestions without enabling either option.
+Read and accept the unified User Agreement at first launch; it includes privacy and information-handling terms and remains accessible in settings. Submit a problem or suggestion from General settings → Problems and suggestions.
 
 The clients check for updates after startup. Settings also provides Check for updates, Download update, and Install update. Save edits and finish generation first. Windows runs its installer; Android requires system confirmation; macOS opens the downloaded, verified DMG so you can replace the app in Applications. Failed checks or downloads leave the existing app available.
 

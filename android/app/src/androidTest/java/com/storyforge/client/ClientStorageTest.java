@@ -41,7 +41,7 @@ public class ClientStorageTest {
             awaitTrue(scenario, "!Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').disabled");
             evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b => b.textContent === '同意协议并继续').click(); true");
             awaitTrue(scenario, "!!JSON.parse(localStorage.getItem('storyforge-client-agreement-v1'))?.acceptedAt && !Array.from(document.querySelectorAll('button')).some(b => b.textContent === '同意协议并继续')");
-            assertEquals("true", evaluate(scenario, "!JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).analytics && !JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).errors"));
+            assertEquals("true", evaluate(scenario, "JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).analytics && JSON.parse(localStorage.getItem('storyforge-client-observability-v1')).errors"));
             evaluate(scenario, "localStorage.setItem('native-client-probe', 'preserved'); window.__probe = false; var r = indexedDB.open('native-client-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('values'); r.onsuccess = () => { var t = r.result.transaction('values', 'readwrite'); t.objectStore('values').put('manuscript-probe', 'sample'); t.oncomplete = () => { r.result.close(); window.__probe = true; }; }; true");
             awaitTrue(scenario, "window.__probe === true");
             evaluate(scenario, "window.__blocked = false; fetch('http://example.com/v1').catch(() => { window.__blocked = true; }); true");

@@ -6,11 +6,9 @@ Works are stored locally in your browser or installed client. Storage is separat
 
 When you explicitly use AI, the content required for that operation is sent to the model service you configured. That provider's terms and privacy rules apply. Keep API keys in model settings and never include them in manuscripts, prompts, screenshots or feedback.
 
-## Usage and failure feedback {#in-app-feedback-and-usage-reporting-in-development}
+## Client User Agreement {#in-app-feedback-and-usage-reporting-in-development}
 
-Depending on your choices, we collect necessary usage and diagnostic information to understand daily activity, investigate software problems and improve the experience. Usage reporting and automatic diagnostics do not collect your manuscript text, prompts or API keys. You can disable these features at any time in settings. Problems and suggestions you submit are used to respond to feedback and improve the product.
-
-Both optional switches start off. Declining or disabling them does not prevent normal editing or manual feedback. The first-launch User Agreement and Privacy Notice explain the installed client; you can read them again in settings.
+The installed client uses one User Agreement, including privacy and information-handling terms. Read it at first launch or view it again in General settings.
 
 ## Feedback you submit
 
@@ -20,6 +18,6 @@ Local error summaries help troubleshoot failures. They are not complete crash du
 
 ## Website use
 
-The website processes necessary access and technical information to operate the site, maintain security and improve the experience. First-party cookies may support site operation. It does not read works or API keys stored in your creation workspace. Website operation does not automatically enable optional reporting in the installed client.
+The website processes necessary access and technical information to operate the site, maintain security and improve the experience. First-party cookies may support site operation. It does not read works or API keys stored in your creation workspace.
 
 For privacy questions or requests, contact BJxuanxiangkeji@163.com. Continue: [Backup and recovery](/en/guides/backup-restore) · [Model configuration](/en/getting-started/model-config).

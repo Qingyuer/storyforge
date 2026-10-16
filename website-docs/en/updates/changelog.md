@@ -4,7 +4,7 @@ Changes are organized by user impact. **Main-branch updates do not mean a new ve
 
 ## Version 4.0.2 · Desktop and Android clients
 
-This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus first-launch agreements, optional usage and diagnostic sharing, and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability; existing downloads remain unchanged. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
+This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus a unified first-launch User Agreement and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability; existing downloads remain unchanged. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
 
 ## October 15, 2026 · v4.0.1 failure-feedback builds
 

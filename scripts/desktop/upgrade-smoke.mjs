@@ -32,7 +32,7 @@ async function launch() {
   await page.waitForSelector('#root main, #root button', { timeout: 60000 })
   const consent = page.getByRole('button', { name: '同意协议并继续', exact: true })
   if (await consent.count()) {
-    await page.getByLabel('我已阅读并同意《用户协议》，并已阅读《隐私说明》').check()
+    await page.getByLabel('我已阅读并同意《用户协议》').check()
     await consent.click(); await consent.waitFor({ state: 'hidden' })
   }
   await page.evaluate(source => { (0, eval)(source) }, fixture)
@@ -56,7 +56,7 @@ try {
   await install(nextPackage)
   page = await launch()
   assert.equal(await app.evaluate(({ app }) => app.getVersion()), currentVersion)
-  const result = await page.evaluate(() => window.__nativeUpgrade.verify(true))
+  const result = await page.evaluate(backup => window.__nativeUpgrade.verify(true, backup), JSON.parse(await readFile(backupPath, 'utf8')))
   await page.goto(`http://localhost:17831/storyforge/workspace/${result.projectId}`)
   await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible({ timeout: 60000 })
   await expect(page.getByTitle(result.title)).toBeVisible()

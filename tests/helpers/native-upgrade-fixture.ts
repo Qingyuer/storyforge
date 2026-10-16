@@ -1,5 +1,5 @@
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../../src/lib/export/json-export'
 import { db } from '../../src/lib/db/schema'
 
 // Injected by native tests only. Never included in the application bundle.
@@ -21,7 +21,7 @@ async function seed() {
   localStorage.setItem(key, JSON.stringify({ projectId: created.scope.projectId, backup }))
   return { projectId: created.scope.projectId, title, text, backup }
 }
-async function verify(restore = false) {
+async function verify(restore = false, externalBackup?: ProjectExportData) {
   const stored = JSON.parse(localStorage.getItem(key) ?? 'null')
   requireValue(stored, 'Upgrade lost local preferences')
   const before = structuredClone(stored.backup)
@@ -36,7 +36,8 @@ async function verify(restore = false) {
     let rejected = false
     try { await importProjectJSON({ ...stored.backup, version: -1 }) } catch { rejected = true }
     requireValue(rejected && await db.projects.count() === count, 'Invalid backup created partial data')
-    const restoredId = await importProjectJSON(stored.backup)
+    requireValue(externalBackup, 'Restore must read the backup from a native file')
+    const restoredId = await importProjectJSON(externalBackup)
     requireValue(restoredId !== stored.projectId, 'Restore overwrote original work')
     const recovered = JSON.stringify(await exportProjectJSON(restoredId))
     requireValue(recovered.includes(text) && recovered.includes(image), 'Restore lost manuscript or cover')

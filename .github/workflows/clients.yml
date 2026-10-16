@@ -53,7 +53,7 @@ jobs:
       - run: npm ci
       - run: npm run build:portable -- --outDir dist-client-verification
       - run: npx playwright install --with-deps chromium
-      - name: Verify packaged startup agreement and optional reporting
+      - name: Verify unified packaged startup agreement
         run: npx playwright test --config playwright.clients.config.ts
       - uses: actions/upload-artifact@v4
         if: failure()
