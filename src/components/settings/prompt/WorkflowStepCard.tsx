@@ -32,6 +32,7 @@ interface Props {
   onOutputChange: (value: string) => void
   saved: boolean
   hasProject: boolean
+  experimental?: boolean
   actionsDisabled?: boolean
 }
 
@@ -48,6 +49,7 @@ export function WorkflowStepCard({
   saved,
   hasProject,
   actionsDisabled = false,
+  experimental = false,
 }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -63,6 +65,10 @@ export function WorkflowStepCard({
     })
   }
 
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([editedOutput], { type: 'text/plain;charset=utf-8' }))
+    const link = document.createElement('a'); link.href = url; link.download = `storyforge-draft-${step.stepId}.txt`; link.click(); URL.revokeObjectURL(url)
+  }
   const statusIcon = {
     pending: <ChevronRight className="w-4 h-4 text-text-muted" />,
     running: <Loader2 className="w-4 h-4 text-accent animate-spin" />,
@@ -153,13 +159,14 @@ export function WorkflowStepCard({
                     {copied ? <Check className="w-3 h-3 text-success" /> : <ClipboardCopy className="w-3 h-3" />}
                     {copied ? '已复制' : '复制'}
                   </button>
+                  <button onClick={download} className="text-xs text-text-secondary">导出草稿</button>
                   {step.saveTarget && (
                     <>
                       <span className="text-text-muted">·</span>
                       <button
                         onClick={() => onSave(editedOutput, step.saveTarget!)}
                         disabled={saved || !hasProject || actionsDisabled}
-                        title={!hasProject ? '需先进入项目' : `自动写入 ${targetLabel(step.saveTarget)}`}
+                        title={!hasProject ? '需先进入项目' : experimental ? '通过词条库提取候选，确认后才能写入' : `自动写入 ${targetLabel(step.saveTarget)}`}
                         className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${
                           saved
                             ? 'bg-success/15 text-success'
@@ -169,7 +176,8 @@ export function WorkflowStepCard({
                         }`}
                       >
                         {saved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
-                        {saved ? `已存到 ${targetLabel(step.saveTarget)}` : `保存到 ${targetLabel(step.saveTarget)}`}
+                        {experimental ? '提取为设定候选' : saved ? `已存到 ${targetLabel(step.saveTarget)}` : `保存到 ${targetLabel(step.saveTarget)}`}
+
                       </button>
                     </>
                   )}
