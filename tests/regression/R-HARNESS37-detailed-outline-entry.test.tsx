@@ -319,6 +319,10 @@ describe.sequential('R-HARNESS37 · 章节页场景细纲 Agent/Harness 收口',
     const host = await mountScenePanel(fixture)
     await waitUntil(() => !host.querySelector<HTMLElement>('[title="AI 一键拆场景"]')!.className.includes('pointer-events-none'))
     await act(async () => { host.querySelector<HTMLElement>('[title="AI 一键拆场景"]')!.click() })
+    await waitUntil(async () => {
+      const run = await db.agentRuns.orderBy('id').last()
+      return !!run?.id && (await readAgentRunV1(fixture.scope, run.id)).projection.state === 'awaiting_confirmation'
+    })
     await waitUntil(() => !!host.querySelector('[data-testid="dismiss-detail"]'))
     const reject = vi.spyOn(detailedRun, 'rejectDetailedOutlineGenerationCandidateV1')
       .mockRejectedValueOnce(new Error('隔离拒绝保存失败'))
