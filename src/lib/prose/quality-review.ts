@@ -4,8 +4,8 @@ import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 import { SCENE_REVIEW_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v8'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v9'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 
 /** Rechecks retain the version of their actual nested review request. */
 export function qualityReviewPromptVersionFromMessagesV1(messages: readonly ChatMessage[]): typeof REVIEW_PROMPT_VERSIONS[number] {
@@ -98,7 +98,7 @@ function text(value: unknown, label: string, max: number): string {
 export function qualityReviewSystemGuidanceV1(mode: QualityReviewModeV1): string {
   return `全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。
 你提供${labels[mode]}的编辑建议。阅读下方完整正文，并尊重作者的场景任务、文风和停笔位置。
-维度：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性。
+dimension只能从以下维度选择一个字面值：${QUALITY_REVIEW_DIMENSIONS_V1.join('|')}。资料字段名、问题类型描述不能用作dimension。confidence只能是suggestion或uncertain。检查期待、主动选择、因果、系统边界与兑现、声线、重复、节奏和连续性；具体依据和约束分类写在reason中。
 优先核对关键过程与结果：交付、验收、付款、调整、试验、签字是否跳过必要行动；前态—动作—后态的数量、时间、资源和状态是否相互吻合；结尾是否混入写作要求、停笔说明或任务自评。必须区分角色的有意隐瞒、推测与叙述事实，无法确定则标为uncertain。
 先处理会改变读者对事件理解的问题，再考虑表达细节。表达建议需要说明具体影响，不为求变化修改有效动作或强行填满留白。
 ${SCENE_REVIEW_GUIDANCE_V1}
@@ -120,7 +120,7 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
   const targetTextHash = await hashCanonicalValue(input.chapterText)
   const system = `${qualityReviewSystemGuidanceV1(input.mode)}
 输出一个JSON对象，不要围栏或解释。外层必须同时有summary、strengths、issues三个键；没有问题也明确返回issues:[]，没有保留点写strengths:[]，不得仅返回空对象：
-{"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","anchorId":"定位目录中的编号","reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
+{"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"causality","confidence":"suggestion","anchorId":"定位目录中的编号","reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`
   return { targetTextHash, messages: [
     { role: 'system', content: system },
@@ -162,7 +162,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const anchors = new Map(qualityReviewAnchorsV1(input.chapterText, promptVersion).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
-    const anchored = ['whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
+    const anchored = ['whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
     keys(row, anchored ? ['dimension', 'confidence', 'anchorId', 'reason', 'suggestion'] : ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined

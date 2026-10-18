@@ -33,6 +33,13 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...oldInput, raw: JSON.stringify({ summary: '旧请求不能用新编号', strengths: [], issues: [row] }) })).rejects.toThrow('编号')
   })
 
+  it.each(['writingStyle', 'consistencyRules', 'atmosphere'])('真实模型误用资料字段 %s 作为问题维度时拒绝，不把缺失意见补成合格报告', async dimension => {
+    const chapterText = '她在获得许可后，才作出约定要求的承诺。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '许可', chapterText, registeredContext: '许可需先取得明确承诺。' })
+    const value = { summary: '核对发生顺序', strengths: [], issues: [{ dimension, confidence: 'suggestion', anchorId: 'p1', reason: '承诺晚于许可', suggestion: '在授权范围核对顺序' }] }
+    await expect(parseWholeChapterQualityReviewV1({ raw: JSON.stringify(value), mode: 'quality', chapterText, targetTextHash: request.targetTextHash, messages: request.messages, responseCompletion: 'complete', settings })).rejects.toThrow('维度')
+  })
+
   it('真实探针中的跨段拼接引文仍拒绝；单段定位有效，旧v3记录按原版本验签', async () => {
     const chapterText = '账本初始余额三点，操作消耗两点。\n陈禾扣除两点，余额变成八点。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '账本', chapterText, registeredContext: '初始三点，消耗两点，不凭空奖励。' })

@@ -3,7 +3,7 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import { verifyWholeChapterQualityReviewV1, type QualityReviewArtifactV1 } from './quality-review'
 import { SCENE_REVISION_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVISION_PROMPT_VERSION_V1 = 'quality-revision-patches-v4'
+export const QUALITY_REVISION_PROMPT_VERSION_V1 = 'quality-revision-patches-v5'
 
 export interface QualityRevisionSpanV1 {
   id: string
