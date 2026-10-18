@@ -150,3 +150,12 @@ it('自定义词条只替换文本字段；枚举、数字、引用与未登记�
   await db.codexCategories.update(entry.categoryId, { fieldSchema: '[]' })
   await expect(undoTextReplacementV1(receipt)).rejects.toThrow('字段定义已变化')
 })
+
+it('替换后词条转入另一分类时，撤销不得按旧分类文本定义修改新分类字段', async () => {
+  const { scope, entryId, request } = await fixture()
+  const receipt = await commitTextReplacementV1(await previewTextReplacementV1(request), async () => 1)
+  const categoryId = await db.codexCategories.add(stampNewRecord(scope, 'codexCategories', { projectId: scope.projectId, name: '引用分类', key: 'references', icon: 'X', fieldSchema: '[{"key":"a","type":"ref"},{"key":"b","type":"select"}]', order: 1, createdAt: 1, updatedAt: 1 }) as never)
+  await db.codexEntries.update(entryId, { categoryId })
+  await expect(undoTextReplacementV1(receipt)).rejects.toThrow('分类或字段定义已变化')
+  expect(await db.codexEntries.get(entryId)).toMatchObject({ categoryId, summary: '新印记', fields: '{"a":"新","b":"新"}' })
+})

@@ -125,7 +125,8 @@ async function writeChanges(scope: WorkspaceScope, worldGroupId: number | null, 
   for (const change of changes) {
     if (change.categoryBaseline) {
       const category = await db.codexCategories.get(change.categoryBaseline.id)
-      if (!category || !await assertRecordInScope(scope, 'codexCategories', category) || category.fieldSchema !== change.categoryBaseline.fieldSchema) throw new Error('词条字段定义已变化，请重新预览；没有写入任何修改。')
+      const entry = await db.codexEntries.get(change.id)
+      if (!category || entry?.categoryId !== category.id || !await assertRecordInScope(scope, 'codexCategories', category) || category.fieldSchema !== change.categoryBaseline.fieldSchema) throw new Error('词条分类或字段定义已变化，请重新预览；没有写入任何修改。')
     }
     const result = await adopt({ projectId: scope.projectId, scope, worldGroupId, target: change.target, recordId: change.id, mode: 'replace', preserveAuthorText: true, data: change[direction] })
     if (result.written.length !== 1 || result.skipped.length || result.unknown.length || result.typeErrors.length || result.fkErrors.length) throw new Error(`未能保存 ${change.label}，本次修改已撤回。`)

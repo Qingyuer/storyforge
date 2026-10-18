@@ -368,7 +368,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
             isCurrent={idx === currentIndex && globalStatus === 'running'}
             onSkip={() => handleSkip(step.stepId)}
             onRetry={() => handleRetryStep(idx)}
-            onSave={output => setExtractSource(output)}
+            onExtract={output => setExtractSource(output)}
             onUserInputChange={(v) => userInputsRef.current.set(step.stepId, v)}
             onOutputChange={(output) => {
               stepOutputsRef.current.set(step.stepId, output)
@@ -378,8 +378,6 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
                 setGlobalStatus('paused')
               }
             }}
-            saved={false}
-            experimental
             hasProject={!!project?.id}
             actionsDisabled={globalStatus === 'running'}
           />
@@ -390,8 +388,8 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
         <div className="bg-bg-surface border border-success/30 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-success mb-2">✓ 全部完成</h3>
           <p className="text-xs text-text-secondary mb-3">
-            可以把每步输出复制到对应模块（角色 / 大纲 / 章节正文等）。
-            后续 Phase 可以做"一键写入"自动化。
+            每步输出都是可编辑草稿，可以复制、导出，或提取为设定候选。
+            候选需由你确认采纳后才会写入作品。
           </p>
         </div>
       )}
