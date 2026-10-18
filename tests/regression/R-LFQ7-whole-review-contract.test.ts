@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewAnchorsV1, formatQualityReviewAnchorsV1 } from '../../src/lib/prose/quality-review'
+import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1, verifyWholeChapterQualityReviewV1, qualityReviewAnchorsV1, formatQualityReviewAnchorsV1, QUALITY_REVIEW_PROMPT_VERSION_V1 } from '../../src/lib/prose/quality-review'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
@@ -26,7 +26,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parse({ ...row, anchorId: 'p2-1' })).rejects.toThrow('编号')
     await expect(parse({ ...row, anchorId: 'p3' })).rejects.toThrow('编号')
     await expect(parse({ ...row, quote: '随意改写的引文' })).rejects.toThrow('契约')
-    const historicalMessages = request.messages.map((message, index) => ({ ...message, content: index === 0 ? message.content.replace('全文评审契约：whole-chapter-quality-review-v7。', '全文评审契约：whole-chapter-quality-review-v6。') : message.content.replace(formatQualityReviewAnchorsV1(chapterText), formatQualityReviewAnchorsV1(chapterText, 'whole-chapter-quality-review-v6')) }))
+    const historicalMessages = request.messages.map((message, index) => ({ ...message, content: index === 0 ? message.content.replace(`全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。`, '全文评审契约：whole-chapter-quality-review-v6。') : message.content.replace(formatQualityReviewAnchorsV1(chapterText), formatQualityReviewAnchorsV1(chapterText, 'whole-chapter-quality-review-v6')) }))
     const oldInput = { mode: 'quality' as const, chapterText, targetTextHash: request.targetTextHash, messages: historicalMessages, responseCompletion: 'complete' as const, settings, promptVersion: 'whole-chapter-quality-review-v6' as const }
     const historical = await parseWholeChapterQualityReviewV1({ ...oldInput, raw: JSON.stringify({ summary: '历史段落定位', strengths: [], issues: [{ ...row, anchorId: 'p2-1' }] }) })
     expect(await verifyWholeChapterQualityReviewV1(historical, chapterText, historicalMessages)).toBe(true)
@@ -41,7 +41,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     await expect(parseWholeChapterQualityReviewV1({ ...base, raw: JSON.stringify(root) })).rejects.toThrow('引文')
     const raw = JSON.stringify({ ...root, issues: [issue('余额变成八点。', null, null)] })
     const current = await parseWholeChapterQualityReviewV1({ ...base, raw })
-    expect(current.reviewer.promptVersion).toBe('whole-chapter-quality-review-v7')
+    expect(current.reviewer.promptVersion).toBe(QUALITY_REVIEW_PROMPT_VERSION_V1)
     expect(current.issues[0].paragraph).toBe(2)
     const old = await parseWholeChapterQualityReviewV1({ ...base, raw, promptVersion: 'whole-chapter-quality-review-v3' })
     expect(await verifyWholeChapterQualityReviewV1(old, chapterText, request.messages)).toBe(true)

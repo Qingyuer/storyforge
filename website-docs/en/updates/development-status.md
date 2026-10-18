@@ -1,5 +1,12 @@
 # Pending development and branch audit
 
+## October 19, 2026 · Longform author-feedback iteration (development branch)
+
+[PR #141](https://github.com/yuanbw2025/storyforge/pull/141) continues to address character reactions, responsive dialogue, and endings exposed by actual author repairs. Generation, whole-chapter review, scoped revision, and recheck share the existing strategy and explicit adoption chain. Reviews distinguish internal contradictions, omitted explicit task requirements, and optional expression preferences, so polishing does not silently remove important conditions. Four internal author micro-scene repairs have been returned; they do not establish independent formal literary benefit or lower repair cost.
+
+In prose Quality review (质量审校), enter separate requirements in Review instructions (本轮评审补充要求) and Revision instructions (本轮修稿要求). Select actual issues, allowed paragraphs, and protected quotations before one revision and one recheck. Saved reports and comparisons show the instructions actually used and recover after refresh. Authors still judge model suggestions; failures, unknown outcomes, and older candidates retain their recovery and freshness boundaries.
+
+Complete engineering checks passed for earlier source `1b854005` (4495 tests, 3 production-agent checks, 293 browser passes / 2 skips). New commits integrating main must be verified at their actual head; see PR evidence. This branch remains unmerged, undeployed, and absent from existing downloads. Older dated sections below remain historical snapshots.
 
 ## October 18, 2026 review
 

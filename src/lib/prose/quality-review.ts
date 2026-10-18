@@ -4,8 +4,8 @@ import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 import { SCENE_REVIEW_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v7'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v8'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 
 /** Rechecks retain the version of their actual nested review request. */
 export function qualityReviewPromptVersionFromMessagesV1(messages: readonly ChatMessage[]): typeof REVIEW_PROMPT_VERSIONS[number] {
@@ -119,7 +119,7 @@ export async function buildWholeChapterQualityReviewRequestV1(input: {
   if (input.authorRequest && input.authorRequest.length > 16000) throw new Error('本次评审要求过长，请精简后再开始。')
   const targetTextHash = await hashCanonicalValue(input.chapterText)
   const system = `${qualityReviewSystemGuidanceV1(input.mode)}
-输出一个JSON对象，不要围栏或解释：
+输出一个JSON对象，不要围栏或解释。外层必须同时有summary、strengths、issues三个键；没有问题也明确返回issues:[]，没有保留点写strengths:[]，不得仅返回空对象：
 {"summary":"本章的阅读情况及不确定性","strengths":["保留的有效写法"],"issues":[{"dimension":"上述维度之一","confidence":"suggestion|uncertain","anchorId":"定位目录中的编号","reason":"问题及影响","suggestion":"只针对该问题的建议"}]}
 没有证据不要编造问题；空issues不是文学达标或整章无错的认证。不得把本段指令写进故事。`
   return { targetTextHash, messages: [
@@ -162,7 +162,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const anchors = new Map(qualityReviewAnchorsV1(input.chapterText, promptVersion).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
-    const anchored = ['whole-chapter-quality-review-v6', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
+    const anchored = ['whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
     keys(row, anchored ? ['dimension', 'confidence', 'anchorId', 'reason', 'suggestion'] : ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
