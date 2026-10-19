@@ -7,6 +7,31 @@ const settings = describeResolvedAIRequestSettingsV1(resolveRequestConfig({ ...u
 const issue = (quote: string, start: number | null, end: number | null) => ({ dimension: 'causality', confidence: 'uncertain', quote, start, end, reason: '付款过程没有写出，却直接记为已收款。', suggestion: '核对付款过程，保持金额和签字人。' })
 
 describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
+  it('登记资料与作者计划先交接，再核对实际完整正文，避免以计划自证结算', async () => {
+    const chapterText = '她实际回听了三次。\n计数器仍写消耗两次。'
+    const registeredContext = '计划只回听两次，但尚未执行。'
+    const authorRequest = '核对实际回听与余额，保留人物选择的代价。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '回听', chapterText, registeredContext, authorRequest })
+    const delivered = request.messages[1].content
+    expect(delivered.indexOf(registeredContext)).toBeLessThan(delivered.indexOf(authorRequest))
+    expect(delivered.indexOf(authorRequest)).toBeLessThan(delivered.indexOf('【完整正文'))
+    expect(delivered.indexOf('【完整正文')).toBeLessThan(delivered.indexOf(chapterText))
+    expect(delivered.indexOf(chapterText)).toBeLessThan(delivered.indexOf('【正文结束】'))
+    expect(request.messages[0].content).toContain('suggestion必须单独给出非空')
+  })
+
+  it.each(['whole-chapter-quality-review-v10', 'whole-chapter-quality-review-v11'] as const)('实际漏写suggestion的响应在%s仍整份拒绝；完整历史报告不改版本', async promptVersion => {
+    const chapterText = '她已经回听三次，结算却只记两次。'
+    const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '回听', chapterText, registeredContext: '' })
+    const messages = request.messages.map((message, index) => index === 0 ? { ...message, content: message.content.replace(`全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。`, `全文评审契约：${promptVersion}。`) } : message)
+    const row = { dimension: 'system-payoff', confidence: 'suggestion', anchorId: 'p1', reason: '实际三次却只记两次；建议核对每次动作。' }
+    const parse = (value: unknown) => parseWholeChapterQualityReviewV1({ raw: JSON.stringify({ summary: '核对实际动作', strengths: [], issues: [value] }), mode: 'quality', chapterText, targetTextHash: request.targetTextHash, messages, responseCompletion: 'complete', settings, promptVersion })
+    await expect(parse(row)).rejects.toThrow('字段不符合报告契约')
+    const complete = await parse({ ...row, suggestion: '保持已确认规则，逐次核对资源结算。' })
+    expect(complete.reviewer.promptVersion).toBe(promptVersion)
+    expect(await verifyWholeChapterQualityReviewV1(complete, chapterText, messages)).toBe(true)
+  })
+
   it('片段编号精确定位重复原文；长段与代理对不截断，伪造编号和混合协议仍拒绝', async () => {
     const chapterText = '她收回绳子。\n\n她收回绳子。\n' + '甲'.repeat(159) + '😀确认回撤线。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '探路', chapterText, registeredContext: '' })

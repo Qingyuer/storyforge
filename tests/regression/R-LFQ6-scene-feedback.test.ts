@@ -41,6 +41,7 @@ describe('LFQ6 · 群友探路反馈进入既有正文与审修链', () => {
     ['whole-chapter-quality-review-v8', 'quality-revision-recheck-v7'],
     ['whole-chapter-quality-review-v9', 'quality-revision-recheck-v8'],
     ['whole-chapter-quality-review-v10', 'quality-revision-recheck-v9'],
+    ['whole-chapter-quality-review-v11', 'quality-revision-recheck-v9'],
   ] as const)('历史或当前嵌套报告 %s / %s 按实际请求版本恢复验签', async (reviewVersion, recheckVersion) => {
     const originalText = '绳子只有一百二十厘米。\n她把十五米绳索全部放出。\n两人决定撤回。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '探路', chapterText: originalText, registeredContext: '仅有一条绳索，没有新装备。' })
