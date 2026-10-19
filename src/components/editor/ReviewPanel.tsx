@@ -430,6 +430,7 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
             <span className="text-text-muted">{finding.category}</span>
           </div>
           <p className="mt-1 text-xs text-text-primary">{finding.reason}</p>
+          {finding.citationWarning && <p className="mt-1 text-[11px] text-warning">附带引文与所选位置不一致，以下已显示原文，请核对意见。</p>}
           <p className="mt-1 text-[11px] text-text-muted border-l-2 border-border pl-2">正文：“{finding.quote}”</p>
           {finding.evidence.map((evidence, evidenceIndex) => (
             <p key={evidenceIndex} className="mt-1 text-[11px] text-accent/80">

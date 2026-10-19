@@ -43,7 +43,7 @@ import { createVerificationReceiptV1 } from './verification-receipt'
 
 export const CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1 = 'chapter:consistency-audit' as const
 export const CONSISTENCY_AUDIT_VERIFIER_SET_V1 = 'chapter-consistency-audit-terminal-v1' as const
-export const CONSISTENCY_AUDIT_ADAPTER_VERSION_V1 = 'chapter-consistency-audit-durable-v4' as const
+export const CONSISTENCY_AUDIT_ADAPTER_VERSION_V1 = 'chapter-consistency-audit-durable-v5' as const
 
 const ACTIVE_STATES = new Set(['planned', 'running', 'paused', 'awaiting_confirmation', 'verifying'])
 const AUDIT_IN_FLIGHT = new Map<string, Promise<DurableConsistencyAuditResultV1>>()

@@ -4,7 +4,7 @@ import { formatQualityReviewAnchorsV1, qualityReviewAnchorsV1 } from '../../pros
 export type ConsistencyAuditMode = 'fast' | 'deep'
 export type ConsistencySeverity = 'hard' | 'risk' | 'unknown'
 
-export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v3'
+export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v4'
 // Freeze the shared catalog's numbering rules for this audit protocol.
 const AUDIT_ANCHOR_VERSION = 'whole-chapter-quality-review-v10'
 
@@ -13,6 +13,8 @@ export interface ConsistencyFinding {
   severity: ConsistencySeverity
   quote: string
   anchorId?: string
+  /** The selected ID resolved, but redundant model text differed; never a hard finding. */
+  citationWarning?: boolean
   evidence: Array<{
     sourceType: 'canon' | 'observation' | 'chapter' | 'summary'
     sourceId: number
@@ -48,7 +50,7 @@ export function buildConsistencyAuditPrompt(args: {
 {"findings":[{"category":"分类","severity":"hard|risk|unknown","anchorId":"逐字复制正文目录编号","evidence":[{"sourceType":"chapter|summary|observation|canon","sourceId":0,"quote":"证据上下文逐字引文"}],"reason":"为何冲突或有风险","suggestion":"可选建议"}],"cognitionReferences":[{"characterId":1,"knowledgeKey":"闭集中的key","quote":"该角色运用或陈述该知识的正文逐字引文"}],"lifecycleReferences":[{"characterId":1,"activityType":"normal-activity","quote":"已死亡角色作为活人正常行动的正文逐字引文"}]}
 
 规则：
-1. findings.anchorId 必须逐字复制正文定位目录的编号，不能自行缩写或生成编号；代码从该位置取原文，不要另抄 findings.quote；
+1. findings.anchorId 必须逐字复制正文定位目录的编号，不能自行缩写或生成编号；代码从该位置取原文，不要另抄 findings.quote。若额外附带不同引文，该意见会降为信息不足并提示核对，不以附注改变原文；
 2. 外部 evidence.quote 必须逐字来自只读资料；正文内部的另一处依据使用 {"sourceType":"chapter","sourceId":0,"anchorId":"正文目录中的对应编号"}，不要另抄 quote。0 仅代表本次待审章，不能用于伪造外部证据；
 3. hard 必须有至少一条正确证据，且只能用于直接矛盾；
 4. 创作选择、信息不足或可能解释得通的内容只能标 risk/unknown；
@@ -79,18 +81,20 @@ export function parseConsistencyAuditResult(args: {
     const parsed = JSON.parse(args.raw.slice(start, end + 1)) as { findings?: unknown }
     if (!Array.isArray(parsed.findings)) return null
     const anchors = new Map(qualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION).map(anchor => [anchor.anchorId, anchor]))
-    const currentQuote = (value: Record<string, unknown>): { quote: string; anchorId?: string } => {
+    const currentQuote = (value: Record<string, unknown>): { quote: string; anchorId?: string; citationWarning?: boolean } => {
       if (Object.prototype.hasOwnProperty.call(value, 'anchorId')) {
         const anchor = typeof value.anchorId === 'string' ? anchors.get(value.anchorId) : undefined
-        if (!anchor || (value.quote !== undefined && value.quote !== anchor.quote)) throw new Error('Invalid chapter anchor')
-        return { quote: anchor.quote, anchorId: anchor.anchorId }
+        if (!anchor) throw new Error('Invalid chapter anchor')
+        return { quote: anchor.quote, anchorId: anchor.anchorId,
+          ...(value.quote !== undefined && value.quote !== anchor.quote ? { citationWarning: true } : {}) }
       }
       return { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
     }
     const findings = parsed.findings.map((raw): ConsistencyFinding => {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid finding')
       const item = raw as Record<string, unknown>
-      const { quote, anchorId } = currentQuote(item)
+      const { quote, anchorId, citationWarning: targetWarning } = currentQuote(item)
+      let citationWarning = targetWarning === true
       if (!quote || !args.chapterContent.includes(quote)
         || typeof item.category !== 'string' || !item.category.trim()
         || typeof item.reason !== 'string' || !item.reason.trim()
@@ -106,6 +110,7 @@ export function parseConsistencyAuditResult(args: {
         if (!currentChapter && Object.prototype.hasOwnProperty.call(value, 'anchorId')) throw new Error('External evidence cannot use chapter anchors')
         const cited: ReturnType<typeof currentQuote> = currentChapter ? currentQuote(value) : { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
         const evidenceQuote = cited.quote
+        citationWarning ||= cited.citationWarning === true
         if (!evidenceQuote || !['canon', 'observation', 'chapter', 'summary'].includes(String(value.sourceType))
           || !Number.isInteger(value.sourceId) || (value.sourceId as number) < 0
           || !(currentChapter ? args.chapterContent : args.evidenceContext).includes(evidenceQuote)) {
@@ -119,12 +124,13 @@ export function parseConsistencyAuditResult(args: {
         }
       })
       const requested = item.severity as ConsistencySeverity
-      const severity: ConsistencySeverity = requested === 'hard' && evidence.length === 0 ? 'unknown' : requested
+      const severity: ConsistencySeverity = citationWarning || (requested === 'hard' && evidence.length === 0) ? 'unknown' : requested
       return {
         category: item.category.trim(),
         severity,
         quote,
         ...(anchorId ? { anchorId } : {}),
+        ...(citationWarning ? { citationWarning: true } : {}),
         evidence,
         reason: item.reason.trim(),
         suggestion: (item.suggestion as string | undefined)?.trim() || undefined,

@@ -122,6 +122,14 @@ describe('NS-3 · evidence-backed consistency audit', () => {
     expect(parse({ ...finding, anchorId: 'p1', evidence: [{ sourceType: 'canon', sourceId: 7, anchorId: 'p1', quote: '消耗 青铜铃 ×1' }] })).toBeNull()
   })
 
+  it('valid IDs always use original text; conflicting redundant quotations remain visible as uncertain advice', () => {
+    const result = parseConsistencyAuditResult({ mode: 'fast', chapterContent: chapter, evidenceContext: evidence,
+      raw: JSON.stringify({ findings: [{ category: '持有物', severity: 'hard', anchorId: 'p1', quote: '改抄的附注',
+        evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1', quote: '另一条改抄附注' }], reason: '需作者核对。' }] }),
+    })
+    expect(result?.findings[0]).toMatchObject({ severity: 'unknown', citationWarning: true, quote: chapter, evidence: [{ quote: chapter }] })
+  })
+
   it('builds distinct fast and deep audit contracts without truncating chapter prose', () => {
     const longChapter = '正文'.repeat(5000)
     const fast = buildConsistencyAuditPrompt({

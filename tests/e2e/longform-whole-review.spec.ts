@@ -152,7 +152,7 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
   const requests: any[] = []
   await page.route('https://whole-review.invalid/**', route => {
     requests.push(route.request().postDataJSON())
-    const findings = [{ category: '付款依据', severity: 'risk', anchorId: 'p2',
+    const findings = [{ category: '付款依据', severity: 'hard', anchorId: 'p2', quote: '模型改抄的附注不能替代原文',
       evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1-1' }],
       reason: '正文中可见的清点动作尚不能证明付款，需核对结算依据。' }]
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] }) })
@@ -165,6 +165,7 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
   await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText('正文中可见的清点动作尚不能证明付款，需核对结算依据。', { exact: true })).toBeVisible()
+  await expect(page.getByText('附带引文与所选位置不一致，以下已显示原文，请核对意见。', { exact: true })).toBeVisible()
   expect(requests).toHaveLength(1)
   expect(requests[0].messages[1].content).toContain('清点工具，收款后签收，最后关灯')
   expect(requests[0].messages[1].content).toContain(original)
