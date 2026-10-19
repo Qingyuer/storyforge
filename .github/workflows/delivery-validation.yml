@@ -24,7 +24,9 @@ jobs:
         include:
           - id: cli
             script: ci
-            timeout: 90
+            # Coverage runs files serially in fresh processes; all cases and
+            # their individual performance/timeout gates remain unchanged.
+            timeout: 150
           - id: browser
             script: ci:e2e
             timeout: 180
