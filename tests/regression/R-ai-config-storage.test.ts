@@ -191,6 +191,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       'agnes-2.5-pro-alpha',
       'agnes-2.5-pro-beta',
       'agnes-3.0-flash',
+      'agnes-3.0-pro',
       'agnes-2.0-flash',
     ])
 
@@ -207,7 +208,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
   })
 
-  it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {
+  it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash', 'agnes-3.0-pro'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {
     expect(normalizeProviderModel('agnes', model)).toBe(model)
     expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe(PROVIDER_PRESETS.agnes.model)
     const useAIConfigStore = await freshStore()
