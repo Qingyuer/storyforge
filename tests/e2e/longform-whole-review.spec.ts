@@ -155,7 +155,7 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
     const findings = [{ category: '付款依据', severity: 'risk', anchorId: 'p2',
       evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1-1' }],
       reason: '正文中可见的清点动作尚不能证明付款，需核对结算依据。' }]
-    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] }) })
   })
   const target = await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
@@ -170,6 +170,8 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
   expect(requests[0].messages[1].content).toContain(original)
   expect(requests[0].messages[1].content).toContain('"anchorId":"p2"')
   expect(requests[0].max_tokens).toBe(16000)
+  expect(requests[0].stream).toBe(false)
+  expect(requests[0].response_format).toEqual({ type: 'json_object' })
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await page.getByRole('button', { name: '一致性', exact: true }).click()
@@ -195,7 +197,7 @@ test('一致性无效引文显示失败而不是空报告，不自动重发或�
   await page.route('https://whole-review.invalid/**', route => {
     calls++
     const findings = [{ category: '虚构', severity: 'hard', quote: '这句不在正文里', evidence: [], reason: '不能丢弃后显示无问题' }]
-    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] }) })
   })
   const target = await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
@@ -218,7 +220,7 @@ test('一致性专审503单次停止，不在durable预算外重发', async ({ p
   await page.getByRole('button', { name: '一致性', exact: true }).click()
   await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
-  await expect(page.getByText(/一致性响应未完整结束/)).toBeVisible()
+  await expect(page.getByText(/503|专审暂时不可用/)).toBeVisible()
   expect(calls).toBe(1)
   await expect(page.getByText(/本次未发现可定位的一致性问题/)).toHaveCount(0)
   await expect(page.locator('.tiptap-editor')).toContainText(quote)
@@ -228,7 +230,7 @@ test('一致性专审被截断时即使收到有效空JSON也不认证无问题'
   let calls = 0
   await page.route('https://whole-review.invalid/**', route => {
     calls++
-    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: '{"findings":[]}' }, finish_reason: 'length' }] })}\n\ndata: [DONE]\n\n` })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' }, finish_reason: 'length' }] }) })
   })
   await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
@@ -237,4 +239,29 @@ test('一致性专审被截断时即使收到有效空JSON也不认证无问题'
   await expect(page.getByText(/一致性响应未完整结束/)).toBeVisible()
   await expect(page.getByText(/本次未发现可定位的一致性问题/)).toHaveCount(0)
   expect(calls).toBe(1)
+})
+
+test('一致性JSON审计中关闭面板会停止等待，刷新不生成报告或自动重发', async ({ page }) => {
+  let calls = 0
+  await page.route('https://whole-review.invalid/**', async route => {
+    calls++
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' }, finish_reason: 'stop' }] }) }).catch(() => undefined)
+  })
+  const target = await setup(page)
+  await page.getByRole('button', { name: '一致性', exact: true }).click()
+  await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
+  await page.getByRole('button', { name: '开始检测', exact: true }).click()
+  await expect.poll(() => calls).toBe(1)
+  await page.getByRole('button', { name: '关闭质量审校', exact: true }).click()
+  await expect.poll(() => page.evaluate(async id => {
+    const { db } = await import('/storyforge/src/lib/db/schema.ts')
+    return (await db.agentRuns.where('projectId').equals(id).toArray()).map(run => run.status)
+  }, target.projectId)).toContain('paused')
+  await page.reload()
+  await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await page.getByRole('button', { name: '一致性', exact: true }).click()
+  await expect(page.getByText(/本次未发现可定位的一致性问题/)).toHaveCount(0)
+  expect(calls).toBe(1)
+  await expect(page.locator('.tiptap-editor')).toContainText(quote)
 })

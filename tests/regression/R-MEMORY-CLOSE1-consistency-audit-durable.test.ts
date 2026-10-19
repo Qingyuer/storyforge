@@ -238,6 +238,19 @@ describe('MEMORY-CLOSE-1 · 显式一致性审计的 durable Harness 闭环', ()
     expect(snapshot.events.some(event => event.type === 'model.responded')).toBe(true)
     expect(await readLatestConsistencyAgentRun({ projectId: fixture.project.id!, chapterId: fixture.targetChapterId })).toBeNull()
     expect((await db.chapters.get(fixture.targetChapterId))?.content).toBe(targetHtml)
+    const retained = (await db.agentRunArtifacts.toArray()).filter(artifact => artifact.artifactKind === 'raw-response')
+    expect(retained).toHaveLength(1)
+    expect(JSON.parse(retained[0].content!).raw).toBe(raw)
+  })
+
+  it('length结束的有效JSON也保留原响应后失败，不保存无问题报告', async () => {
+    const fixture = await seedConsistencyProject()
+    await expect(runDurableConsistencyAuditV1(runInput(fixture, async () => ({ raw: '{"findings":[]}', completion: 'incomplete', finishReason: 'length' })))).rejects.toThrow('响应未完整结束')
+    const retained = (await db.agentRunArtifacts.toArray()).find(artifact => artifact.artifactKind === 'raw-response')!
+    expect(JSON.parse(retained.content!)).toMatchObject({ raw: '{"findings":[]}', completion: 'incomplete', finishReason: 'length' })
+    expect(await db.agentEvents.count()).toBe(0)
+    const row = await db.agentRuns.orderBy('id').last()
+    expect((await readAgentRunV1(fixture.scope, row!.id!)).projection.state).toBe('failed')
   })
 
   it('模型结果未知时不自动重试；只有作者再次触发才取消旧 Run 并创建一次新调用', async () => {

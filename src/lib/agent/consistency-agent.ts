@@ -138,7 +138,13 @@ export interface ConsistencyAgentExecutionTraceV1 {
     sourceTextHash: string
   }) => void | Promise<void>
   modelRequested?: (input: { messages: ChatMessage[] }) => void | Promise<void>
-  modelResponded?: (input: { raw: string }) => void | Promise<void>
+  modelResponded?: (input: { raw: string; completion?: 'complete' | 'incomplete'; finishReason?: string }) => void | Promise<void>
+}
+
+export type ConsistencyAgentModelResponseV1 = string | {
+  raw: string
+  completion: 'complete' | 'incomplete'
+  finishReason?: string
 }
 
 function emptyContext(): ConsistencyAgentContextEvidence {
@@ -270,7 +276,7 @@ export async function runConsistencyAgent(input: {
   provider?: Parameters<typeof assembleContext>[0]['provider']
   model?: string
   budget: AgentTeamBudgetTracker
-  call: (messages: ChatMessage[]) => Promise<string>
+  call: (messages: ChatMessage[]) => Promise<ConsistencyAgentModelResponseV1>
   trace?: ConsistencyAgentExecutionTraceV1
 }): Promise<ConsistencyAgentCandidate> {
   const scope = await resolveReadScopeLike(input.projectId)
@@ -325,14 +331,19 @@ export async function runConsistencyAgent(input: {
     maxOutputTokens: CONSISTENCY_AGENT_OUTPUT_BUDGET_V1[input.mode],
   })
   let raw: string
+  let received: ConsistencyAgentModelResponseV1
   try {
-    raw = await input.call(messages)
+    received = await input.call(messages)
+    raw = typeof received === 'string' ? received : received.raw
     input.budget.settleCall(reservation, raw)
   } catch (error) {
     input.budget.settleFailedCall(reservation)
     throw error
   }
-  await input.trace?.modelResponded?.({ raw })
+  await input.trace?.modelResponded?.({ raw, ...(typeof received === 'string' ? {} : { completion: received.completion, finishReason: received.finishReason }) })
+  if (typeof received !== 'string' && received.completion !== 'complete') {
+    throw new Error('一致性响应未完整结束，未生成报告或自动重发。')
+  }
   const parsed = parseConsistencyAuditResult({
     raw,
     mode: input.mode,

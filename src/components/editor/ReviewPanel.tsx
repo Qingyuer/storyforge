@@ -6,9 +6,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { liveQuery } from 'dexie'
 import { X, ShieldCheck, Bot, TrendingUp, Loader2, ScanSearch } from 'lucide-react'
-import { useAIStream } from '../../hooks/useAIStream'
-import type { StreamResult } from '../../lib/ai/client'
-import { createAISessionKey } from '../../stores/ai-generation-session'
+import { describeResolvedAIRequestSettingsV1, resolveRequestConfig, type ChatResult } from '../../lib/ai/client'
+import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { useReviewResultStore, selectChapterReview, type ReviewTab } from '../../stores/review-result'
 import {
   type ConsistencyAuditMode,
@@ -70,7 +69,6 @@ export default function ReviewPanel(props: Props) {
   const { projectId, chapterId, outlineNodeId, worldGroupId, chapterContent, chapterTitle,
     onClose } = props
 
-  const ai = useAIStream(createAISessionKey(projectId, 'review.run', chapterId))
   const [auditMode, setAuditMode] = useState<ConsistencyAuditMode>('fast')
   const [consistencyRunning, setConsistencyRunning] = useState(false)
   const [consistencyError, setConsistencyError] = useState('')
@@ -100,7 +98,8 @@ export default function ReviewPanel(props: Props) {
   const qualityGeneration = useRef(0)
   const qualityTarget = useRef('')
   const qualityAbort = useRef<AbortController | null>(null)
-  useEffect(() => () => qualityAbort.current?.abort(), [projectId, chapterId])
+  const consistencyAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => { qualityAbort.current?.abort(); consistencyAbort.current?.abort() }, [projectId, chapterId])
   qualityTarget.current = `${projectId}:${chapterId}`
   const [revisionHash, setRevisionHash] = useState('')
   useEffect(() => {
@@ -180,11 +179,26 @@ export default function ReviewPanel(props: Props) {
   }
 
   const handleRunConsistency = async () => {
+    if (consistencyAbort.current) return
+    const target = `${projectId}:${chapterId}`
     setConsistencyError('')
     setConsistencyRunning(true)
+    const controller = new AbortController()
+    consistencyAbort.current = controller
     try {
       await props.onBeforeConsistencyRun?.()
+      if (controller.signal.aborted || qualityTarget.current !== target) return
       const config = useAIConfigStore.getState().config
+      const meta = {
+        category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
+        projectId,
+        configOverrides: { maxTokens: CONSISTENCY_AGENT_OUTPUT_BUDGET_V1[auditMode] },
+        contextOverflowPolicy: 'reject' as const,
+        transportRetryPolicy: 'none' as const,
+      }
+      const resolution = resolveRequestConfig(config, meta)
+      const savedChapter = await db.chapters.get(chapterId)
+      if (!savedChapter) throw new Error('一致性审计章节不存在。')
       const budget = new AgentTeamBudgetTracker(
         useAIConfigStore.getState().agentTeamBudgetProfile,
       )
@@ -194,35 +208,33 @@ export default function ReviewPanel(props: Props) {
         outlineNodeId,
         worldGroupId: worldGroupId ?? null,
         chapterTitle,
-        chapterContent,
+        chapterContent: savedChapter.content ?? '',
         mode: auditMode,
-        provider: config.provider,
-        model: config.model,
+        provider: resolution.config.provider,
+        model: resolution.config.model,
+        requestSettings: describeResolvedAIRequestSettingsV1(resolution, false, { responseFormat: 'json_object' }),
         budget,
         call: async messages => {
-          const delivery: StreamResult = {}
-          const raw = await ai.start(messages, undefined, {
-            formalEntryId: 'prose.review.consistency',
-            category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
-            projectId,
-            configOverrides: { maxTokens: CONSISTENCY_AGENT_OUTPUT_BUDGET_V1[auditMode] },
-            contextOverflowPolicy: 'reject',
-            transportRetryPolicy: 'none',
-          }, undefined, delivery)
-          if (delivery.completion !== 'complete' || (delivery.finishReason && delivery.finishReason !== 'stop')) {
-            throw new Error('一致性响应未完整结束，未生成报告或自动重发。')
-          }
-          return raw
+          const delivery: ChatResult = {}
+          const raw = await executeRegisteredAIEntryV1('prose.review.consistency', messages, resolution.config, {
+            ...meta, category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
+          },
+            controller.signal, delivery, { responseFormat: 'json_object' }, resolution)
+          return { raw, completion: delivery.finishReason === 'stop' ? 'complete' : 'incomplete', finishReason: delivery.finishReason }
         },
       })
+      if (controller.signal.aborted || qualityTarget.current !== target) return
       const { run, candidate } = result
       setLocalConsistencyRun(run)
       setConsistency(chapterId, toConsistencyAuditResult(candidate))
       props.onConsistencyRun?.(run)
     } catch (error) {
-      setConsistencyError(error instanceof Error ? error.message : '一致性 Agent 运行失败')
+      if (!controller.signal.aborted && qualityTarget.current === target) setConsistencyError(error instanceof Error ? error.message : '一致性 Agent 运行失败')
     } finally {
-      setConsistencyRunning(false)
+      if (consistencyAbort.current === controller) {
+        consistencyAbort.current = null
+        setConsistencyRunning(false)
+      }
     }
   }
 
@@ -289,11 +301,11 @@ export default function ReviewPanel(props: Props) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleRun}
-            disabled={ai.isStreaming || consistencyRunning || qualityRunning || revisionBusy || !chapterContent}
+            disabled={consistencyRunning || qualityRunning || revisionBusy || !chapterContent}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
-            {ai.isStreaming || consistencyRunning || qualityRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-            {ai.isStreaming || consistencyRunning || qualityRunning ? '检测中...' : '开始检测'}
+            {consistencyRunning || qualityRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+            {consistencyRunning || qualityRunning ? '检测中...' : '开始检测'}
           </button>
           <button aria-label="关闭质量审校" onClick={() => { qualityAbort.current?.abort(); onClose() }} className="p-1 text-text-muted hover:text-text-primary rounded">
             <X className="w-4 h-4" />
@@ -351,38 +363,30 @@ export default function ReviewPanel(props: Props) {
             )}
           </div>
         )}
-        {((activeTab === 'consistency' && ai.error) || consistencyError || qualityError) && (
+        {(consistencyError || qualityError) && (
           <div className="text-xs text-error bg-error/10 px-3 py-2 rounded-lg mb-3">
-            {qualityError || consistencyError || ai.error}
+            {qualityError || consistencyError}
           </div>
         )}
 
-        {!currentResult && !ai.isStreaming && !consistencyRunning && !qualityRunning && (
+        {!currentResult && !consistencyRunning && !qualityRunning && (
           <div className="text-center py-8 text-text-muted text-sm">
             点击「开始检测」运行{activeTab === 'consistency' ? (auditMode === 'fast' ? ' Fast Guard' : ' Deep Audit') : activeTab === 'review' ? '审校' : activeTab === 'antiAI' ? '表达与重复评审' : '追读力评估'}
           </div>
         )}
 
-        {(ai.isStreaming || qualityRunning) && (
+        {(consistencyRunning || qualityRunning) && (
           <div className="flex items-center justify-center py-8 gap-2 text-text-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
             AI 正在分析...
-            {ai.output.length > 0 && (
-              <span className="text-xs">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
-            )}
-          </div>
-        )}
-        {ai.tokenUsage && !ai.isStreaming && (
-          <div className="text-[10px] text-text-muted mb-2" title={`输入 ${ai.tokenUsage.inputTokens} + 输出 ${ai.tokenUsage.outputTokens}`}>
-            Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
           </div>
         )}
 
-        {activeTab === 'consistency' && consistencyResult && !ai.isStreaming && (
+        {activeTab === 'consistency' && consistencyResult && !consistencyRunning && (
           <ConsistencyResultView result={consistencyResult} />
         )}
 
-        {activeTab !== 'consistency' && qualityResult && !qualityRunning && !ai.isStreaming && <>
+        {activeTab !== 'consistency' && qualityResult && !qualityRunning && <>
           <WholeQualityReportView result={qualityResult} selected={selectedIssues} disabled={revisionBusy || !qualityResult.current} toggle={id => setSelectedIssues(value => value.includes(id) ? value.filter(item => item !== id) : [...value, id])} />
           {qualityResult.current && qualityResult.report.issues.length > 0 && <div className="mt-4 space-y-3 rounded border border-border p-3">
             <p className="text-sm font-medium">按选中问题修稿</p>
