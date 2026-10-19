@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { liveQuery } from 'dexie'
 import { X, ShieldCheck, Bot, TrendingUp, Loader2, ScanSearch } from 'lucide-react'
 import { useAIStream } from '../../hooks/useAIStream'
+import type { StreamResult } from '../../lib/ai/client'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useReviewResultStore, selectChapterReview, type ReviewTab } from '../../stores/review-result'
 import {
@@ -197,12 +198,21 @@ export default function ReviewPanel(props: Props) {
         provider: config.provider,
         model: config.model,
         budget,
-        call: messages => ai.start(messages, undefined, {
-          formalEntryId: 'prose.review.consistency',
-          category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
-          projectId,
-          configOverrides: { maxTokens: auditMode === 'fast' ? 4_000 : 6_000 },
-        }),
+        call: async messages => {
+          const delivery: StreamResult = {}
+          const raw = await ai.start(messages, undefined, {
+            formalEntryId: 'prose.review.consistency',
+            category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
+            projectId,
+            configOverrides: { maxTokens: auditMode === 'fast' ? 4_000 : 6_000 },
+            contextOverflowPolicy: 'reject',
+            transportRetryPolicy: 'none',
+          }, undefined, delivery)
+          if (delivery.completion !== 'complete' || (delivery.finishReason && delivery.finishReason !== 'stop')) {
+            throw new Error('一致性响应未完整结束，未生成报告或自动重发。')
+          }
+          return raw
+        },
       })
       const { run, candidate } = result
       setLocalConsistencyRun(run)
@@ -318,7 +328,7 @@ export default function ReviewPanel(props: Props) {
               : 'border-border bg-bg-base text-text-muted'
           }`}>
             <p>
-              {props.consistencyCurrent === false ? '正文已变化，以下报告已过期。' : '当前正文报告'}
+              {props.consistencyCurrent === false ? '正文或作品资料已变化，以下报告已过期。' : '当前正文报告'}
               {' · '}{consistencyMeta.mode === 'background' ? '自动 Fast Guard' : consistencyMeta.mode === 'fast' ? 'Fast Guard' : 'Deep Audit'}
               {' · '}{consistencyMeta.budget.calls}/{consistencyMeta.budget.maxCalls} 次模型调用
               {' · '}约 {consistencyMeta.budget.usedTokens.toLocaleString()} / {consistencyMeta.budget.maxTokens.toLocaleString()} tokens
@@ -329,7 +339,14 @@ export default function ReviewPanel(props: Props) {
                 {' · '}纳入 {consistencyMeta.context.included.length}
                 {' · '}省略 {consistencyMeta.context.omitted.length}
                 {' · '}裁剪 {consistencyMeta.context.trimmed.length}
+                {' · '}截断 {consistencyMeta.context.truncated?.length ?? '未记录'}
               </p>
+            )}
+            {(consistencyMeta.context.trimmed.length > 0 || (consistencyMeta.context.truncated?.length ?? 0) > 0) && (
+              <p className="mt-1 text-warning">部分资料未完整读取，以下结果只覆盖实际收到的内容。</p>
+            )}
+            {!consistencyMeta.context.contentRevisionHash && consistencyMeta.mode !== 'background' && (
+              <p className="mt-1 text-warning">这份报告未记录作品资料版本，只对应当时正文。</p>
             )}
           </div>
         )}
@@ -392,7 +409,7 @@ export default function ReviewPanel(props: Props) {
 
 function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
   if (!result.findings.length) {
-    return <p className="text-sm text-success">未发现有证据支持的一致性问题。</p>
+    return <p className="text-sm text-text-muted">本次未发现可定位的一致性问题，仍需核对关键事实和结算。</p>
   }
   return (
     <div className="space-y-3">

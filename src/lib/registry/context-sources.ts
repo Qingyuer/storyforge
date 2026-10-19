@@ -33,6 +33,7 @@ import { getChapterDerivedMemoryStatus, normalizeChapterText } from '../ai/chapt
 import { parseStages } from '../types/story-arc'
 import { parseFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
+import { DETAILED_SCENE_TASK_FIELDS } from '../types/detailed-outline'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
 import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
 import { formatCharacterKnowledgeContext, readProjectCharacterKnowledge } from '../knowledge-ledger/knowledge-ledger'
@@ -1602,6 +1603,10 @@ async function readDetailedOutline(projectId: number, outlineNodeId?: number | n
     const bits = [s.summary, s.conflict ? `冲突:${s.conflict}` : '', s.location ? `地点:${s.location}` : '']
       .filter(Boolean).join(' / ')
     parts.push(`场景${i + 1} ${s.title || ''}: ${bits}`)
+    for (const { key, label } of DETAILED_SCENE_TASK_FIELDS) {
+      if (typeof s[key] === 'string' && s[key].trim()) parts.push(`${label}:${s[key]}`)
+    }
+    if (typeof s.notes === 'string' && s.notes.trim()) parts.push(`作者备注:${s.notes}`)
   })
   if (detail.prohibitions?.length) {
     parts.push(`不可写清单:${detail.prohibitions.join('；')}`)

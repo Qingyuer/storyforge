@@ -33,7 +33,7 @@ describe('NS-3 · evidence-backed consistency audit', () => {
     })
   })
 
-  it('drops invented prose quotes and downgrades evidence-free hard claims', () => {
+  it('rejects invented prose or evidence instead of presenting an empty successful report', () => {
     const invented = parseConsistencyAuditResult({
       mode: 'fast',
       chapterContent: chapter,
@@ -48,7 +48,7 @@ describe('NS-3 · evidence-backed consistency audit', () => {
         }],
       }),
     })
-    expect(invented?.findings).toEqual([])
+    expect(invented).toBeNull()
 
     const noEvidence = parseConsistencyAuditResult({
       mode: 'fast',
@@ -64,7 +64,45 @@ describe('NS-3 · evidence-backed consistency audit', () => {
         }],
       }),
     })
-    expect(noEvidence?.findings[0]?.severity).toBe('unknown')
+    expect(noEvidence).toBeNull()
+  })
+
+  it('can cite another exact passage in the reviewed chapter without inventing a registered source', () => {
+    const parse = (sourceId: number) => parseConsistencyAuditResult({
+      mode: 'fast', chapterContent: chapter, evidenceContext: evidence,
+      raw: JSON.stringify({ findings: [{
+        category: '人物陈述', severity: 'risk', quote: '从左袖取出了青铜铃',
+        evidence: [{ sourceType: 'chapter', sourceId, quote: '自己从未见过青铜铃' }],
+        reason: '陈述与行为需要核对，也可能是角色故意说谎。',
+      }] }),
+    })
+    expect(parse(0)?.findings[0].evidence[0].quote).toBe('自己从未见过青铜铃')
+    expect(parse(7)).toBeNull()
+  })
+
+  it.each([
+    { severity: 'certain' },
+    { reason: '' },
+    { evidence: [{ sourceType: 'invented', sourceId: 7, quote: '消耗 青铜铃 ×1' }] },
+    { evidence: [{ sourceType: 'chapter', sourceId: -1, quote: '消耗 青铜铃 ×1' }] },
+  ])('does not turn malformed findings into a valid subset: %j', invalid => {
+    const valid = {
+      category: '持有物', severity: 'hard', quote: '从左袖取出了青铜铃',
+      evidence: [{ sourceType: 'observation', sourceId: 7, quote: '消耗 青铜铃 ×1' }],
+      reason: '此前已交出，需要核对何时取回。',
+    }
+    expect(parseConsistencyAuditResult({
+      mode: 'fast', chapterContent: chapter, evidenceContext: evidence,
+      raw: JSON.stringify({ findings: [valid, { ...valid, ...invalid }] }),
+    })).toBeNull()
+  })
+
+  it('preserves an evidence-free issue as uncertain and accepts a genuinely empty report', () => {
+    const empty = { mode: 'fast' as const, chapterContent: chapter, evidenceContext: evidence }
+    expect(parseConsistencyAuditResult({ ...empty, raw: '{"findings":[]}' })?.findings).toEqual([])
+    expect(parseConsistencyAuditResult({ ...empty, raw: JSON.stringify({ findings: [{
+      category: '待核对', severity: 'hard', quote: '从左袖取出了青铜铃', evidence: [], reason: '缺少可核对来源。',
+    }] }) })?.findings[0].severity).toBe('unknown')
   })
 
   it('builds distinct fast and deep audit contracts without truncating chapter prose', () => {
