@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildWholeChapterQualityReviewRequestV1, parseWholeChapterQualityReviewV1 } from '../../src/lib/prose/quality-review'
-import { freezeQualityRevisionPlanV1, applyQualityRevisionPatchesV1 } from '../../src/lib/prose/quality-revision'
+import { freezeQualityRevisionPlanV1, applyQualityRevisionPatchesV1, qualityRevisionProtectionErrorV1 } from '../../src/lib/prose/quality-revision'
 import { describeResolvedAIRequestSettingsV1, resolveRequestConfig } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildQualityRecheckRequestV1, parseQualityRecheckV1, verifyQualityRecheckV1 } from '../../src/lib/prose/quality-recheck'
@@ -74,6 +74,19 @@ describe('LFQ8 · 作者选题与限定文字范围', () => {
     expect(result.outputText).toContain('已确认事实：余额3点。')
     expect(result.outputText).toContain('已收款')
     expect(result.outputText).toContain('两人关灯，停笔。')
+  })
+
+  it('保护原句保留一次；模型在授权补丁中重新附加原句仍会被拒绝，普通重复可保留', async () => {
+    const f = await seed()
+    const plan = await freezeQualityRevisionPlanV1({ ...f, protectedQuotes: ['已收款'] })
+    const unsafe = await applyQualityRevisionPatchesV1({ plan, originalText: f.originalText, raw: JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '陈禾写下已收款，' }] }) })
+    // Real-model failure shape: the protected original stays outside the patch,
+    // while the replacement pastes it in again. Keep reconstruction for history.
+    expect(unsafe.outputText).toContain('已收款，已收款')
+    expect(qualityRevisionProtectionErrorV1(plan, unsafe.outputText)).toContain('重复附加受保护原句')
+    const safe = await applyQualityRevisionPatchesV1({ plan, originalText: f.originalText, raw: JSON.stringify({ edits: [{ spanId: 'p2.2', replacement: '；收款、收款的动作由作者决定。' }] }) })
+    expect(qualityRevisionProtectionErrorV1(plan, safe.outputText)).toBeNull()
+    expect(qualityRevisionProtectionErrorV1(plan, f.originalText.replace('已收款', ''))).toContain('缺少受保护原句')
   })
 
   it('旧报告、未选问题、伪造引文和越界段落在发模型前拒绝', async () => {

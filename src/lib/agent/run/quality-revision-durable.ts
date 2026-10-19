@@ -9,7 +9,7 @@ import { normalizeRichEditorHTMLV1 } from '../../editor/rich-editor-schema'
 import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import { captureWorkspaceContentRevisionV1, assertWorkspaceContentRevisionFreshV1 } from '../../authoring/content-revision'
 import { prepareProseGatewayAssemblyV1 } from '../../prose/gateway-context'
-import { buildQualityRevisionRequestV1, freezeQualityRevisionPlanV1, QUALITY_REVISION_PROMPT_VERSION_V1, type QualityRevisionPlanV1 } from '../../prose/quality-revision'
+import { buildQualityRevisionRequestV1, freezeQualityRevisionPlanV1, qualityRevisionProtectionErrorV1, QUALITY_REVISION_PROMPT_VERSION_V1, type QualityRevisionPlanV1 } from '../../prose/quality-revision'
 import { previewQualityRevisionHTMLV1 } from '../../prose/quality-revision-html'
 import { buildQualityRecheckRequestV1, parseQualityRecheckV1 } from '../../prose/quality-recheck'
 import { QUALITY_RECHECK_STEP_V1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
@@ -33,7 +33,7 @@ import { beginProseGenerationGatewayStepV1, buildProseGenerationRunContractV3, p
 
 type Call = (messages: ChatMessage[], resolution: AIRequestConfigResolution, result: StreamResult) => Promise<string>
 export interface QualityRevisionDraftV1 { version: 'quality-revision-draft-v1'; plan: QualityRevisionPlanV1; sourceHtml: string; contentHtml: string; outputText: string; rawPatches: string }
-export interface QualityRevisionViewV1 { runId: number; state: string; current: boolean; draft: QualityRevisionDraftV1; candidate: ProseGenerationCandidateV1 | null }
+export interface QualityRevisionViewV1 { runId: number; state: string; current: boolean; draft: QualityRevisionDraftV1; candidate: ProseGenerationCandidateV1 | null; protectionError?: string }
 
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: any) {
   return appendAgentRunEventV1({ scope, runId: snapshot.run.id, type, payload, expectedLastSequence: snapshot.projection.lastSequence } as any)
@@ -113,6 +113,8 @@ async function runQualityRevisionLockedV1(input: QualityRevisionInputV1): Promis
     snapshot = await append(input.scope, snapshot, 'budget.settled', { stepId: 'prose-generation', modelCalls: 1, toolCalls: 0, tokens: received.usage?.totalTokens ?? first.estimatedInputTokens + estimateTokens(raw) })
     const draft: QualityRevisionDraftV1 = { version: 'quality-revision-draft-v1', plan, sourceHtml, contentHtml: preview.contentHtml, outputText: preview.outputText, rawPatches: raw }
     snapshot = (await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: draft })).snapshot
+    const protectionError = qualityRevisionProtectionErrorV1(plan, preview.outputText)
+    if (protectionError) throw new Error(protectionError)
     await assertWorkspaceContentRevisionFreshV1(revision, { scope: input.scope, worldGroupId: input.worldGroupId })
     if (input.signal?.aborted) throw new Error('修订已停止，预演结果已保留，未继续复核。')
     const recheckResolution = boundedQualityResolutionV1(resolveRequestConfig(input.configOverride ?? useAIConfigStore.getState().config, { category: 'review.quality', projectId: input.scope.projectId, configOverrides: input.generationOverrides }))
@@ -172,8 +174,9 @@ export async function readLatestQualityRevisionV1(input: { scope: WorkspaceScope
   if (rebuilt.contentHtml !== draft.contentHtml || rebuilt.outputText !== draft.outputText) throw new Error('修订预演证据已损坏。')
   const stored = await readLatestProseGenerationCandidateV1({ ...input, operations: ['quality-revise'] })
   const candidate = stored?.durable.runId === snapshot.run.id ? stored : null
-  const current = candidate ? await isProseGenerationCandidateCurrentV1(candidate) : chapter.content === draft.sourceHtml
-  return { runId: snapshot.run.id, state: snapshot.projection.state, current, draft, candidate }
+  const protectionError = qualityRevisionProtectionErrorV1(draft.plan, draft.outputText)
+  const current = !protectionError && (candidate ? await isProseGenerationCandidateCurrentV1(candidate) : chapter.content === draft.sourceHtml)
+  return { runId: snapshot.run.id, state: snapshot.projection.state, current, draft, candidate, ...(protectionError ? { protectionError } : {}) }
 }
 
 export async function adoptQualityRevisionV1(input: { scope: WorkspaceScope; candidate: ProseGenerationCandidateV1 }) {

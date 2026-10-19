@@ -60,7 +60,7 @@ export default function RevisionNodeSelection({ projectId, worldGroupId, node, o
       <QualityRevisionScopeControls chapterText={data.text} extraParagraphs={extra} protectedText={protectedText} disabled={!data.report.current} setExtraParagraphs={value => update({ additionalParagraphs: value })} setProtectedText={value => update({ protectedText: value })} />
     </>}
     {data?.view && <QualityRevisionComparisonView view={data.view}>
-      {['running', 'paused', 'recovery_required'].includes(data.view.state) && <button className="rounded border border-border p-2 text-xs" onClick={() => {
+      {(['running', 'paused', 'recovery_required'].includes(data.view.state) || data.view.state === 'awaiting_confirmation' && Boolean(data.view.protectionError)) && <button className="rounded border border-border p-2 text-xs" onClick={() => {
         void resolveQualityAuthoringChapterV1({ projectId, worldGroupId, node }).then(({ scope, chapter }) => abandonQualityRevisionV1({ scope, chapterId: chapter.id!, runId: data.view!.runId })).then(() => setRefresh(value => value + 1)).catch(cause => setError(cause instanceof Error ? cause.message : '未能结束运行。'))
       }}>结束未完成运行</button>}
     </QualityRevisionComparisonView>}

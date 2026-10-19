@@ -79,6 +79,7 @@ import type { AIRequestSettingsV1 } from '../../ai/client'
 import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
 import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { QUALITY_RECHECK_STEP_V1, verifyQualityRevisionEvidenceV1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
+import { qualityRevisionProtectionErrorV1 } from '../../prose/quality-revision'
 import { parseQualityRecheckV1 } from '../../prose/quality-recheck'
 
 export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
@@ -1228,6 +1229,10 @@ export async function commitProseGenerationAdoptionV1(input: {
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
   const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
   if (frame) throw new Error(frame.message)
+  if (input.candidate.operation === 'quality-revise' && input.candidate.qualityRevision) {
+    const protectionError = qualityRevisionProtectionErrorV1(input.candidate.qualityRevision.plan, input.candidate.outputText)
+    if (protectionError) throw new Error(protectionError)
+  }
   if (input.candidate.operation === 'quality-revise' && input.contentHtml !== input.candidate.qualityRevision?.contentHtml) throw new Error('范围修订待写回的富文本与冻结候选不一致。')
   try {
     await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {

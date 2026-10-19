@@ -401,7 +401,7 @@ export default function ReviewPanel(props: Props) {
         {revisionError && <p className="mt-3 rounded bg-error/10 p-3 text-xs text-error">{revisionError}</p>}
         {revisionView && <QualityRevisionComparisonView view={revisionView}>
           {revisionView.current && revisionView.candidate && revisionView.state === 'awaiting_confirmation' && <div className="flex gap-2"><button disabled={revisionBusy} className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" onClick={() => void decideRevision(true)}>确认采纳修订</button><button disabled={revisionBusy} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50" onClick={() => void decideRevision(false)}>放弃修订</button></div>}
-          {['running', 'paused', 'recovery_required'].includes(revisionView.state) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
+          {(['running', 'paused', 'recovery_required'].includes(revisionView.state) || revisionView.state === 'awaiting_confirmation' && Boolean(revisionView.protectionError)) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
             setRevisionBusy(true); setRevisionError('')
             void resolveScopeLike(projectId).then(async scope => { await abandonQualityRevisionV1({ scope, chapterId, runId: revisionView.runId }); setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId })) })
               .catch(error => setRevisionError(error instanceof Error ? error.message : '运行未能结束。')).finally(() => setRevisionBusy(false))

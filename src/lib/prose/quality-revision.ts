@@ -118,6 +118,17 @@ export async function freezeQualityRevisionPlanV1(input: {
   return { ...body, planHash: await hashCanonicalValue(body) }
 }
 
+/** Exact protection gate, separate from reconstruction so old unsafe previews
+ * remain inspectable. A frozen protected quote was unique in the source. */
+export function qualityRevisionProtectionErrorV1(plan: Pick<QualityRevisionPlanV1, 'protectedQuotes'>, outputText: string): string | null {
+  for (const quote of plan.protectedQuotes) {
+    const first = outputText.indexOf(quote)
+    if (first < 0) return '修订稿缺少受保护原句，不能采纳。'
+    if (outputText.indexOf(quote, first + 1) >= 0) return '修订稿重复附加受保护原句，不能采纳。'
+  }
+  return null
+}
+
 /** Deterministic reconstruction preserves every unselected/protected code unit.
  * This is text-scope validation, not a semantic fact or literature certificate. */
 export async function applyQualityRevisionPatchesV1(input: {

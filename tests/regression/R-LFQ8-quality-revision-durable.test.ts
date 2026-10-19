@@ -7,8 +7,10 @@ import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { normalizeRichEditorHTMLV1 } from '../../src/lib/editor/rich-editor-schema'
 import { runWholeChapterQualityReviewV1 } from '../../src/lib/agent/run/quality-review-durable'
-import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1 } from '../../src/lib/agent/run/quality-revision-durable'
+import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1 } from '../../src/lib/agent/run/quality-revision-durable'
 import { isProseGenerationCandidateCurrentV1 } from '../../src/lib/agent/run/prose-generation-durable'
+import * as protection from '../../src/lib/prose/quality-revision'
+import { verifyQualityRevisionEvidenceV1 } from '../../src/lib/prose/quality-revision-evidence'
 
 const old = useAIConfigStore.getState()
 // These cases verify multi-transaction durability, not latency. Keep a bounded
@@ -124,6 +126,49 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, maxTokens: 20000 } })
     await expect(runQualityRevisionV1(input(second))).rejects.toThrow('预算')
     expect(second.revise).not.toHaveBeenCalled(); expect(second.recheck).not.toHaveBeenCalled()
+  }, DURABLE_TEST_TIMEOUT)
+
+  it('重复附加保护原句在复核前停止，收到的补丁与只读预演可恢复，原稿不变', async () => {
+    const f = await seed()
+    const raw = JSON.stringify({ edits: [{ spanId: 'p2.1', replacement: '陈禾签下名字。' }] })
+    await expect(runQualityRevisionV1({ ...input(f), protectedQuotes: ['陈禾签下名字'] })).rejects.toThrow('重复附加受保护原句')
+    expect(f.revise).toHaveBeenCalledTimes(1)
+    expect(f.recheck).not.toHaveBeenCalled()
+    const view = await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId })
+    expect(view?.state).toBe('failed')
+    expect(view?.current).toBe(false)
+    expect(view?.protectionError).toContain('重复附加受保护原句')
+    expect(view?.draft.outputText).toContain('陈禾签下名字陈禾签下名字。')
+    expect(view?.candidate).toBeNull()
+    expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
+    const artifacts = await db.agentRunArtifacts.where('projectId').equals(f.scope.projectId).toArray()
+    expect(artifacts.some(row => {
+      try { const received = JSON.parse(row.content ?? ''); return received.version === 'quality-revision-received-v1' && received.raw === raw } catch { return false }
+    })).toBe(true)
+  }, DURABLE_TEST_TIMEOUT)
+
+  it('旧策略产生的重复保护候选仍可查看和结束，但共享采纳入口不接受', async () => {
+    const f = await seed()
+    // Simulate the previous policy, retaining real durable contracts, artifacts,
+    // candidate hashes and receipts instead of forging a signed candidate.
+    const previousPolicy = vi.spyOn(protection, 'qualityRevisionProtectionErrorV1').mockReturnValue(null)
+    let legacy: Awaited<ReturnType<typeof runQualityRevisionV1>>
+    try { legacy = await runQualityRevisionV1({ ...input(f), protectedQuotes: ['陈禾签下名字'] }) } finally { previousPolicy.mockRestore() }
+    expect(legacy!.state).toBe('awaiting_confirmation')
+    expect(await verifyQualityRevisionEvidenceV1(legacy!.candidate!.qualityRevision!, legacy!.candidate!.outputText)).toBe(false)
+    expect(await isProseGenerationCandidateCurrentV1(legacy!.candidate!)).toBe(false)
+    const before = (await db.agentRuns.get(legacy!.runId))!.lastSequence
+    await expect(adoptQualityRevisionV1({ scope: f.scope, candidate: legacy!.candidate! })).rejects.toThrow('重复附加受保护原句')
+    expect((await db.agentRuns.get(legacy!.runId))!.lastSequence).toBe(before)
+    expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
+    const view = await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId })
+    expect(view?.draft.outputText).toContain('陈禾签下名字陈禾签下名字。')
+    expect(view?.protectionError).toContain('重复附加受保护原句')
+    expect(view?.current).toBe(false)
+    await abandonQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId, runId: legacy!.runId })
+    expect((await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId }))?.state).toBe('cancelled')
+    expect(f.revise).toHaveBeenCalledTimes(1)
+    expect(f.recheck).toHaveBeenCalledTimes(1)
   }, DURABLE_TEST_TIMEOUT)
 
   it('作者取消保留一次已收到预演，禁止复核重发；并发占用不派第二次模型调用', async () => {

@@ -24,14 +24,15 @@ export function WholeQualityReportView({ result, selected, toggle, disabled }: {
 export function QualityRevisionScopeControls({ chapterText, extraParagraphs, protectedText, disabled, setExtraParagraphs, setProtectedText }: { chapterText: string; extraParagraphs: number[]; protectedText: string; disabled: boolean; setExtraParagraphs: (value: number[]) => void; setProtectedText: (value: string) => void }) {
   return <>
     <details><summary className="cursor-pointer text-xs">选择其它可改段落</summary><div className="mt-2 max-h-40 space-y-1 overflow-y-auto">{chapterText.split('\n').filter(line => line.trim()).map((line, index) => <label key={index} className="flex gap-2 text-xs"><input type="checkbox" disabled={disabled} checked={extraParagraphs.includes(index + 1)} onChange={() => setExtraParagraphs(extraParagraphs.includes(index + 1) ? extraParagraphs.filter(item => item !== index + 1) : [...extraParagraphs, index + 1])} />第 {index + 1} 段：{line}</label>)}</div></details>
-    <label className="block text-xs">保护原句（可选，每行一句，须与正文完全相同）<textarea aria-label="保护原句" className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={protectedText} disabled={disabled} onChange={event => setProtectedText(event.target.value)} /></label>
+    <label className="block text-xs">保护原句（可选，每行一句，须与原稿完全相同且只出现一次；修订后原样保留一次）<textarea aria-label="保护原句" className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={protectedText} disabled={disabled} onChange={event => setProtectedText(event.target.value)} /></label>
   </>
 }
 
 export function QualityRevisionComparisonView({ view, children }: { view: QualityRevisionViewV1; children?: ReactNode }) {
+  const protectionBlocked = Boolean(view.protectionError) && !['completed', 'cancelled'].includes(view.state)
   return <div data-testid="quality-revision-preview" className="mt-4 space-y-3 rounded border border-border p-3">
     <p className="text-sm font-medium">修订前后对照</p>
-    <p className="text-xs text-text-muted">{view.state === 'completed' ? '已采纳，记录只读。' : view.state === 'cancelled' ? '已放弃，原稿保留。' : !view.current ? '原稿、资料或证据已变化，修订不能采纳。' : !view.candidate || view.state !== 'awaiting_confirmation' ? '复核未完成，预演结果只供查看；刷新不会重发。' : '复核已返回，最终是否采用由你判断。'}</p>
+    <p role={protectionBlocked ? 'alert' : undefined} className={protectionBlocked ? 'text-xs text-warning' : 'text-xs text-text-muted'}>{view.state === 'completed' ? '已采纳，记录只读。' : view.state === 'cancelled' ? '已放弃，原稿保留。' : view.protectionError ? `${view.protectionError}预演结果只供查看。` : !view.current ? '原稿、资料或证据已变化，修订不能采纳。' : !view.candidate || view.state !== 'awaiting_confirmation' ? '复核未完成，预演结果只供查看；刷新不会重发。' : '复核已返回，最终是否采用由你判断。'}</p>
     {view.draft.plan.authorRequest && <details className="text-xs"><summary className="cursor-pointer text-text-muted">这次修订使用的作者要求</summary><p className="mt-2 whitespace-pre-wrap">{view.draft.plan.authorRequest}</p></details>}
     <div className="grid gap-3 md:grid-cols-2"><div><p className="text-xs text-text-muted">原稿</p><p className="whitespace-pre-wrap text-sm">{htmlToPlainText(view.draft.sourceHtml)}</p></div><div><p className="text-xs text-text-muted">修订稿</p><p className="whitespace-pre-wrap text-sm">{view.draft.outputText}</p></div></div>
     {view.candidate?.qualityRevision?.recheck.outcomes.map(item => <p key={item.issueId} className="text-xs">{item.status === 'improved' ? '模型认为已有改善' : item.status === 'unchanged' ? '模型认为仍未解决' : '模型无法确定'}：{item.reason}<br />依据：“{item.quote}”</p>)}
