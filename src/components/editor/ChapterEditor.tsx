@@ -387,7 +387,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   ))
   const restoreAI = ai.restore
   const stateAI = useAIStream()
-  const memoryAI = useAIStream()
   const editorRef = useRef<RichEditorHandle>(null)
   const organizationAbortRef = useRef<AbortController | null>(null)
   const transitionSnapshotRef = useRef<AgentRunSnapshotV1 | null>(null)
@@ -1223,7 +1222,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         call: messages => executeRegisteredAIEntryV1('prose.chapter.memory', messages, aiConfig, {
           category: 'chapter.memory',
           projectId: project.id!,
-        }),
+        }, undefined, undefined, { responseFormat: 'json_object' }),
       })
       if (result.status === 'written') await refreshChapter(chapterId)
     } catch (error) {
@@ -2557,11 +2556,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const result = await runChapterMemoryTask({
         projectId: project.id!,
         ...task,
-        call: messages => memoryAI.start(messages, undefined, {
-          formalEntryId: 'prose.chapter.memory',
+        call: messages => executeRegisteredAIEntryV1('prose.chapter.memory', messages, aiConfig, {
           category: 'chapter.memory',
           projectId: project.id!,
-        }),
+        }, undefined, undefined, { responseFormat: 'json_object' }),
       })
       if (result.status === 'written') {
         await refreshChapter(task.chapterId)
@@ -2577,7 +2575,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return 'failed'
     } finally {
       setAutoProcessing('idle')
-      memoryAI.reset()
     }
   }
 
@@ -3528,7 +3525,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       <ChapterMemoryPanel
         summary={currentChapter.summary}
         hasText={!!plainText}
-        memoryBusy={autoProcessing === 'memory' || memoryAI.isStreaming}
+        memoryBusy={autoProcessing === 'memory'}
         chapterTitle={chapterDisplay?.title ?? currentChapter.title}
         nextChapterTitle={(() => {
           const next = findNextCanonicalChapter(nodes, chapters, currentChapter)
