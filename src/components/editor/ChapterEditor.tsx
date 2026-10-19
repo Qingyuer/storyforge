@@ -138,6 +138,7 @@ import {
 } from '../../lib/agent/run/chapter-post-adoption-durable'
 import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
+import { buildChapterPostAdoptionResumePlanV1 } from '../../lib/agent/run/chapter-post-adoption-resume'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
 import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
@@ -3507,7 +3508,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               </div>
             </div>
           )}
-          {postAdoptionChainState === 'downstream-failed' && (
+          {(postAdoptionChainState === 'downstream-failed'
+            || (postAdoptionChainState === 'downstream-processing'
+              && transitionSnapshotRef.current
+              && buildChapterPostAdoptionResumePlanV1(transitionSnapshotRef.current).canResume)) && (
             <button
               type="button"
               className="mt-2 inline-flex items-center gap-1.5 rounded border border-sky-400/30 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-400/10 disabled:opacity-50"
