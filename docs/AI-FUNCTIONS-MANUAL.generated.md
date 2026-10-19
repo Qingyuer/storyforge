@@ -371,9 +371,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1770` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1748` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1738` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1774` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1752` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1742` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
@@ -499,4 +499,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `0fab3573`
+生成时间基准:commit `fe9b3995`

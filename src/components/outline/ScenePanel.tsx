@@ -220,7 +220,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
                   }
                 } : undefined}
                 onDismiss={pendingCandidate?.candidate.operation === 'scenes'
-                  ? () => { void dismissCandidate('scenes') }
+                  ? () => { void dismissCandidate('scenes').catch(error => { toast.error(error instanceof Error ? error.message : '拒绝细纲失败，请重试') }) }
                   : undefined}
                 onRetry={handleAIGenerate}
               />
@@ -252,7 +252,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
                   }
                 } : undefined}
                 onDismiss={pendingCandidate?.candidate.operation === 'enhanced'
-                  ? () => { void dismissCandidate('enhanced') }
+                  ? () => { void dismissCandidate('enhanced').catch(error => { toast.error(error instanceof Error ? error.message : '拒绝细纲失败，请重试') }) }
                   : undefined}
                 onRetry={handleEnhancedGenerate}
               />

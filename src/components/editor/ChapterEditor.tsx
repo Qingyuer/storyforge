@@ -1683,51 +1683,55 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setProseGenerationError(error instanceof Error ? error.message : '作者编辑保存失败，已阻止正式续写。')
       return
     }
-    await persistCurrentEditorContent()
-    await prepareContinuityBeforeGeneration()
-    const scope = await resolveScopeLike(project.id!)
-    const contentRevision = await captureWorkspaceContentRevisionV1({
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const {
-      text: fullCtx,
-      assembled,
-      generationBinding,
-      characterContext,
-      continuity,
-      continuityBudgetTokens,
-    } = await buildFullWorldCtx('continue', 'write')
-    await assertWorkspaceContentRevisionFreshV1(contentRevision, {
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const informationBoundary = await buildChapterInformationBoundaryV1({
-      scope: await resolveScopeLike(project.id!),
-      chapterId: currentChapter?.id ?? null,
-      outlineNodeId: outlineNode.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      perspectiveCharacterId,
-    })
-    const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
-    const promptRequest = buildContinueRequestV1(
-      plainText,
-      outlineNode.summary,
-      ctxWithChars,
-      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-        .filter(Boolean)
-        .join('\n'),
-      { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
-    )
-    prepareOrRunChapterGeneration(
-      'continue',
-      'chapter.continue',
-      promptRequest.messages,
-      assembled,
-      generationBinding,
-      informationBoundary,
-      contentRevision, promptRequest.modelOverride,
-    )
+    try {
+      await persistCurrentEditorContent()
+      await prepareContinuityBeforeGeneration()
+      const scope = await resolveScopeLike(project.id!)
+      const contentRevision = await captureWorkspaceContentRevisionV1({
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const {
+        text: fullCtx,
+        assembled,
+        generationBinding,
+        characterContext,
+        continuity,
+        continuityBudgetTokens,
+      } = await buildFullWorldCtx('continue', 'write')
+      await assertWorkspaceContentRevisionFreshV1(contentRevision, {
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const informationBoundary = await buildChapterInformationBoundaryV1({
+        scope: await resolveScopeLike(project.id!),
+        chapterId: currentChapter?.id ?? null,
+        outlineNodeId: outlineNode.id!,
+        worldGroupId: chapterWorldGroupId ?? null,
+        perspectiveCharacterId,
+      })
+      const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
+      const promptRequest = buildContinueRequestV1(
+        plainText,
+        outlineNode.summary,
+        ctxWithChars,
+        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+          .filter(Boolean)
+          .join('\n'),
+        { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
+      )
+      prepareOrRunChapterGeneration(
+        'continue',
+        'chapter.continue',
+        promptRequest.messages,
+        assembled,
+        generationBinding,
+        informationBoundary,
+        contentRevision, promptRequest.modelOverride,
+      )
+    } catch (error) {
+      setProseGenerationError(error instanceof Error ? error.message : '正文续写准备失败。')
+    }
   }
 
   const handlePolish = () => {
