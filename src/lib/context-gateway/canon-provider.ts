@@ -45,7 +45,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v6'
+const PROVIDER_VERSION = 'canon-resource-provider-v7'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -332,6 +332,12 @@ function short(value: string, limit = 240): string {
 }
 
 function rowTitle(spec: ResourceSpec, row: ResourceRow): string {
+  // History rows identify occurrences, not one definition of the named item
+  // or event. Their fields share the registered portable occurrence identity.
+  if (spec.name === 'itemLedger' || spec.name === 'storyTimelineEvents') {
+    const name = exactValue(spec.name === 'itemLedger' ? row.itemName : row.title).trim()
+    return `${name || spec.resourceIdentity.label} · ${row.ragDocumentId}`
+  }
   for (const key of ['title', 'name', 'entityName', 'subjectName', 'itemName', 'key']) {
     const value = row[key]
     if (typeof value === 'string' && value.trim()) return value.trim()
