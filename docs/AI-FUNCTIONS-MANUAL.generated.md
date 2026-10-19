@@ -363,8 +363,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:808` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:912` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:822` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:930` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
@@ -433,7 +433,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/comic/durable-production.ts:270 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
-- `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
+- `src/lib/generation/workflow-generation-node.ts:22 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
 - `src/lib/node-authoring/executor.ts:444 · chat`
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
@@ -446,7 +446,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 49 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 47 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -466,8 +466,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prose.review.recheck` | `prose.quality-recheck` | `review.quality` | auxiliary / durable-run | `quality-revision-recheck` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.consistency` | `prose.review` | `review.consistency.fast`<br/>`review.consistency.deep` | auxiliary / durable-run | `consistency-audit-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
 | `world.map.concept` | `world-origin.map-config` | `geography.concept-map` | auxiliary / authoring-draft | `concept-map-svg` | 禁止 | `src/components/geography/GeographyPanel.tsx` |
-| `world.setting.lookup.qa` | `world-origin.review` | `setting-qa` | auxiliary / read-only | `setting-qa-answer` | 禁止 | `src/components/editor/SettingLookupPanel.tsx` |
-| `world.setting.lookup.extract` | `world-origin.codex-extract` | `setting-extract` | formal / authoring-draft | `setting-extraction-candidate` | `codexEntries` | `src/components/editor/SettingLookupPanel.tsx` |
 | `outline.workshop.scan` | `outline.chapters` | `outline.workshop.scan` | formal / generation-node | `outline-workshop-scan` | 禁止 | `src/lib/outline/workshop.ts` |
 | `outline.workshop.motivation` | `outline.chapters` | `outline.workshop.motivation` | formal / generation-node | `outline-workshop-motivation` | 禁止 | `src/lib/outline/workshop.ts` |
 | `outline.workshop.collision` | `outline.chapters` | `outline.workshop.collision` | formal / generation-node | `outline-workshop-collision` | 禁止 | `src/lib/outline/workshop.ts` |
@@ -502,4 +500,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `2a93bced`
+生成时间基准:commit `f684af95`
