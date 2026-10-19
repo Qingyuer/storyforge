@@ -3,7 +3,7 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import { verifyWholeChapterQualityReviewV1, type QualityReviewArtifactV1 } from './quality-review'
 import { SCENE_REVISION_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVISION_PROMPT_VERSION_V1 = 'quality-revision-patches-v6'
+export const QUALITY_REVISION_PROMPT_VERSION_V1 = 'quality-revision-patches-v7'
 
 export interface QualityRevisionSpanV1 {
   id: string
@@ -42,7 +42,7 @@ export function buildQualityRevisionRequestV1(input: {
   if (input.report.artifactHash !== input.plan.reportHash) throw new Error('修订的初审报告与冻结计划不一致。')
   const { plan, report } = input
   return [
-    { role: 'system', content: `范围修订契约：${QUALITY_REVISION_PROMPT_VERSION_V1}。\n只处理作者明确选中的阅读问题。你只能替换允许范围，不能修改保护文字、其它段落、人物事实、奖励与停笔位置。不要额外改写全文，也不要把范围或任务说明写进小说。\n${SCENE_REVISION_GUIDANCE_V1}\nspanId只能逐字复制允许替换范围中的id，不能使用问题id或评审anchorId。replacement仅替换该范围，范围外原文由系统保留，不得重复附加已扣除的保护文字；修改相关数值时核对本场所有受影响的陈述，不能只改其中一处。\n输出单个JSON：{"edits":[{"spanId":"允许范围的id","replacement":"该范围的替换文字，可为空以删除"}]}。每个spanId最多一次，总替换字符不超过${plan.maxReplacementChars}。` },
+    { role: 'system', content: `范围修订契约：${QUALITY_REVISION_PROMPT_VERSION_V1}。\n只处理作者明确选中的阅读问题。你只能替换允许范围，不能修改保护文字、其它段落、作者已确认的人物事实、奖励规则与停笔位置。原稿中的错误陈述可在授权范围内修正；不要额外改写全文，也不要把范围或任务说明写进小说。\n${SCENE_REVISION_GUIDANCE_V1}\nspanId只能逐字复制允许替换范围中的id，不能使用问题id或评审anchorId。replacement仅替换该范围，范围外原文由系统保留，不得重复附加已扣除的保护文字；修改相关数值时核对本场所有受影响的陈述，不能只改其中一处。\n输出单个JSON：{"edits":[{"spanId":"允许范围的id","replacement":"该范围的替换文字，可为空以删除"}]}。每个spanId最多一次，总替换字符不超过${plan.maxReplacementChars}。` },
     { role: 'user', content: `【完整原稿】\n${input.originalText}\n【作者选中的问题】\n${JSON.stringify(report.issues.filter(issue => plan.issueIds.includes(issue.id)))}\n【初审保留点 · 编辑建议，不是新增事实】\n${JSON.stringify(report.strengths)}\n【允许替换的文字范围】\n${JSON.stringify(plan.allowedSpans)}\n【保护文字】\n${JSON.stringify(plan.protectedQuotes)}\n【登记资料与作者要求】\n${input.registeredContext}${plan.authorRequest ? `\n【本轮作者补充要求 · 只适用于已授权范围】\n${plan.authorRequest}` : ''}` },
   ]
 }

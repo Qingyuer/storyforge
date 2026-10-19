@@ -32,6 +32,7 @@ describe('LFQ8 · 作者选题与限定文字范围', () => {
     const input = { plan, candidateText, messages, settings: f.report.reviewer.settings, completion: 'complete' as const }
     await expect(parseQualityRecheckV1({ ...input, raw: JSON.stringify({ review: { summary: '已修复', strengths: [] }, outcomes: [outcome] }) })).rejects.toThrow('字段')
     await expect(parseQualityRecheckV1({ ...input, raw: JSON.stringify({ review: { summary: '已修复', strengths: [], issues: [] } }) })).rejects.toThrow('逐项覆盖')
+    await expect(parseQualityRecheckV1({ ...input, raw: JSON.stringify({ review: { summary: '仍需核对', strengths: [], issues: [{ dimension: 'continuity', confidence: 'uncertain', anchorId: 'p2', reason: '建议与依据并写在这里不能替代必填suggestion。' }] }, outcomes: [outcome] }) })).rejects.toThrow('字段')
     await expect(buildQualityRecheckRequestV1({ plan, originalReport: f.report, chapterTitle: '交付', candidateText: '  ', registeredContext: '' })).rejects.toThrow('为空')
   })
 
@@ -46,10 +47,10 @@ describe('LFQ8 · 作者选题与限定文字范围', () => {
     const outcome = { issueId: plan.issueIds[0], status: 'improved', quote: '赵经理递来一百二十元；陈禾点清后开了收条。', reason: '实际付款过程可见' }
     const raw = JSON.stringify({ review: { summary: '复核修订后正文', strengths: [], issues: [] }, outcomes: [outcome] })
     const checked = await parseQualityRecheckV1({ raw, plan, candidateText, messages, settings, completion: 'complete' })
-    expect(checked.promptVersion).toBe('quality-revision-recheck-v9')
+    expect(checked.promptVersion).toBe('quality-revision-recheck-v10')
     expect(await verifyQualityRecheckV1(checked, plan, candidateText, messages)).toBe(true)
     await expect(parseQualityRecheckV1({ raw: JSON.stringify({ review: { summary: '误看旧稿', strengths: [], issues: [] }, outcomes: [{ ...outcome, quote: f.report.issues[0].quote }] }), plan, candidateText, messages, settings, completion: 'complete' })).rejects.toThrow('引文')
-    const legacyMessages = messages.map((message, i) => i === 0 ? { ...message, content: message.content.replace('复核契约：quality-revision-recheck-v9。', '') } : message)
+    const legacyMessages = messages.map((message, i) => i === 0 ? { ...message, content: message.content.replace('复核契约：quality-revision-recheck-v10。', '') } : message)
     const historical = await parseQualityRecheckV1({ raw, plan, candidateText, messages: legacyMessages, settings, completion: 'complete' })
     expect(historical.promptVersion).toBe('quality-revision-recheck-v1')
     expect(await verifyQualityRecheckV1(historical, plan, candidateText, legacyMessages)).toBe(true)

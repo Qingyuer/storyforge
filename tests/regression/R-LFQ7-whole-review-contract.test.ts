@@ -20,7 +20,7 @@ describe('LFQ7 · 全章输入、真实引文与阅读建议合同', () => {
     expect(request.messages[0].content).toContain('suggestion必须单独给出非空')
   })
 
-  it.each(['whole-chapter-quality-review-v10', 'whole-chapter-quality-review-v11'] as const)('实际漏写suggestion的响应在%s仍整份拒绝；完整历史报告不改版本', async promptVersion => {
+  it.each(['whole-chapter-quality-review-v10', 'whole-chapter-quality-review-v11', 'whole-chapter-quality-review-v12'] as const)('实际漏写suggestion的响应在%s仍整份拒绝；完整历史报告不改版本', async promptVersion => {
     const chapterText = '她已经回听三次，结算却只记两次。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '回听', chapterText, registeredContext: '' })
     const messages = request.messages.map((message, index) => index === 0 ? { ...message, content: message.content.replace(`全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。`, `全文评审契约：${promptVersion}。`) } : message)

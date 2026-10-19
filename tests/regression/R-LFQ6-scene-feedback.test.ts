@@ -42,6 +42,7 @@ describe('LFQ6 · 群友探路反馈进入既有正文与审修链', () => {
     ['whole-chapter-quality-review-v9', 'quality-revision-recheck-v8'],
     ['whole-chapter-quality-review-v10', 'quality-revision-recheck-v9'],
     ['whole-chapter-quality-review-v11', 'quality-revision-recheck-v9'],
+    ['whole-chapter-quality-review-v12', 'quality-revision-recheck-v10'],
   ] as const)('历史或当前嵌套报告 %s / %s 按实际请求版本恢复验签', async (reviewVersion, recheckVersion) => {
     const originalText = '绳子只有一百二十厘米。\n她把十五米绳索全部放出。\n两人决定撤回。'
     const request = await buildWholeChapterQualityReviewRequestV1({ mode: 'quality', chapterTitle: '探路', chapterText: originalText, registeredContext: '仅有一条绳索，没有新装备。' })
@@ -49,7 +50,8 @@ describe('LFQ6 · 群友探路反馈进入既有正文与审修链', () => {
     const plan = await freezeQualityRevisionPlanV1({ scope: { projectId: 1, worldId: 1, workId: 1 }, chapterId: 1, reportRunId: 1, report, reviewMessages: request.messages, reviewCurrent: true, originalText, selectedIssueIds: [report.issues[0].id], previousCalls: 2, authorRequest: '修正长度，保留撤退' })
     const candidateText = '绳子只有一百二十厘米。\n她将绳子探向脚边，确认石沿后把它收回。\n两人决定撤回。'
     const messages = (await buildQualityRecheckRequestV1({ plan, originalReport: report, chapterTitle: '探路', candidateText, registeredContext: originalText })).map((message, index) => index === 0 ? { ...message, content: message.content.replace(`全文评审契约：${QUALITY_REVIEW_PROMPT_VERSION_V1}。`, `全文评审契约：${reviewVersion}。`).replace(`复核契约：${QUALITY_RECHECK_PROMPT_VERSION_V1}。`, `复核契约：${recheckVersion}。`) } : { ...message, content: message.content.replace(formatQualityReviewAnchorsV1(candidateText), formatQualityReviewAnchorsV1(candidateText, reviewVersion)) })
-    const location = ['quality-revision-recheck-v6', 'quality-revision-recheck-v7', 'quality-revision-recheck-v8', 'quality-revision-recheck-v9'].includes(recheckVersion) ? { anchorId: 'p2' } : ['quality-revision-recheck-v4', 'quality-revision-recheck-v5'].includes(recheckVersion) ? { anchorId: 'p2-1' } : { quote: '她将绳子探向脚边，确认石沿后把它收回。' }
+    const location = ['quality-revision-recheck-v6', 'quality-revision-recheck-v7', 'quality-revision-recheck-v8', 'quality-revision-recheck-v9', 'quality-revision-recheck-v10'].includes(recheckVersion) ? { anchorId: 'p2' } : ['quality-revision-recheck-v4', 'quality-revision-recheck-v5'].includes(recheckVersion) ? { anchorId: 'p2-1' } : { quote: '她将绳子探向脚边，确认石沿后把它收回。' }
+    if (reviewVersion === QUALITY_REVIEW_PROMPT_VERSION_V1) expect(messages[0].content).toContain('suggestion必须单独给出非空')
     const artifact = await parseQualityRecheckV1({ raw: JSON.stringify({ review: { summary: '范围内修正，阅读收益由作者判断', strengths: ['试探过程仍保留'], issues: [] }, outcomes: [{ issueId: plan.issueIds[0], status: 'improved', ...location, reason: '不再放出超过总长的绳索' }] }), plan, candidateText, messages, settings, completion: 'complete' })
     expect(artifact.promptVersion).toBe(recheckVersion)
     expect(artifact.review.reviewer.promptVersion).toBe(reviewVersion)
