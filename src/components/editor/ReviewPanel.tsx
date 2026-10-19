@@ -16,6 +16,7 @@ import {
 } from '../../lib/ai/adapters/consistency-audit-adapter'
 import {
   toConsistencyAuditResult,
+  CONSISTENCY_AGENT_OUTPUT_BUDGET_V1,
   type ConsistencyAgentRun,
 } from '../../lib/agent/consistency-agent'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
@@ -204,7 +205,7 @@ export default function ReviewPanel(props: Props) {
             formalEntryId: 'prose.review.consistency',
             category: auditMode === 'fast' ? 'review.consistency.fast' : 'review.consistency.deep',
             projectId,
-            configOverrides: { maxTokens: auditMode === 'fast' ? 4_000 : 6_000 },
+            configOverrides: { maxTokens: CONSISTENCY_AGENT_OUTPUT_BUDGET_V1[auditMode] },
             contextOverflowPolicy: 'reject',
             transportRetryPolicy: 'none',
           }, undefined, delivery)

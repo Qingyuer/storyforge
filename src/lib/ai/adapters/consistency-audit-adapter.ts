@@ -1,18 +1,23 @@
 import type { ChatMessage } from '../../types'
+import { formatQualityReviewAnchorsV1, qualityReviewAnchorsV1 } from '../../prose/quality-review'
 
 export type ConsistencyAuditMode = 'fast' | 'deep'
 export type ConsistencySeverity = 'hard' | 'risk' | 'unknown'
 
-export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v2'
+export const CONSISTENCY_AUDIT_PROMPT_VERSION_V1 = 'consistency-evidence-audit-v3'
+// Freeze the shared catalog's numbering rules for this audit protocol.
+const AUDIT_ANCHOR_VERSION = 'whole-chapter-quality-review-v10'
 
 export interface ConsistencyFinding {
   category: string
   severity: ConsistencySeverity
   quote: string
+  anchorId?: string
   evidence: Array<{
     sourceType: 'canon' | 'observation' | 'chapter' | 'summary'
     sourceId: number
     quote: string
+    anchorId?: string
   }>
   reason: string
   suggestion?: string
@@ -40,11 +45,11 @@ export function buildConsistencyAuditPrompt(args: {
       content: `你是小说一致性证据审计器。契约：${CONSISTENCY_AUDIT_PROMPT_VERSION_V1}。${focus}
 
 输出严格 JSON：
-{"findings":[{"category":"分类","severity":"hard|risk|unknown","quote":"待审正文逐字引文","evidence":[{"sourceType":"chapter|summary|observation|canon","sourceId":0,"quote":"证据上下文逐字引文"}],"reason":"为何冲突或有风险","suggestion":"可选建议"}],"cognitionReferences":[{"characterId":1,"knowledgeKey":"闭集中的key","quote":"该角色运用或陈述该知识的正文逐字引文"}],"lifecycleReferences":[{"characterId":1,"activityType":"normal-activity","quote":"已死亡角色作为活人正常行动的正文逐字引文"}]}
+{"findings":[{"category":"分类","severity":"hard|risk|unknown","anchorId":"逐字复制正文目录编号","evidence":[{"sourceType":"chapter|summary|observation|canon","sourceId":0,"quote":"证据上下文逐字引文"}],"reason":"为何冲突或有风险","suggestion":"可选建议"}],"cognitionReferences":[{"characterId":1,"knowledgeKey":"闭集中的key","quote":"该角色运用或陈述该知识的正文逐字引文"}],"lifecycleReferences":[{"characterId":1,"activityType":"normal-activity","quote":"已死亡角色作为活人正常行动的正文逐字引文"}]}
 
 规则：
-1. quote 必须逐字来自待审正文；
-2. evidence.quote 必须逐字来自证据上下文；正文内部的另一处依据使用 sourceType="chapter"、sourceId=0，quote 逐字来自待审正文。0 仅代表本次待审章，不能用于伪造外部证据；
+1. findings.anchorId 必须逐字复制正文定位目录的编号，不能自行缩写或生成编号；代码从该位置取原文，不要另抄 findings.quote；
+2. 外部 evidence.quote 必须逐字来自只读资料；正文内部的另一处依据使用 {"sourceType":"chapter","sourceId":0,"anchorId":"正文目录中的对应编号"}，不要另抄 quote。0 仅代表本次待审章，不能用于伪造外部证据；
 3. hard 必须有至少一条正确证据，且只能用于直接矛盾；
 4. 创作选择、信息不足或可能解释得通的内容只能标 risk/unknown；
 5. cognitionReferences 只能从提供的角色认知审计闭集中选择 characterId + knowledgeKey；quote 必须是正文逐字引文；不确定就不输出；
@@ -56,7 +61,7 @@ export function buildConsistencyAuditPrompt(args: {
     },
     {
       role: 'user',
-      content: `【章节】${args.chapterTitle}\n\n【只读资料：规则与已确认条件用于核对，章纲/细纲是计划】\n${args.evidenceContext}\n\n${args.cognitionCatalog || '【角色认知审计闭集】无'}\n\n${args.lifecycleCatalog || '【角色存亡审计闭集】无'}\n\n【待审正文：其中的断言也需要核对，不能自证正确】\n${args.chapterContent}\n\n请输出 JSON：`,
+      content: `【章节】${args.chapterTitle}\n\n【只读资料：规则与已确认条件用于核对，章纲/细纲是计划】\n${args.evidenceContext}\n\n${args.cognitionCatalog || '【角色认知审计闭集】无'}\n\n${args.lifecycleCatalog || '【角色存亡审计闭集】无'}\n\n【待审正文：其中的断言也需要核对，不能自证正确】\n${args.chapterContent}\n【正文结束】\n【正文定位目录：findings与本章证据只复制anchorId】\n${formatQualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION)}\n\n请输出 JSON：`,
     },
   ]
 }
@@ -73,10 +78,19 @@ export function parseConsistencyAuditResult(args: {
   try {
     const parsed = JSON.parse(args.raw.slice(start, end + 1)) as { findings?: unknown }
     if (!Array.isArray(parsed.findings)) return null
+    const anchors = new Map(qualityReviewAnchorsV1(args.chapterContent, AUDIT_ANCHOR_VERSION).map(anchor => [anchor.anchorId, anchor]))
+    const currentQuote = (value: Record<string, unknown>): { quote: string; anchorId?: string } => {
+      if (Object.prototype.hasOwnProperty.call(value, 'anchorId')) {
+        const anchor = typeof value.anchorId === 'string' ? anchors.get(value.anchorId) : undefined
+        if (!anchor || (value.quote !== undefined && value.quote !== anchor.quote)) throw new Error('Invalid chapter anchor')
+        return { quote: anchor.quote, anchorId: anchor.anchorId }
+      }
+      return { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
+    }
     const findings = parsed.findings.map((raw): ConsistencyFinding => {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid finding')
       const item = raw as Record<string, unknown>
-      const quote = typeof item.quote === 'string' ? item.quote.trim() : ''
+      const { quote, anchorId } = currentQuote(item)
       if (!quote || !args.chapterContent.includes(quote)
         || typeof item.category !== 'string' || !item.category.trim()
         || typeof item.reason !== 'string' || !item.reason.trim()
@@ -88,8 +102,10 @@ export function parseConsistencyAuditResult(args: {
       const evidence = item.evidence.map((entry): ConsistencyFinding['evidence'][number] => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Invalid evidence')
         const value = entry as Record<string, unknown>
-        const evidenceQuote = typeof value.quote === 'string' ? value.quote.trim() : ''
         const currentChapter = value.sourceType === 'chapter' && value.sourceId === 0
+        if (!currentChapter && Object.prototype.hasOwnProperty.call(value, 'anchorId')) throw new Error('External evidence cannot use chapter anchors')
+        const cited: ReturnType<typeof currentQuote> = currentChapter ? currentQuote(value) : { quote: typeof value.quote === 'string' ? value.quote.trim() : '' }
+        const evidenceQuote = cited.quote
         if (!evidenceQuote || !['canon', 'observation', 'chapter', 'summary'].includes(String(value.sourceType))
           || !Number.isInteger(value.sourceId) || (value.sourceId as number) < 0
           || !(currentChapter ? args.chapterContent : args.evidenceContext).includes(evidenceQuote)) {
@@ -99,6 +115,7 @@ export function parseConsistencyAuditResult(args: {
           sourceType: value.sourceType as ConsistencyFinding['evidence'][number]['sourceType'],
           sourceId: value.sourceId as number,
           quote: evidenceQuote,
+          ...(cited.anchorId ? { anchorId: cited.anchorId } : {}),
         }
       })
       const requested = item.severity as ConsistencySeverity
@@ -107,6 +124,7 @@ export function parseConsistencyAuditResult(args: {
         category: item.category.trim(),
         severity,
         quote,
+        ...(anchorId ? { anchorId } : {}),
         evidence,
         reason: item.reason.trim(),
         suggestion: (item.suggestion as string | undefined)?.trim() || undefined,

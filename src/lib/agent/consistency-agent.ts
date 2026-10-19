@@ -126,8 +126,9 @@ export const CONSISTENCY_AGENT_INPUT_BUDGET_V1 = {
 } as const
 
 export const CONSISTENCY_AGENT_OUTPUT_BUDGET_V1 = {
-  fast: 4_000,
-  deep: 6_000,
+  // Includes provider reasoning tokens, which can exhaust 4K before any report text.
+  fast: 16_000,
+  deep: 16_000,
 } as const
 
 export interface ConsistencyAgentExecutionTraceV1 {

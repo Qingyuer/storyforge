@@ -152,18 +152,24 @@ test('一致性专审读取本章计划，支持章内证据并在刷新后保�
   const requests: any[] = []
   await page.route('https://whole-review.invalid/**', route => {
     requests.push(route.request().postDataJSON())
-    const findings = [{ category: '付款依据', severity: 'risk', quote,
-      evidence: [{ sourceType: 'chapter', sourceId: 0, quote: '两人安静清点工具。' }],
+    const findings = [{ category: '付款依据', severity: 'risk', anchorId: 'p2',
+      evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1-1' }],
       reason: '正文中可见的清点动作尚不能证明付款，需核对结算依据。' }]
     return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify({ findings }) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` })
   })
   const target = await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
+  await expect(page.getByText(/全文与审计资料超出 Fast Guard 输入预算/)).toBeVisible()
+  expect(requests).toHaveLength(0)
+  await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
+  await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText('正文中可见的清点动作尚不能证明付款，需核对结算依据。', { exact: true })).toBeVisible()
   expect(requests).toHaveLength(1)
   expect(requests[0].messages[1].content).toContain('清点工具，收款后签收，最后关灯')
   expect(requests[0].messages[1].content).toContain(original)
+  expect(requests[0].messages[1].content).toContain('"anchorId":"p2"')
+  expect(requests[0].max_tokens).toBe(16000)
   await page.reload()
   await page.getByRole('button', { name: '质量审校', exact: true }).click()
   await page.getByRole('button', { name: '一致性', exact: true }).click()
@@ -193,6 +199,7 @@ test('一致性无效引文显示失败而不是空报告，不自动重发或�
   })
   const target = await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
+  await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText(/JSON 无法解析或引文、证据无效/)).toBeVisible()
   await expect(page.getByText(/本次未发现可定位的一致性问题/)).toHaveCount(0)
@@ -209,6 +216,7 @@ test('一致性专审503单次停止，不在durable预算外重发', async ({ p
   await page.route('https://whole-review.invalid/**', route => { calls++; return route.fulfill({ status: 503, body: '专审暂时不可用' }) })
   await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
+  await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText(/一致性响应未完整结束/)).toBeVisible()
   expect(calls).toBe(1)
@@ -224,6 +232,7 @@ test('一致性专审被截断时即使收到有效空JSON也不认证无问题'
   })
   await setup(page)
   await page.getByRole('button', { name: '一致性', exact: true }).click()
+  await page.getByRole('button', { name: 'Deep Audit · 因果/动机/伏笔', exact: true }).click()
   await page.getByRole('button', { name: '开始检测', exact: true }).click()
   await expect(page.getByText(/一致性响应未完整结束/)).toBeVisible()
   await expect(page.getByText(/本次未发现可定位的一致性问题/)).toHaveCount(0)

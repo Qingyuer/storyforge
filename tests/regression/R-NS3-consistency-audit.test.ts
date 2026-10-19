@@ -105,6 +105,23 @@ describe('NS-3 · evidence-backed consistency audit', () => {
     }] }) })?.findings[0].severity).toBe('unknown')
   })
 
+  it('resolves closed paragraph IDs for both findings and chapter evidence without model-copied quotes', () => {
+    const body = '开场剩余两枚。\n连续消耗两枚后，余额仍为两枚。'
+    const result = parseConsistencyAuditResult({
+      mode: 'fast', chapterContent: body, evidenceContext: evidence,
+      raw: JSON.stringify({ findings: [{ category: '资源结算', severity: 'hard', anchorId: 'p2',
+        evidence: [{ sourceType: 'chapter', sourceId: 0, anchorId: 'p1' }], reason: '消耗与余额需要核对。' }] }),
+    })
+    expect(result?.findings[0]).toMatchObject({ anchorId: 'p2', quote: '连续消耗两枚后，余额仍为两枚。', evidence: [{ anchorId: 'p1', quote: '开场剩余两枚。' }] })
+  })
+
+  it('rejects invalid IDs even with valid fallback quotes and cannot relabel chapter spans as external evidence', () => {
+    const finding = { category: '持有物', severity: 'risk', anchorId: 'p900', quote: chapter, evidence: [], reason: '不可猜测编号。' }
+    const parse = (value: unknown) => parseConsistencyAuditResult({ mode: 'fast', chapterContent: chapter, evidenceContext: evidence, raw: JSON.stringify({ findings: [value] }) })
+    expect(parse(finding)).toBeNull()
+    expect(parse({ ...finding, anchorId: 'p1', evidence: [{ sourceType: 'canon', sourceId: 7, anchorId: 'p1', quote: '消耗 青铜铃 ×1' }] })).toBeNull()
+  })
+
   it('builds distinct fast and deep audit contracts without truncating chapter prose', () => {
     const longChapter = '正文'.repeat(5000)
     const fast = buildConsistencyAuditPrompt({

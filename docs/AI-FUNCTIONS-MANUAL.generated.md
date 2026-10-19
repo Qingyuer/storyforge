@@ -405,7 +405,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ReviewPanel.tsx:203 · ai.start`
+- `src/components/editor/ReviewPanel.tsx:204 · ai.start`
 - `src/lib/adventure/harness.ts:383 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
@@ -500,4 +500,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `bfac008f`
+生成时间基准:commit `c38073b7`
