@@ -5,8 +5,8 @@ import { qualityReviewSystemGuidanceV1, parseWholeChapterQualityReviewV1, verify
 import type { QualityRevisionPlanV1 } from './quality-revision'
 import { SCENE_RECHECK_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v8'
-const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', 'quality-revision-recheck-v4', 'quality-revision-recheck-v5', 'quality-revision-recheck-v6', 'quality-revision-recheck-v7', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
+export const QUALITY_RECHECK_PROMPT_VERSION_V1 = 'quality-revision-recheck-v9'
+const RECHECK_PROMPT_VERSIONS = ['quality-revision-recheck-v1', 'quality-revision-recheck-v2', 'quality-revision-recheck-v3', 'quality-revision-recheck-v4', 'quality-revision-recheck-v5', 'quality-revision-recheck-v6', 'quality-revision-recheck-v7', 'quality-revision-recheck-v8', QUALITY_RECHECK_PROMPT_VERSION_V1] as const
 export interface QualityRecheckArtifactV1 {
   version: 1
   promptVersion: typeof RECHECK_PROMPT_VERSIONS[number]

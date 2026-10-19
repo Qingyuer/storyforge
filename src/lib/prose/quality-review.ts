@@ -4,8 +4,8 @@ import type { AIRequestSettingsV1 } from '../ai/client'
 import { parseProseRequestSettingsV1 } from './request-evidence'
 import { SCENE_REVIEW_GUIDANCE_V1 } from './scene-craft'
 
-export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v9'
-const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
+export const QUALITY_REVIEW_PROMPT_VERSION_V1 = 'whole-chapter-quality-review-v10'
+const REVIEW_PROMPT_VERSIONS = ['whole-chapter-quality-review-v1', 'whole-chapter-quality-review-v2', 'whole-chapter-quality-review-v3', 'whole-chapter-quality-review-v4', 'whole-chapter-quality-review-v5', 'whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', 'whole-chapter-quality-review-v9', QUALITY_REVIEW_PROMPT_VERSION_V1] as const
 
 /** Rechecks retain the version of their actual nested review request. */
 export function qualityReviewPromptVersionFromMessagesV1(messages: readonly ChatMessage[]): typeof REVIEW_PROMPT_VERSIONS[number] {
@@ -162,7 +162,7 @@ export async function parseWholeChapterQualityReviewV1(input: {
   const anchors = new Map(qualityReviewAnchorsV1(input.chapterText, promptVersion).map(anchor => [anchor.anchorId, anchor]))
   const issues = root.issues.map((value, index): QualityReviewIssueV1 => {
     const row = record(value, `issues[${index}]`)
-    const anchored = ['whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
+    const anchored = ['whole-chapter-quality-review-v6', 'whole-chapter-quality-review-v7', 'whole-chapter-quality-review-v8', 'whole-chapter-quality-review-v9', QUALITY_REVIEW_PROMPT_VERSION_V1].includes(promptVersion) && Object.prototype.hasOwnProperty.call(row, 'anchorId')
     keys(row, anchored ? ['dimension', 'confidence', 'anchorId', 'reason', 'suggestion'] : ['dimension', 'confidence', 'quote', 'start', 'end', 'reason', 'suggestion'], `issues[${index}]`)
     if (!QUALITY_REVIEW_DIMENSIONS_V1.includes(row.dimension as QualityReviewDimensionV1) || !['suggestion', 'uncertain'].includes(String(row.confidence))) throw new Error('问题维度或不确定性标识无效。')
     const anchor = anchored && typeof row.anchorId === 'string' ? anchors.get(row.anchorId) : undefined
