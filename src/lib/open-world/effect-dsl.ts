@@ -94,8 +94,17 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   if (operation === 'change-player-resource') { exact(payload, ['resource', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { resource: enumValue(payload.resource, ['health', 'skill-resource'], `${label}.resource`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'grant-experience') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: int(payload.amount, `${label}.amount`, 1) } } }
   if (operation === 'apply-status' || operation === 'remove-status') { exact(payload, ['statusKey'], `${label}.payload`); return { key: effectKey, operation, payload: { statusKey: ref(payload.statusKey, refs.statuses, `${label}.statusKey`) } } }
-  if (operation === 'grant-item') { exact(payload, ['itemKey', 'quantity'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000) } } }
-  if (operation === 'remove-item') { exact(payload, ['itemKey', 'quantity', 'reason'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000), reason: enumValue(payload.reason, ['consume', 'drop', 'sell', 'craft'], `${label}.reason`) } } }
+  if (operation === 'grant-item') {
+    const ifAbsent = Object.prototype.hasOwnProperty.call(payload, 'ifAbsent')
+    exact(payload, ['itemKey', 'quantity', ...(ifAbsent ? ['ifAbsent'] : [])], `${label}.payload`)
+    if (ifAbsent && payload.ifAbsent !== true) fail(`${label}.ifAbsent只能显式为true`)
+    return { key: effectKey, operation, payload: {
+      itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`),
+      quantity: int(payload.quantity, `${label}.quantity`, 1, ifAbsent ? 1 : 1_000_000),
+      ...(ifAbsent ? { ifAbsent: true as const } : {}),
+    } }
+  }
+  if (operation === 'remove-item') { exact(payload, ['itemKey', 'quantity', 'reason'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000), reason: enumValue(payload.reason, ['consume', 'drop', 'sell', 'craft', 'fulfillment'], `${label}.reason`) } } }
   if (operation === 'equip-item' || operation === 'unequip-item') { exact(payload, ['itemKey'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`) } } }
   if (operation === 'learn-skill') { exact(payload, ['skillKey'], `${label}.payload`); return { key: effectKey, operation, payload: { skillKey: ref(payload.skillKey, refs.skills, `${label}.skillKey`) } } }
   if (operation === 'learn-recipe') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
@@ -564,10 +573,21 @@ function applyDefinitions(
   } else if (authorization?.kind === 'combat-action') fail('CombatAction授权没有对应Effect')
   const craftingEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect.operation === 'perform-crafting')
   if (craftingEffects.length) {
-    if (craftingEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'crafting') fail('制作Effect缺少唯一Crafting授权')
+    if (craftingEffects.length !== 1 || authorization?.kind !== 'crafting') fail('制作Effect缺少唯一Crafting授权')
+    if (modules.actions.version >= 19) {
+      const recipeKey = craftingEffects[0].payload.recipeKey
+      const proof = effects[1]
+      if (effects.length !== 2 || effects[0] !== craftingEffects[0]
+        || proof?.operation !== 'set-world-flag' || proof.key !== `effect.fulfillment.recipe.${recipeKey}`
+        || proof.payload.flagKey !== `flag.fulfillment.recipe.${recipeKey}` || proof.payload.value !== true) {
+        fail('制作证据必须与已授权制作在同一原子批次提交')
+      }
+    } else if (effects.length !== 1) fail('旧制作Effect不能附加新操作证据')
     if (craftingEffects[0].payload.recipeKey !== authorization.recipeKey) fail('制作Effect与配方授权不一致')
     crafting.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'crafting') fail('Crafting授权没有对应Effect')
+  else if (modules.actions.version >= 19 && effects.some(effect => effect.operation === 'set-world-flag'
+    && effect.payload.flagKey.startsWith('flag.fulfillment.recipe.'))) fail('制作证据不能脱离实际制作独立提交')
   const transactionEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect.operation === 'perform-transaction')
   if (transactionEffects.length) {
     if (transactionEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'transaction') fail('交易Effect缺少唯一Transaction授权')
@@ -646,8 +666,18 @@ function applyDefinitions(
         const { payload } = effect
         const removalReason = effect.operation === 'remove-item' ? effect.payload.reason : null
         const definition = item(payload.itemKey)
+        if (effect.operation === 'grant-item' && effect.payload.ifAbsent) {
+          const held = definition.stackPolicy === 'stacked'
+            ? state.inventory.stackQuantities[payload.itemKey] ?? 0
+            : Object.values(state.inventory.itemInstances).filter(instance => instance.itemKey === payload.itemKey).length
+          if (held > 0) {
+            record(changes, effect, `retain-item:${payload.itemKey}`, held, held)
+            break
+          }
+        }
         if (effect.operation === 'remove-item') {
           if (definition.critical) fail(`${effect.key}不能移除关键物品`)
+          if (removalReason === 'fulfillment' && (modules.actions.version < 19 || definition.stackPolicy !== 'stacked')) fail(`${effect.key}交付物品缺少新版结算合同`)
           if (removalReason === 'consume' && !definition.consumable) fail(`${effect.key}目标不是消耗品`)
           if (removalReason === 'drop' && !definition.droppable) fail(`${effect.key}目标不可丢弃`)
           if (removalReason === 'sell' && !definition.sellable) fail(`${effect.key}目标不可出售`)

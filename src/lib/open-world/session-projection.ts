@@ -768,7 +768,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== authorization.recipeKey
         || projection.protocol.pendingActionQuantity !== authorization.quantity || projection.protocol.pendingActionItemKey !== null
         || action.category !== 'craft' || action.actorScope !== 'player' || action.targetScope !== 'recipe'
-        || applied.plan.effectKeys.length !== 1 || applied.plan.effectKeys[0] !== action.successEffectKeys[0]
+        || canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(action.successEffectKeys)
         || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('制作授权与命令或Action不一致')
       const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
       if (action.requirementConditionKeys.some(conditionKey => conditionResults[conditionKey]?.satisfied !== true)) fail('制作Action条件未满足')

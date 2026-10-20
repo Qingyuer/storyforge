@@ -805,7 +805,9 @@ export interface TextOpenWorldCreatorReleaseArtifactReceiptV1 {
  * it in a player/distribution manifest. */
 export interface TextOpenWorldCreatorReleaseSourceContractsV1 {
   schema: 'storyforge.text-open-world-creator-release-source-contracts'
-  version: 1
+  /** v2 binds full SourceManifest/IntegrationReport Artifact payload hashes;
+   * v1 preserves the historical inner-body hash contract for readback. */
+  version: 1 | 2
   productType: 'text-open-world'
   creatorBrief: TextOpenWorldCreatorBriefV1
   sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
@@ -3112,6 +3114,31 @@ export type TextOpenWorldQuestBindingDefinitionKindV1 =
   | 'actor' | 'faction' | 'enemy' | 'encounter' | 'item' | 'skill'
   | 'recipe' | 'vendor' | 'reward' | 'interaction' | 'action'
 
+/** P8F v3: explicit, closed-candidate evidence for fixed objectives and repairs.
+ * Template instances retain their own runtime lifecycle; historical operation
+ * flags must never be used to claim fresh work by a repeated template. */
+export interface TextOpenWorldQuestFulfillmentSelectionsV1 {
+  version: 1
+  objectives: Array<{
+    objectiveNumber: number
+    anyActionGroups: number[][]
+    items: Array<{ itemNumber: number; quantity: number; consume: boolean }>
+  }>
+  interactions: Array<{
+    interactionNumber: number
+    consumedItems: Array<{ itemNumber: number; quantity: number }>
+  }>
+  endings: Array<{ endingNumber: number; requiredInteractionNumbers: number[] }>
+}
+
+/** P8F v4: one-time acquisition at a fixed objective's frozen interaction.
+ * These are candidate ordinals, never model-authored runtime effects. */
+export interface TextOpenWorldItemAcquisitionSelectionV1 {
+  objectiveNumber: number
+  interactionNumber: number
+  items: Array<{ itemNumber: number; quantity: number }>
+}
+
 /**
  * P8F quest and gameplay binding document. It owns the exact cross-catalog
  * references plus deterministic Action/Condition/Effect definitions. P9 may
@@ -3254,7 +3281,15 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     questStageKey: string
     consequencePlanKey: string
     effectKeys: string[]
+    /** P8F draft v2 explicitly resolves deferred semantics; v1 artifacts omit this. */
+    selection?: {
+      direction: 'increase' | 'decrease' | 'change'
+      targetKeys: string[]
+    }
   }>
+  /** Pinned ordinal selections are recompiled against the exact upstream hashes. */
+  fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
+  itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
   /**
    * Deterministic P8F binding of every authored ending to the final protected
    * mainline quest. P9 may author the visible choice copy, but it must point at
@@ -3412,6 +3447,8 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     knowledgeProgressReady?: true
     /** Fresh G7 build binds important-story consequences and distinct ending eligibility paths. */
     storyOutcomesRuntimeBound?: true
+    /** Action v19 records successful crafts and explicitly settled repairs. */
+    fixedObjectiveFulfillmentReady?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true
@@ -4196,6 +4233,13 @@ export interface TextOpenWorldIntegrationReportV1 {
     endingActionKeys: string[]
     generatedMediaArtifactKeys: string[]
     fallbackMediaSlotKeys: string[]
+    /** Deterministic map-owned correction; original accepted P9 stays immutable. */
+    sceneRegionCorrections?: Array<{
+      sceneKey: string
+      locationKey: string
+      sourceRegionKey: string
+      runtimeRegionKey: string
+    }>
   }
   verification: {
     productPackageParsed: true

@@ -389,7 +389,7 @@ describe('TOW-G5-03 · production readiness UI', () => {
       },
     })
     expect(JSON.stringify(onConfirmed.mock.calls[0]?.[0])).not.toContain(SECRET_KEY)
-    expect(host.textContent).toContain('Build 仍为 0')
+    expect(host.textContent).toContain('新 Build · 未启动')
     await expect(productionCounts()).resolves.toEqual(before)
     await act(async () => {
       const selector = host.querySelector<HTMLSelectElement>('select[aria-label="生产预算档位"]')!

@@ -492,12 +492,13 @@ async function createRuleset(input: {
   createdAt: number
 }): Promise<TextOpenWorldGameplayRulesetSkeletonV1> {
   const claimByKey = new Map(input.context.sourceLedger.claims.map(claim => [claim.claimKey, claim]))
+  const sourceClaimKeys = [...input.draft.sourceClaimKeys].sort()
   const basisHash = await hashProductProductionValueV2({
     gameBriefHash: input.context.gameBrief.gameBriefHash,
     experienceContractHash: input.context.experienceContract.experienceContractHash,
     sourceLedgerHash: input.context.sourceLedger.ledgerHash,
     contextSelectionHash: input.context.contextSelectionHash,
-    claimHashes: input.draft.sourceClaimKeys.map(key => claimByKey.get(key)!.entryHash),
+    claimHashes: sourceClaimKeys.map(key => claimByKey.get(key)!.entryHash),
   })
   const body: Omit<TextOpenWorldGameplayRulesetSkeletonV1, 'gameplayRulesetHash'> = {
     schema: 'storyforge.text-open-world-gameplay-ruleset-skeleton',
@@ -512,7 +513,7 @@ async function createRuleset(input: {
       version: 1,
       title: input.draft.rulesetTitle,
       summary: input.draft.summary,
-      sourceClaimKeys: [...input.draft.sourceClaimKeys].sort(),
+      sourceClaimKeys,
     },
     ...fixedRules(input.draft),
     basisHash,
@@ -727,7 +728,7 @@ export function createTextOpenWorldGameplayRulesetExecutorV1(options: {
       projectId: execution.scope.projectId,
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.gameplay-ruleset',
+      category: SKILL_ID,
       system: prompt,
       contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(8_000, execution.task.budgetReservation.outputTokens)),

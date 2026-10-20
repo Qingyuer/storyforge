@@ -187,7 +187,7 @@ export function TextOpenWorldCreatorProductionReadiness(
       <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted">
         <span className="rounded-full border border-border bg-bg-base px-3 py-1">Brief v{brief.revision}</span>
         <span className="rounded-full border border-border bg-bg-base px-3 py-1 font-mono">{compactHash(brief.briefHash)}</span>
-        <span className="rounded-full border border-border bg-bg-base px-3 py-1">Build 0 · 未启动</span>
+        <span className="rounded-full border border-border bg-bg-base px-3 py-1">新 Build · 未启动</span>
       </div>
     </header>
 
@@ -345,7 +345,7 @@ export function TextOpenWorldCreatorProductionReadiness(
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <p className="text-xs text-text-muted">{confirmation
-            ? <><CheckCircle2 className="mr-1 inline h-4 w-4 text-success" />检查快照已确认；Build 仍为 0，尚未产生生产费用。</>
+            ? <><CheckCircle2 className="mr-1 inline h-4 w-4 text-success" />检查快照已确认；尚未创建新 Build 或发出本轮生产请求，历史用量保留。</>
             : '刷新或更换 Brief、模型、Key 状态、端点、价格后必须重新确认。'}</p>
           <button type="button" onClick={confirm}
             disabled={!preflight.ready || !allAcknowledged || Boolean(confirmation)}

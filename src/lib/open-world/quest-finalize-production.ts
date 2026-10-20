@@ -17,12 +17,14 @@ import type {
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEnemyEncounterCatalogV1,
   TextOpenWorldItemRewardCatalogV1,
+  TextOpenWorldItemAcquisitionSelectionV1,
   TextOpenWorldMainlineThreadV1,
   TextOpenWorldMapInteractionCatalogV1,
   TextOpenWorldNpcRuntimeCatalogV1,
   TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldQuestBindingDefinitionKindV1,
   TextOpenWorldQuestDesignDocumentsV1,
+  TextOpenWorldQuestFulfillmentSelectionsV1,
   TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldRegionNarrativePacksV1,
   TextOpenWorldSignificantThreadsV1,
@@ -35,6 +37,12 @@ import {
   compileTextOpenWorldStatusDefinitionV2,
 } from './combat-mechanics-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
+import {
+  buildTextOpenWorldObjectiveFulfillmentDemandsV1,
+  compileTextOpenWorldObjectiveFulfillmentV1,
+  parseTextOpenWorldQuestFulfillmentSelectionsV1,
+} from './objective-fulfillment-production'
+import { compileTextOpenWorldItemAcquisitionsV1, parseTextOpenWorldItemAcquisitionsV1 } from './item-acquisition-production'
 
 const SKILL_ID = 'text-open-world.production.quest-finalize.v1'
 const MAX_CONTEXT_CHARS = 700_000
@@ -114,6 +122,10 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   achievementBindingCandidates?: AchievementBindingCandidateV1[]
   /** Missing from pre-G7 durable contexts; omission preserves the historical ending/consequence graph. */
   storyOutcomeContract?: 'governed-v19'
+  /** Fresh contexts require draft v3; frozen v19 contexts may explicitly opt in. */
+  objectiveFulfillmentContract?: 'fixed-objectives-v1'
+  /** Fresh v4 drafts declare actual pickup paths; old frozen requests omit it. */
+  itemAcquisitionContract?: 'fixed-objective-items-v1'
   endingEligibilityDemands?: EndingEligibilityDemandV1[]
   contextSelectionHash: string
 }
@@ -143,6 +155,13 @@ export type TextOpenWorldQuestFinalizeModelRunnerV1 = (input: {
 }) => Promise<TextOpenWorldQuestFinalizeModelExecutionV1>
 
 interface QuestFinalizeDraftV1 {
+  fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
+  itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
+  consequenceSelections?: Array<{
+    consequenceNumber: number
+    direction: 'increase' | 'decrease' | 'change'
+    targetCandidateNumbers: number[]
+  }>
   quests: Array<{ questNumber: number; description: string; tags: string[] }>
   objectives: Array<{
     objectiveNumber: number
@@ -467,7 +486,55 @@ function buildEndingEligibilityDemands(context: QuestFinalizeContextWithoutHashV
     }))
 }
 
+/** P6 reserves semantics, not final catalog identities. Never infer people from a thread number. */
+function buildStoryConsequenceDemands(context: QuestFinalizeContextWithoutHashV1) {
+  let consequenceNumber = 0
+  return context.significantThreads.stages.flatMap(stage => stage.localConsequencePlans.map(plan => {
+    const thread = context.significantThreads.threads.find(item => item.key === stage.threadKey)
+      ?? fail(`重要故事后果缺少来源故事:${plan.key}`)
+    const storyQuestKeys = new Set(context.questSkeletons.quests
+      .filter(quest => quest.storylineKey === thread.key).map(quest => quest.key))
+    const objectiveKeys = new Set(context.questSkeletons.objectives
+      .filter(objective => storyQuestKeys.has(objective.questKey)).map(objective => objective.key))
+    const itemRequirementKeys = new Set(context.contentRequirementManifest.requirements
+      .filter(requirement => requirement.kind === 'item' && requirement.consumerRefs.some(ref => (
+        ref.kind === 'quest-objective' && objectiveKeys.has(ref.consumerKey)
+      ))).map(requirement => requirement.key))
+    const candidates: Array<{ kind: 'actor' | 'faction' | 'region' | 'morality' | 'currency' | 'item'; key: string; title: string }> = []
+    if (plan.kind === 'npc-attitude') {
+      context.npcRuntimeCatalog.actors.filter(actor => actor.demandKind !== 'service-replacement'
+        && thread.regionKeys.includes(actor.regionKey)).forEach(actor => candidates.push({ kind: 'actor', key: actor.key, title: actor.name }))
+    } else if (plan.kind === 'faction-affinity') {
+      context.npcRuntimeCatalog.factions.forEach(faction => candidates.push({ kind: 'faction', key: faction.key, title: faction.title }))
+    } else if (plan.kind === 'regional-state') {
+      context.mapInteractionCatalog.regions.filter(region => thread.regionKeys.includes(region.key))
+        .forEach(region => candidates.push({ kind: 'region', key: region.key, title: region.title }))
+    } else if (plan.kind === 'morality') {
+      candidates.push({ kind: 'morality', key: 'player.morality', title: '玩家道德倾向' })
+    } else {
+      candidates.push({ kind: 'currency', key: 'player.currency', title: '玩家货币（仅适用于明确的金钱得失）' })
+      // Story evidence is an inventory item, not currency. Only this story's declared items
+      // may be granted; removals are excluded to avoid an unguarded completion cost.
+      if (plan.direction !== 'decrease') context.itemRewardCatalog.items
+        .filter(item => item.fulfilledRequirementKeys.some(key => itemRequirementKeys.has(key)))
+        .forEach(item => candidates.push({ kind: 'item', key: item.key, title: item.title }))
+    }
+    if (!candidates.length) fail(`重要故事后果缺少可绑定的目录目标:${plan.key}`)
+    return {
+      consequenceNumber: ++consequenceNumber, consequencePlanKey: plan.key, kind: plan.kind,
+      description: plan.description,
+      allowedDirections: plan.direction === 'change' && plan.kind !== 'regional-state'
+        ? ['increase', 'decrease'] as const : [plan.direction],
+      targetCandidates: candidates.map((candidate, index) => ({ ...candidate, candidateNumber: index + 1 })),
+    }
+  }))
+}
+
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.objectiveFulfillmentContract !== undefined
+    && (context.objectiveFulfillmentContract !== 'fixed-objectives-v1' || context.storyOutcomeContract !== 'governed-v19')) {
+    fail('固定任务操作证据合同无效')
+  }
   if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
     fail('Quest生命周期生产合同无效')
   }
@@ -510,9 +577,6 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
           || consequence.runtimeBinding.conditionKeys.length
           || consequence.runtimeBinding.effectKeys.length) {
           fail(`重要故事后果已经被上游越权绑定:${consequence.key}`)
-        }
-        if (consequence.direction === 'change') {
-          fail(`重要故事后果必须明确增加或减少方向:${consequence.key}`)
         }
       }
     }
@@ -644,6 +708,8 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     body.achievementBindingCandidates = knowledgeProduction.achievementBindingCandidates
   }
   body.storyOutcomeContract = 'governed-v19'
+  body.objectiveFulfillmentContract = 'fixed-objectives-v1'
+  body.itemAcquisitionContract = 'fixed-objective-items-v1'
   body.endingEligibilityDemands = buildEndingEligibilityDemands(body)
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -677,12 +743,26 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     fail('Knowledge与成就模型选择字段必须同时存在或同时缺失')
   }
   const explicitKnowledgeSelections = governedKnowledge && hasKnowledgeSelections && hasAchievementSelections
+  const explicitAcquisitions = governedStoryOutcome && root.version === 4
+  const explicitFulfillment = governedStoryOutcome && (root.version === 3 || explicitAcquisitions)
+  if (context.objectiveFulfillmentContract && !explicitFulfillment) fail('固定任务操作证据合同必须使用draft v3')
+  if (context.itemAcquisitionContract && !explicitAcquisitions) fail('任务物品获取合同必须使用draft v4')
+  if (explicitFulfillment && (context.questLifecycleContract !== 'governed-v16'
+    || context.combatMechanicsContract !== 'governed-v17' || !governedKnowledge)) {
+    fail('固定任务操作证据需要完整的受治理生命周期、战斗与Knowledge基线')
+  }
+  const explicitConsequences = governedStoryOutcome && (root.version === 2
+    || explicitFulfillment && Object.prototype.hasOwnProperty.call(root, 'consequenceSelections'))
   exactKeys(root, [
     'schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents',
     ...(explicitKnowledgeSelections ? ['knowledgeSelections', 'achievementCandidateNumbers'] : []),
     ...(governedStoryOutcome ? ['endingEligibilitySelections'] : []),
+    ...(explicitConsequences ? ['consequenceSelections'] : []),
+    ...(explicitFulfillment ? ['fulfillmentSelections'] : []),
+    ...(explicitAcquisitions ? ['itemAcquisitionSelections'] : []),
   ], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft' || root.version !== 1) fail('draft schema/version无效')
+  if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft'
+    || (root.version !== 1 && !explicitConsequences && !explicitFulfillment)) fail('draft schema/version无效')
   if (!Array.isArray(root.quests) || root.quests.length !== context.questSkeletons.quests.length) fail(`quests必须与${context.questSkeletons.quests.length}项骨架一一对应`)
   const quests = root.quests.map((value, index) => {
     const row = record(value, `quests[${index}]`); exactKeys(row, ['questNumber', 'description', 'tags'], `quests[${index}]`)
@@ -778,6 +858,41 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
   })
   if (randomEvents.some((event, index) => event.seedNumber !== index + 1)) fail('randomEvents必须按序精确覆盖')
   const baseDraft: QuestFinalizeDraftV1 = { quests, objectives, decks, templates, randomEvents }
+  if (explicitFulfillment) baseDraft.fulfillmentSelections = parseTextOpenWorldQuestFulfillmentSelectionsV1(root.fulfillmentSelections, context)
+  if (explicitAcquisitions) baseDraft.itemAcquisitionSelections = parseTextOpenWorldItemAcquisitionsV1(
+    root.itemAcquisitionSelections, context, baseDraft.fulfillmentSelections!,
+  )
+  if (explicitConsequences) {
+    const demands = buildStoryConsequenceDemands(context)
+    if (!Array.isArray(root.consequenceSelections) || root.consequenceSelections.length !== demands.length) {
+      fail(`consequenceSelections必须逐项覆盖${demands.length}条故事后果`)
+    }
+    baseDraft.consequenceSelections = root.consequenceSelections.map((value, index) => {
+      const label = `consequenceSelections[${index}]`; const row = record(value, label)
+      exactKeys(row, ['consequenceNumber', 'direction', 'targetCandidateNumbers'], label)
+      const demand = demands[index]!
+      if (row.consequenceNumber !== demand.consequenceNumber) fail(`${label}必须按来源顺序精确覆盖`)
+      const direction = enumValue(row.direction, demand.allowedDirections, `${label}.direction`)
+      if (!Array.isArray(row.targetCandidateNumbers) || !row.targetCandidateNumbers.length
+        || row.targetCandidateNumbers.length > (['faction-affinity', 'resource', 'regional-state'].includes(demand.kind) ? 3 : 1)) {
+        fail(`${label}目录目标数量无效`)
+      }
+      const targetCandidateNumbers = row.targetCandidateNumbers.map((number, targetIndex) => (
+        integer(number, `${label}.targetCandidateNumbers[${targetIndex}]`, 1, demand.targetCandidates.length)
+      ))
+      if (targetCandidateNumbers.some((number, targetIndex) => targetIndex > 0 && number <= targetCandidateNumbers[targetIndex - 1]!)) {
+        fail(`${label}目录目标必须严格升序且不重复`)
+      }
+      const targets = targetCandidateNumbers.map(number => demand.targetCandidates[number - 1]!)
+      if (targets.some(target => target.kind === 'item') && (direction !== 'increase'
+        || targets.some(target => target.kind !== 'item'))) fail(`${label}物品后果只能增加已声明物品，不能混入货币或扣除物品`)
+      return { consequenceNumber: demand.consequenceNumber, direction, targetCandidateNumbers }
+    })
+  } else if (governedStoryOutcome && context.significantThreads.stages.some(stage => (
+    stage.localConsequencePlans.some(plan => plan.direction === 'change')
+  ))) {
+    fail('未明确方向的故事后果必须通过draft v2 consequenceSelections显式收口')
+  }
   if (governedStoryOutcome) {
     const demands = context.endingEligibilityDemands ?? fail('结局资格选择缺少候选合同')
     if (!Array.isArray(root.endingEligibilitySelections)
@@ -1164,7 +1279,7 @@ function supportActionsForDefinitions(input: {
     const encounter = input.context.enemyEncounterCatalog.encounters.find(item => item.key === key)
       ?? (enemy ? input.context.enemyEncounterCatalog.encounters.find(item => item.enemyGroups.some(group => group.enemyKey === enemy.key)) : null)
     if (encounter) result.push(`action.start.${encounter.key}`)
-    if (input.context.progressionCatalogs.skills.some(item => item.key === key)) result.push(`action.combat.${key}`)
+    if (input.context.progressionCatalogs.skills.some(item => item.key === key && item.activation === 'active')) result.push(`action.combat.${key}`)
     const item = input.context.itemRewardCatalog.items.find(candidate => candidate.key === key)
     if (item?.consumable) result.push(`action.use.${key}`)
     if (item?.kind === 'equipment') result.push(`action.equip.${key}`)
@@ -1279,7 +1394,13 @@ async function createArtifacts(input: {
     }
     reward.grants.items.forEach((grant, index) => {
       const key = `effect.reward.${reward.key}.item.${String(index + 1).padStart(3, '0')}`
-      addEffect({ key, operation: 'grant-item', payload: { itemKey: grant.itemKey, quantity: grant.quantity } }); rewardEffects.push(key)
+      const alreadyAcquirable = input.draft.itemAcquisitionSelections?.some(selection => selection.items.some(item => (
+        input.context.itemRewardCatalog.items[item.itemNumber - 1]!.key === grant.itemKey
+      ))) && input.context.itemRewardCatalog.items.find(item => item.key === grant.itemKey)!.unique
+      addEffect({ key, operation: 'grant-item', payload: {
+        itemKey: grant.itemKey, quantity: grant.quantity,
+        ...(alreadyAcquirable ? { ifAbsent: true as const } : {}),
+      } }); rewardEffects.push(key)
     })
     reward.grants.skillKeys.forEach((skillKey, index) => {
       const key = `effect.reward.${reward.key}.skill.${String(index + 1).padStart(3, '0')}`
@@ -1502,6 +1623,14 @@ async function createArtifacts(input: {
   const stageRows: TextOpenWorldQuestDesignDocumentsV1['stages'] = []
   const objectiveRows: TextOpenWorldQuestDesignDocumentsV1['objectives'] = []
   const storyOutcomeBindings: NonNullable<TextOpenWorldQuestDesignDocumentsV1['storyOutcomeBindings']> = []
+  const consequenceSelections = new Map(input.draft.consequenceSelections
+    ? buildStoryConsequenceDemands(input.context).map((demand, index) => {
+      const selection = input.draft.consequenceSelections![index]!
+      return [demand.consequencePlanKey, {
+        direction: selection.direction,
+        targets: selection.targetCandidateNumbers.map(number => demand.targetCandidates[number - 1]!),
+      }]
+    }) : [])
   input.context.questSkeletons.objectives.forEach((objective, index) => {
     const draft = input.draft.objectives[index]!
     const definitions = requirementBindings.filter(binding => objective.requirementKeys.includes(binding.requirementKey)).flatMap(binding => binding.definitionKeys)
@@ -1580,9 +1709,21 @@ async function createArtifacts(input: {
       sourceStage.localConsequencePlans.forEach(plan => {
         const outcomeEffectKey = `effect.story-outcome.${plan.key}`
         const unsignedAmount = plan.magnitude === 'minor' ? 5 : plan.magnitude === 'moderate' ? 10 : 20
-        const amount = plan.direction === 'decrease' ? -unsignedAmount : unsignedAmount
+        const selection = consequenceSelections.get(plan.key)
+        const direction = selection?.direction ?? plan.direction
+        const amount = direction === 'decrease' ? -unsignedAmount : unsignedAmount
         const outcomeEffects: TextOpenWorldEffectDefinitionV1[] = []
-        if (plan.kind === 'morality') {
+        if (selection) {
+          selection.targets.forEach((target, index) => {
+            const key = selection.targets.length > 1 ? `${outcomeEffectKey}.${String(index + 1).padStart(3, '0')}` : outcomeEffectKey
+            if (target.kind === 'actor') outcomeEffects.push({ key, operation: 'set-story-modifier', payload: { actorKey: target.key, value: amount } })
+            else if (target.kind === 'faction') outcomeEffects.push({ key, operation: 'change-faction-affinity', payload: { factionKey: target.key, amount } })
+            else if (target.kind === 'region') outcomeEffects.push({ key, operation: 'change-region-state', payload: { regionKey: target.key, state: `story-outcome.${direction}.${plan.magnitude}` } })
+            else if (target.kind === 'morality') outcomeEffects.push({ key, operation: 'change-morality', payload: { amount } })
+            else if (target.kind === 'item') outcomeEffects.push({ key, operation: 'grant-item', payload: { itemKey: target.key, quantity: 1, ifAbsent: true } })
+            else outcomeEffects.push({ key, operation: 'change-currency', payload: { amount } })
+          })
+        } else if (plan.kind === 'morality') {
           if (plan.targetSemanticKey !== 'player.morality') fail(`道德后果目标无效:${plan.key}`)
           outcomeEffects.push({ key: outcomeEffectKey, operation: 'change-morality', payload: { amount } })
         } else if (plan.kind === 'faction-affinity') {
@@ -1637,6 +1778,7 @@ async function createArtifacts(input: {
           questStageKey: stage.key,
           consequencePlanKey: plan.key,
           effectKeys: outcomeEffects.map(effect => effect.key),
+          ...(selection ? { selection: { direction: selection.direction, targetKeys: selection.targets.map(target => target.key) } } : {}),
         })
       })
     }
@@ -2112,6 +2254,15 @@ async function createArtifacts(input: {
       })
     })
   }
+  if (input.draft.fulfillmentSelections) compileTextOpenWorldObjectiveFulfillmentV1({
+    context: input.context, selections: input.draft.fulfillmentSelections,
+    conditions, effects, actions, objectives: objectiveRows,
+    interactions: interactionBindings, endings: endingRouteBindings,
+  })
+  if (input.draft.itemAcquisitionSelections) compileTextOpenWorldItemAcquisitionsV1({
+    context: input.context, selections: input.draft.itemAcquisitionSelections,
+    fulfillment: input.draft.fulfillmentSelections!, conditions, effects, actions, interactions: interactionBindings,
+  })
   const questBody: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'> = {
     schema: 'storyforge.text-open-world-quest-design-documents', version: 1, productType: 'text-open-world',
     productInstanceKey: input.context.productInstanceKey, mainlineThreadHash: input.context.mainlineThread.mainlineThreadHash,
@@ -2128,6 +2279,8 @@ async function createArtifacts(input: {
     requirementBindings, quests: questRows, stages: stageRows, objectives: objectiveRows, conditions, effects, actions,
     ...(governedKnowledge ? { knowledgeBindings, achievementBindings } : {}),
     ...(governedStoryOutcome ? { storyOutcomeBindings } : {}),
+    ...(input.draft.fulfillmentSelections ? { fulfillmentSelections: input.draft.fulfillmentSelections } : {}),
+    ...(input.draft.itemAcquisitionSelections ? { itemAcquisitionSelections: input.draft.itemAcquisitionSelections } : {}),
     endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
@@ -2171,6 +2324,7 @@ async function createArtifacts(input: {
         knowledgeProgressReady: true as const,
       } : {}),
       ...(governedStoryOutcome ? { storyOutcomesRuntimeBound: true as const } : {}),
+      ...(input.draft.fulfillmentSelections ? { fixedObjectiveFulfillmentReady: true as const } : {}),
       ...(governedProtectedStoryReveal ? { protectedStoryRevealActionsReady: true as const } : {}),
       allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
@@ -2600,7 +2754,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || canonicalProductProductionJsonV2(selectionReady?.expression) !== canonicalProductProductionJsonV2({
       op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'],
     })) fail('结局选择入口没有绑定最终主线完成条件')
-  artifact.endingBindings.routes.forEach(binding => {
+  artifact.endingBindings.routes.forEach((binding, routeIndex) => {
     const condition = artifact.conditions.find(item => item.key === binding.conditionKey)
     const eligibilityCondition = binding.eligibilityConditionKey === undefined
       ? undefined
@@ -2637,6 +2791,11 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         })),
         ...binding.eligibility.requiredRecipeKeys.map(recipeKey => ({
           op: 'inventory-recipe-known' as const, recipeKey, known: true,
+        })),
+        ...(artifact.fulfillmentSelections?.endings[routeIndex]?.requiredInteractionNumbers ?? []).map(number => ({
+          op: 'world-flag' as const,
+          flagKey: `flag.fulfillment.interaction.${artifact.catalogBindings.interactions[number - 1]?.interactionKey}`,
+          value: true,
         })),
       ],
     }
@@ -2806,6 +2965,32 @@ function draftFromArtifacts(
         : artifacts.directorDecks.templates.findIndex(template => template.key === event.upgradeTemplateKey) + 1,
     })),
   }
+  const outcomeBindings = artifacts.questDesignDocuments.storyOutcomeBindings ?? []
+  if (outcomeBindings.some(binding => binding.selection !== undefined)) {
+    if (context.storyOutcomeContract !== 'governed-v19' || outcomeBindings.some(binding => binding.selection === undefined)) {
+      fail('故事后果显式选择必须整组存在，不能与legacy绑定混用')
+    }
+    body.version = 2
+    body.consequenceSelections = buildStoryConsequenceDemands(context).map(demand => {
+      const binding = outcomeBindings.find(item => item.consequencePlanKey === demand.consequencePlanKey)
+      const selection = binding?.selection ?? fail(`故事后果显式选择缺失:${demand.consequencePlanKey}`)
+      return {
+        consequenceNumber: demand.consequenceNumber,
+        direction: selection.direction,
+        targetCandidateNumbers: selection.targetKeys.map(key => (
+          demand.targetCandidates.find(candidate => candidate.key === key)?.candidateNumber ?? 0
+        )),
+      }
+    })
+  }
+  if (artifacts.questDesignDocuments.fulfillmentSelections) {
+    body.version = 3
+    body.fulfillmentSelections = artifacts.questDesignDocuments.fulfillmentSelections
+  }
+  if (artifacts.questDesignDocuments.itemAcquisitionSelections) {
+    body.version = 4
+    body.itemAcquisitionSelections = artifacts.questDesignDocuments.itemAcquisitionSelections
+  }
   if (context.storyOutcomeContract === 'governed-v19') {
     const demands = context.endingEligibilityDemands ?? fail('结局资格反向验证缺少候选合同')
     body.endingEligibilitySelections = demands.map((demand, index) => {
@@ -2938,6 +3123,9 @@ export async function rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1
 }
 
 function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
+  const explicitConsequences = context.storyOutcomeContract === 'governed-v19'
+  const explicitFulfillment = context.objectiveFulfillmentContract === 'fixed-objectives-v1'
+  const explicitAcquisitions = context.itemAcquisitionContract === 'fixed-objective-items-v1'
   const system = [
     '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
     '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
@@ -2949,12 +3137,14 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
     ...(context.storyOutcomeContract === 'governed-v19' ? [
       '每个结局的资格只能从该结局输入的闭集候选编号中选择；不得新增任务、阵营、配方、稳定键或把最终主线自身当作资格。',
       '不同结局必须采用可区分的资格组合。代码会把选择编译为Condition；重要故事局部后果由代码绑定，模型不得输出Effect。',
+      'P6后果targetSemanticKey只是早期语义占位，不能按故事编号猜运行人物。用consequenceSelections逐项选择实际目录目标；数值change必须明确增减，地区change可保留。不得改写既有明确方向。',
+      '资源后果如指证物或记录，应选择该故事已声明物品；只有明确的钱款得失才能选择货币。不能凭后果新增物品或移除物品。',
     ] : []),
   ].join('\n')
   const user = [
     '以下用户消息将提供已登记、已验签且字段精确的QuestFinalize输入合同。',
     `quests按${context.questSkeletons.quests.length}项顺序输出questNumber/description/tags；objectives按${context.objectiveBindingDemands.length}项顺序输出objectiveNumber/description/successDescription/timeCostMinutes(0-60)。`,
-    `decks按${context.mapInteractionCatalog.regions.length}个地区顺序输出regionNumber、非空triggerKinds、maximumRevealed(1-4)、maximumActive(1-3且不大于revealed)、cooldownMinutes(60-1440)、blankWeight(1-100)。`,
+    `decks按${context.mapInteractionCatalog.regions.length}个地区顺序输出regionNumber、非空triggerKinds（只选${TRIGGERS.join('|')}）、maximumRevealed(1-4)、maximumActive(1-3且不大于revealed)、cooldownMinutes(60-1440)、blankWeight(1-100)。`,
     `templates按${context.questSkeletons.quests.filter(quest => quest.type === 'template').length}项顺序输出templateNumber/category/help|resource|exploration|conflict|mystery、intensity(1-6)、weight(1-100)、cooldownMinutes(60-10080)。`,
     `randomEvents按${context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds).length}项顺序输出seedNumber/description/kind(${context.knowledgeProgressContract === 'governed-v18' ? 'atmosphere|resource|encounter|quest-upgrade' : 'atmosphere|resource|encounter|clue|quest-upgrade'})/intensity/weight/cooldownMinutes/upgradeTemplateNumber；只有quest-upgrade必须且只能选择本地区模板编号。`,
     ...(context.knowledgeProgressContract === 'governed-v18' ? [
@@ -2963,9 +3153,22 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
     ] : []),
     ...(context.storyOutcomeContract === 'governed-v19' ? [
       `endingEligibilitySelections按${context.endingEligibilityDemands?.length ?? 0}个结局顺序输出endingNumber、requiredQuestCandidateNumbers、anyQuestCandidateGroups、requiredFactionAffinities(candidateNumber/minimum)、requiredRecipeCandidateNumbers。阵营minimum必须高于初始亲合度且不超过目录上限；所有编号数组严格升序；替代任务组至少两个候选；每条路线至少一项资格。`,
+      'consequenceSelections按下列闭集需求顺序输出consequenceNumber、direction（只选allowedDirections）和targetCandidateNumbers（本条候选编号，严格升序）。人物/道德选择1个；地区、阵营或同类资源选择1到3个，物品只能increase且不可混合货币。',
+      `<story-consequence-demands>${canonicalProductProductionJsonV2(buildStoryConsequenceDemands(context))}</story-consequence-demands>`,
+    ] : []),
+    ...(explicitFulfillment ? [
+      'draft v3/v4必须包含fulfillmentSelections:{version:1,objectives:[{objectiveNumber,anyActionGroups,items:[{itemNumber,quantity,consume}]}],interactions:[{interactionNumber,consumedItems:[{itemNumber,quantity}]}],endings:[{endingNumber,requiredInteractionNumbers}]}。所有数组精确按输入顺序覆盖；编号数组严格升序。',
+      'objectives: cover fixed demands only, no templates. anyActionGroups: at most 4 OR paths of 1..8 demand-local candidateNumbers, all actions within each path required. Each craft path needs recipe proof; interaction goals need action proof. Possession is not crafting. items: only demand.itemNumbers; collect requires held items; consume specifies delivery/removal. Required recipes unlock on accept/restart, proof only on successful crafting.',
+      'interactions逐mapInteractionCatalog.interactions条目声明一次性实体操作消耗，无消耗时填[]；itemNumber是一基itemRewardCatalog.items序号，数量不得超过堆叠上限，禁止消耗critical物品或实例装备。一次性修复有材料才能执行，成功后不得重复扣料。不要仅在文案宣称消耗或修复。模板共用交互不得绑定全局一次性扣料。',
+      'endings逐thread.endingKeys声明实体结局所必需的交互序号；需要完成多个地点的操作时逐项绑定，替代路线通过不同目标操作组和结局条件表示。没有实体前置时填[]。不得为补齐结构改变已确认故事。',
+      `<objective-fulfillment-demands>${canonicalProductProductionJsonV2(buildTextOpenWorldObjectiveFulfillmentDemandsV1(context))}</objective-fulfillment-demands>`,
+    ] : []),
+    ...(explicitAcquisitions ? [
+      'v4 requires itemAcquisitionSelections:[{objectiveNumber,interactionNumber,items:[{itemNumber,quantity}]}], [] if none. Sort global interactionNumbers ascending, unique. Only an exclusive fixed collect/interact/investigate interaction and its declared quest/misc items; quantity 1..min(8,stack limit). No templates, shared/consumptive interactions or new assets.',
+      'Pickups, borrowed records and comparison copies must grant the required item BEFORE objective completion, not only in that quest/later rewards. Pickup checks active stage, earlier required objectives and other required items, then atomically grants items with one-time proof. Restart cannot farm pickups; lost ordinary items rely on existing shops. Preserve story and critical-item protection.',
     ] : []),
     '不要输出敌人、物品、角色、地点、奖励、Action、Condition、Effect、Quest键或任何未要求字段。',
-    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${context.storyOutcomeContract === 'governed-v19' ? ',"endingEligibilitySelections":[...]' : ''}}`,
+    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":${explicitAcquisitions ? 4 : explicitFulfillment ? 3 : explicitConsequences ? 2 : 1},"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${explicitConsequences ? ',"endingEligibilitySelections":[...],"consequenceSelections":[...]' : ''}${explicitFulfillment ? ',"fulfillmentSelections":{...}' : ''}${explicitAcquisitions ? ',"itemAcquisitionSelections":[...]' : ''}}`,
   ].join('\n')
   return { system, user }
 }

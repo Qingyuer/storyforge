@@ -1,5 +1,5 @@
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   finalizeTextOpenWorldCreatorQualityV1,
@@ -10,6 +10,7 @@ import {
   recordTextOpenWorldCreatorFullPlaytestV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
+  recordTextOpenWorldCreatorCalibrationV1,
   requirePassedTextOpenWorldCreatorQualityGateV1,
   waiveTextOpenWorldCreatorAdvisoryIssueV1,
 } from '../../src/lib/open-world/creator-quality'
@@ -23,6 +24,9 @@ import {
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
   parseTextOpenWorldCreatorUpdateVerificationEvidenceV1,
 } from '../../src/lib/open-world/creator-quality-contract'
+import * as calibration from '../../src/lib/open-world/creator-quality-calibration'
+import * as calibrationUsage from '../../src/lib/open-world/creator-calibration-usage'
+import type { TextOpenWorldCreatorCalibrationUsageSourceV1 } from '../../src/lib/open-world/creator-quality-contract'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import {
   canonicalProductProductionJsonV2,
@@ -164,7 +168,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
   for (const artifactKey of [
     'text-open-world.mainline-thread', 'text-open-world.significant-threads',
     'text-open-world.region-narrative-packs', 'text-open-world.scene-scripts',
-    'text-open-world.content-budget',
+    'text-open-world.content-budget', 'text-open-world.quest-skeletons', 'text-open-world.director-decks',
   ] as const) {
     const payload = { schema: `storyforge.fixture.${artifactKey}`, version: 1, artifactKey }
     const payloadJson = canonicalProductProductionJsonV2(payload)
@@ -281,7 +285,9 @@ async function insertGrayboxReceipt(input: FixtureV1): Promise<string> {
   return receipt.receiptHash
 }
 
-async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
+async function insertCalibrationReceipt(input: FixtureV1, options: {
+  reviewInputHash?: string; score?: number; failedUsage?: boolean
+} = {}): Promise<string> {
   const [build, derived, artifacts] = await Promise.all([
     db.productBuilds.get(input.buildId),
     readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope: input.scope, buildId: input.buildId }),
@@ -293,14 +299,17 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
   const semantic = JSON.parse(semanticRow.payloadJson)
   const artifactHash = (key: string) => artifacts.find(row => row.artifactKey === key)!.contentHash
   const ledgerHash = await hashProductProductionValueV2(JSON.parse(build.budgetLedgerJson))
-  const inputHash = await hashProductProductionValueV2({ calibration: 'input', buildId: input.buildId })
+  const inputHash = options.reviewInputHash
+    ?? await hashProductProductionValueV2({ calibration: 'input', buildId: input.buildId })
   const outputHash = await hashProductProductionValueV2({ calibration: 'output', buildId: input.buildId })
   const evaluatedAt = Date.now()
   const checks = [
     'real-independent-provider-identities', 'production-semantic-release-line',
     'independent-narrative-release-line', 'three-distinct-variants-per-template',
     'authored-duration-inventory', 'production-call-usage-observed', 'production-budget-and-cost',
-  ].map(key => ({ key, passed: true, summary: `${key} fixture evidence` }))
+  ].map(key => ({ key, passed: !(key === 'production-call-usage-observed' && options.failedUsage)
+    && !(key === 'independent-narrative-release-line' && (options.score ?? 90) < 70),
+  summary: `${key} fixture evidence` }))
   const evidence = parseTextOpenWorldCreatorCalibrationEvidenceV1({
     schema: 'storyforge.text-open-world-creator-calibration-evidence', version: 1,
     build: input.buildBinding,
@@ -311,11 +320,13 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
     },
     independentReview: {
       provider: 'claude', model: 'claude-sonnet-4-20250514',
-      promptVersion: 'text-open-world-release-calibration-grader.v1',
+      promptVersion: options.reviewInputHash
+        ? calibration.TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1
+        : 'text-open-world-release-calibration-grader.v1',
       inputHash, outputHash, inputTokens: 100, outputTokens: 50,
       finishReason: 'stop', durationMs: 100,
       scores: [
-        { metricKey: 'mainline-quality', score: 90, rationale: '主线结构清晰完整。' },
+        { metricKey: 'mainline-quality', score: options.score ?? 90, rationale: '主线结构清晰完整。' },
         { metricKey: 'significant-stories', score: 90, rationale: '重要故事冲突完整。' },
         { metricKey: 'template-differentiation', score: 90, rationale: '模板变体有明确差异。' },
       ], findings: [],
@@ -340,7 +351,7 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
       budgetMaximumOutputTokens: 360_000, budgetMaximumDurationMs: 86_400_000,
       budgetMaximumCostUsd: 30,
     },
-    checks, passed: true, evaluatedAt,
+    checks, passed: checks.every(check => check.passed), evaluatedAt,
   })
   const inputHashes = [
     input.buildBinding.packageHash,
@@ -356,7 +367,8 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
     gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1, gateVersion: '1',
     verifierId: 'storyforge.creator-independent-release-calibration', verifierVersion: '1',
     verifierKind: 'provider-review' as const, inputHashes, environmentHash: null,
-    measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
+    measuredJson: canonicalProductProductionJsonV2(evidence),
+    status: evidence.passed ? 'passed' as const : 'failed' as const,
     thresholdProfileId: 'storyforge.text-open-world-creator-release-calibration.v1', thresholdProfileVersion: '1',
     evidenceRefs: [semantic.semanticReviewHash, inputHash, outputHash, ledgerHash], createdAt: evaluatedAt,
   }
@@ -364,11 +376,44 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
   await db.productQualityGateReceipts.add({
     projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
     buildId: input.buildId, gateId: receipt.gateId, gateVersion: '1',
-    verifierId: receipt.verifierId, verifierVersion: '1', status: 'passed',
+    verifierId: receipt.verifierId, verifierVersion: '1', status: receipt.status,
     receiptJson: canonicalProductProductionJsonV2(receipt), receiptHash: receipt.receiptHash,
     createdAt: evaluatedAt,
   })
   return receipt.receiptHash
+}
+
+/** Receipt integration only. Narrative projection and independently tested
+ * physical lineage verifiers are adapters here, never real-model evidence. */
+async function calibrationRecheckFixture(score = 90) {
+  const seeded = await fixture({ advisories: false })
+  const context = {
+    schema: 'storyforge.text-open-world-creator-calibration-review-input', version: 1,
+    buildPackageHash: seeded.buildBinding.packageHash,
+  } as calibration.TextOpenWorldCreatorCalibrationReviewContextV1
+  const receiptHash = await insertCalibrationReceipt(seeded, {
+    reviewInputHash: await calibration.hashTextOpenWorldCreatorCalibrationReviewInputV1(context),
+    failedUsage: true, score,
+  })
+  const previousRow = (await db.productQualityGateReceipts.where('[buildId+gateId+receiptHash]')
+    .equals([seeded.buildId, TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1, receiptHash]).first())!
+  const previous = parseTextOpenWorldCreatorCalibrationEvidenceV1(JSON.parse(JSON.parse(previousRow.receiptJson).measuredJson))
+  vi.spyOn(calibration, 'buildTextOpenWorldCreatorCalibrationContextV1').mockReturnValue(context)
+  vi.spyOn(calibration, 'projectTextOpenWorldTemplateDifferentiationV1').mockReturnValue(previous.templateDifferentiation)
+  vi.spyOn(calibration, 'projectTextOpenWorldContentDurationV1').mockReturnValue(previous.contentDuration)
+  const build = (await db.productBuilds.get(seeded.buildId))!
+  const source: TextOpenWorldCreatorCalibrationUsageSourceV1 = {
+    buildNumber: build.buildNumber, briefHash: build.briefHash, planHash: build.planHash,
+    origin: 'creator-start-v1', proofHash: build.rootTerminalReceiptHash!,
+    usage: { ...previous.productionUsage, ledgerHash: 'd'.repeat(64) },
+    observedModelCalls: previous.productionUsage.modelCalls,
+    observedInputTokens: previous.productionUsage.inputTokens, observedOutputTokens: previous.productionUsage.outputTokens,
+    unknownAttemptCount: 0, chargedUpperBoundAttemptCount: 0,
+  }
+  const lineage = vi.spyOn(calibrationUsage, 'readTextOpenWorldCalibrationLineageV1')
+    .mockResolvedValue({ sources: [source], readSets: [] })
+  const cas = vi.spyOn(calibrationUsage, 'assertTextOpenWorldCalibrationLineageUnchangedV1').mockResolvedValue()
+  return { seeded, context, receiptHash, previousRow, previous, lineage, cas }
 }
 
 async function insertCompletedPlaytestRoute(input: FixtureV1, endingKey: string, suffix: string): Promise<number> {
@@ -470,11 +515,57 @@ beforeEach(async () => {
   runtimeEvidence.bySession.clear()
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 afterAll(async () => {
   await db.delete()
 })
 
 describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
+  it.each([90, 64])('复核沿用原%s分和失败回执，生成v2账本结论且零新增评审调用', async score => {
+    const prepared = await calibrationRecheckFixture(score)
+    // Import may relocate local Run IDs. The source verifier above represents
+    // the independently verified current proof; only the old review is reused.
+    const build = (await db.productBuilds.get(prepared.seeded.buildId))!
+    const relocatedLedger = JSON.parse(build.budgetLedgerJson)
+    relocatedLedger.rootRunId = 9876
+    await db.productBuilds.update(build.id!, { budgetLedgerJson: JSON.stringify(relocatedLedger) })
+    const runReview = vi.fn()
+    const receipt = await recordTextOpenWorldCreatorCalibrationV1({
+      scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+      buildId: prepared.seeded.buildId, reuseReceiptHash: prepared.receiptHash,
+    }, { runReview, now: () => prepared.previous.evaluatedAt + 1 })
+    expect(runReview).not.toHaveBeenCalled()
+    expect(prepared.cas).toHaveBeenCalledOnce()
+    expect(receipt.evidence.version).toBe(2)
+    expect(receipt.evidence.independentReview).toEqual(prepared.previous.independentReview)
+    const stored = (await db.productQualityGateReceipts.get(receipt.rowId))!
+    expect(JSON.parse(stored.receiptJson).verifierKind).toBe('deterministic')
+    expect(receipt.status).toBe(score >= 70 ? 'passed' : 'failed')
+    expect(await db.productQualityGateReceipts.get(prepared.previousRow.id!)).toEqual(prepared.previousRow)
+    const readback = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+    })
+    expect(readback.calibrationReceipt?.receiptHash).toBe(receipt.receiptHash)
+  })
+
+  it('评分输入变化时拒绝复用且不重发模型，验真快照变化时原子拒绝新回执', async () => {
+    const prepared = await calibrationRecheckFixture()
+    const input = { scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+      buildId: prepared.seeded.buildId, reuseReceiptHash: prepared.receiptHash }
+    const runReview = vi.fn()
+    prepared.context.buildPackageHash = '0'.repeat(64)
+    await expect(recordTextOpenWorldCreatorCalibrationV1(input, { runReview })).rejects.toThrow('完全相同输入')
+    prepared.context.buildPackageHash = prepared.seeded.buildBinding.packageHash
+    prepared.cas.mockRejectedValueOnce(new Error('terminal CAS Run proof set 已变化'))
+    await expect(recordTextOpenWorldCreatorCalibrationV1(input, { runReview })).rejects.toThrow('terminal CAS')
+    expect(runReview).not.toHaveBeenCalled()
+    expect(await db.productQualityGateReceipts.where('[buildId+gateId]').equals([
+      input.buildId, TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    ]).count()).toBe(1)
+    expect(await db.productQualityGateReceipts.get(prepared.previousRow.id!)).toEqual(prepared.previousRow)
+  })
+
   it('复用生产双评审与完整Artifact治理，代码硬门和建议项分轴展示', async () => {
     const seeded = await fixture()
     const workspace = await readTextOpenWorldCreatorQualityWorkspaceV1({

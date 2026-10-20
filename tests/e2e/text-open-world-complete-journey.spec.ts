@@ -189,7 +189,7 @@ test('玩家从正式 Release 目录走完整旅程，并在结局刷新后保�
     const mapSvg = page.getByTestId('text-open-world-map-svg')
     await mapSvg.getByRole('button', { name: /查看地点：断脊渠口/ }).click()
     await map.getByLabel('选中地点详情')
-      .getByRole('button', { name: /^前往断脊渠口：/ })
+      .getByRole('button', { name: /^沿道路前往断脊渠口，耗时\d+分钟，/ })
       .click()
     await expect(page.getByTestId('text-open-world-global-status'))
       .toContainText('地点断脊渠口', { timeout: 30_000 })

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import type { WorkspaceScope } from '../../lib/types'
 import { readTextOpenWorldResponsibilityWorkspaceV1 } from '../../lib/open-world/responsibility-workspace'
 import type {
@@ -25,15 +26,22 @@ export default function TextOpenWorldResponsibilityOverview(props: TextOpenWorld
   const [result, setResult] = useState<TextOpenWorldResponsibilityProgressV1 | null>(null)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const readQueue = useRef(createLatestSnapshotReadQueue())
   useEffect(() => {
-    let active = true
+    const queue = readQueue.current
     setResult(null)
     setError('')
-    void readTextOpenWorldResponsibilityWorkspaceV1({
-      scope: { projectId, worldId, workId }, productionId: props.productionId, buildId: props.buildId,
-    }).then(value => { if (active) setResult(value) })
-      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : '暂时无法核验生产状态') })
-    return () => { active = false }
+    void queue.enqueue(async isCurrent => {
+      try {
+        const value = await readTextOpenWorldResponsibilityWorkspaceV1({
+          scope: { projectId, worldId, workId }, productionId: props.productionId, buildId: props.buildId,
+        })
+        if (isCurrent()) setResult(value)
+      } catch (cause) {
+        if (isCurrent()) setError(cause instanceof Error ? cause.message : '暂时无法核验生产状态')
+      }
+    })
+    return () => { queue.invalidate() }
   }, [projectId, worldId, workId, props.productionId, props.buildId, props.refreshToken, refresh])
 
   return <section className="mt-5 rounded border border-border bg-bg-elevated p-4" aria-label="三条生产责任线"

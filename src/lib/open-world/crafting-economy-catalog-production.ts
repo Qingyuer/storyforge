@@ -508,7 +508,9 @@ function draftFromArtifact(artifact: TextOpenWorldCraftingEconomyCatalogV1, cont
       return {
         demandNumber: vendor.order, title: vendor.title, description: vendor.description,
         locationNumber: demand.candidateLocationKeys.indexOf(vendor.locationKey) + 1,
-        inventoryItemNumbers: vendor.inventoryEntries.slice(0, 1)
+        // Preserve every possible model-selected prefix (at most 12 items).
+        // The compiler appends the remaining ordinary stock in catalog order.
+        inventoryItemNumbers: vendor.inventoryEntries.slice(0, 12)
           .map(entry => context.itemRewardCatalog.items.findIndex(item => item.key === entry.itemKey) + 1)
           .filter(number => number > 0),
       }
@@ -594,7 +596,7 @@ export function createTextOpenWorldCraftingEconomyCatalogExecutorV1(options: {
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.crafting-economy-catalog',
+      category: SKILL_ID,
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

@@ -10,6 +10,10 @@ import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import {
+  parseTextOpenWorldCreatorMediaAuthorizationV1,
+  type TextOpenWorldCreatorMediaAuthorizationV1,
+} from './creator-media-contract'
 import type {
   ProductProductionTaskExecutionInputV1,
   ProductProductionTaskExecutionResultV1,
@@ -59,6 +63,7 @@ import { parseTextOpenWorldModulesV1 } from './modules'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createInitialTextOpenWorldSessionProjectionV1 } from './session-projection'
+import { resolveTextOpenWorldSceneRegionV1 } from './scene-region-binding'
 import { validateTextOpenWorldDeterministicPreflightV1 } from './system-finalize-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
 import {
@@ -303,6 +308,7 @@ async function generatedMediaBindings(
   execution: ProductProductionTaskExecutionInputV1,
   requirements: TextOpenWorldMediaRequirementsV1,
   brief: ProductProductionBriefV3,
+  importAuthorizations: readonly TextOpenWorldCreatorMediaAuthorizationV1[],
 ): Promise<{
   assetKeyBySlot: Map<string, string>
   artifactKeys: string[]
@@ -389,6 +395,7 @@ async function generatedMediaBindings(
       })
       rightsEvidence.push(await verifyTextOpenWorldMediaRightsV1({
         artifact: row, qualityProfile: brief.qualityProfile, capabilityRequirement: capability,
+        importAuthorizations,
       }))
       assetKeyBySlot.set(slot.key, metadata.assetKey)
       assets.push({
@@ -428,10 +435,12 @@ function compileModulePayloads(
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
   if (actionModuleVersion !== 15 && actionModuleVersion !== 16
-    && actionModuleVersion !== 17 && actionModuleVersion !== 18) {
+    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19) {
     fail('SystemConfigs任务Action版本无效')
   }
-  const expectedActionModuleVersion = qdd.governance.protectedStoryRevealActionsReady === true
+  const expectedActionModuleVersion = qdd.governance.fixedObjectiveFulfillmentReady === true
+    ? 19
+    : qdd.governance.protectedStoryRevealActionsReady === true
     ? 18
     : qdd.governance.structuredCombatMechanicsReady === true
     ? 17
@@ -632,7 +641,8 @@ function compileModulePayloads(
       })),
       scenes: artifacts.scenes.scenes.map(scene => ({
         key: scene.key, order: scene.order, sourceKind: scene.sourceKind, sourceKey: scene.sourceKey,
-        title: scene.title, purpose: scene.purpose, regionKey: scene.regionKey,
+        title: scene.title, purpose: scene.purpose,
+        regionKey: resolveTextOpenWorldSceneRegionV1({ scene, locations: artifacts.map.locations, quests: artifacts.skeletons.quests }),
         locationKey: scene.locationKey, questKey: scene.questKey, stageKey: scene.stageKey,
         objectiveKey: scene.objectiveKey, actorKey: scene.actorKey,
         interactionKey: scene.interactionKey, randomEventKey: scene.randomEventKey,
@@ -1135,12 +1145,13 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
     || productionBuild.briefHash !== productionBriefRow.briefHash) {
     fail('找不到当前Build绑定的授权Product Brief')
   }
-  const creatorContracts = productionBriefRow.briefKind === 'text-open-world-creator-v1'
-    ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+  const creatorAuthority = productionBriefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
         scope: input.execution.scope,
         buildId: productionBuild.id!,
-      })).contracts
+      })
     : null
+  const creatorContracts = creatorAuthority?.contracts
   const sharedBrief = creatorContracts?.executionBrief
     ?? parseProductProductionBriefV3(productionBriefRow.briefJson)
   const sharedBriefHash = creatorContracts?.start.executionBriefHash
@@ -1158,7 +1169,12 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
       !== artifacts.gameBrief.completion.minimumMediaCoverage) {
     fail('V3 GameBrief与授权Product Brief不一致')
   }
-  const mediaBindings = await generatedMediaBindings(input.execution, artifacts.media, sharedBrief)
+  const importAuthorizations = await Promise.all((creatorAuthority?.commandChain ?? [])
+    .filter(command => command.type === 'authorize-text-open-world-creator-media')
+    .map(command => parseTextOpenWorldCreatorMediaAuthorizationV1(command.resultJson)))
+  const mediaBindings = await generatedMediaBindings(
+    input.execution, artifacts.media, sharedBrief, importAuthorizations,
+  )
   const modulePayloads = compileModulePayloads(artifacts, mediaBindings.assetKeyBySlot)
   const innerCandidate: TextOpenWorldRuntimePackageV1 = {
     schema: 'storyforge.text-open-world.runtime-package', version: 1,
@@ -1307,6 +1323,12 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
       parsed: true,
     })),
     generatedBindings: {
+      sceneRegionCorrections: artifacts.scenes.scenes.flatMap(scene => {
+        const runtimeRegionKey = resolveTextOpenWorldSceneRegionV1({ scene, locations: artifacts.map.locations, quests: artifacts.skeletons.quests })
+        return runtimeRegionKey === scene.regionKey ? [] : [{
+          sceneKey: scene.key, locationKey: scene.locationKey, sourceRegionKey: scene.regionKey, runtimeRegionKey,
+        }]
+      }),
       endingActionKeys: artifacts.quests.endingBindings.routes.map(route => route.actionKey),
       generatedMediaArtifactKeys, fallbackMediaSlotKeys: fallbackKeys,
     },
@@ -1362,6 +1384,22 @@ export async function validateTextOpenWorldIntegrationReportV1(input: {
     })
   } else if (report.responsibilitySnapshot !== undefined) fail('旧版 IntegrationReport 不得冒充三线快照')
   const parsedModules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext)
+  const corrections = report.generatedBindings.sceneRegionCorrections
+  if (corrections !== undefined) {
+    if (!Array.isArray(corrections) || new Set(corrections.map(item => item.sceneKey)).size !== corrections.length) {
+      fail('IntegrationReport场景地区校正证据重复或无效')
+    }
+    for (const correction of corrections) {
+      if (parsedModules.narrative.version !== 2) fail('旧版Narrative没有可校正的场景地区')
+      const scene = parsedModules.narrative.scenes.find(item => item.key === correction.sceneKey)
+      if (!scene || scene.sourceKind !== 'quest-objective'
+        || scene.locationKey !== correction.locationKey || scene.regionKey !== correction.runtimeRegionKey
+        || correction.sourceRegionKey === correction.runtimeRegionKey
+        || !parsedModules.world.regions.some(region => region.key === correction.sourceRegionKey)) {
+        fail('IntegrationReport场景地区校正与RuntimePackage不一致')
+      }
+    }
+  }
   const moduleKeys = new Set(report.modules.map(item => item.moduleKey))
   if (report.modules.length !== TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.length
     || moduleKeys.size !== report.modules.length

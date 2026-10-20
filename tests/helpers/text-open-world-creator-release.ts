@@ -37,6 +37,7 @@ import { seedCurrentProductWorld } from './current-product-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from './text-open-world-creator-build'
 import { createTextOpenWorldProductRuntimePackageFixtureV1 } from './text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from './text-open-world-vnext-fixture'
+import { seedTextOpenWorldReleaseRootFixtureV1 } from './text-open-world-release-root'
 
 const RECEIPT_POLICY_ID = 'storyforge.text-open-world-creator-release-quality.v1'
 
@@ -75,6 +76,7 @@ function sortedReceipts(rows: TextOpenWorldCreatorReleaseArtifactReceiptV1[]) {
 export async function createTextOpenWorldCreatorReleaseFixtureV1(
   sourceKind: 'world-release' | 'novel' = 'world-release',
   qualityVersion: 1 | 2 = 1,
+  options: { portableRoot?: boolean } = {},
 ) {
   const sourceWorkspace = sourceKind === 'world-release'
     ? await seedCurrentProductWorld(`Creator Release World ${crypto.randomUUID()}`)
@@ -242,11 +244,15 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
     integrationReportHash: await hashProductProductionValueV2(reportBody),
   }
 
-  const qualityReportHash = '5'.repeat(64)
+  const portableRoot = options.portableRoot
+    ? await seedTextOpenWorldReleaseRootFixtureV1({ creator, pinBundle, runtimePackage })
+    : null
+  const qualityReportHash = portableRoot?.qualityReportHash ?? '5'.repeat(64)
   const buildBinding = {
     productionKey: creator.productionKey, buildNumber: creator.buildNumber,
-    packageHash: runtimePackageHash, previewHash: '6'.repeat(64), manifestHash: '7'.repeat(64),
-    qualityReportHash, rootTerminalReceiptHash: '8'.repeat(64),
+    packageHash: runtimePackageHash, previewHash: portableRoot?.previewHash ?? '6'.repeat(64),
+    manifestHash: portableRoot?.manifestHash ?? '7'.repeat(64),
+    qualityReportHash, rootTerminalReceiptHash: portableRoot?.rootTerminalReceiptHash ?? '8'.repeat(64),
   }
   const completedAt = frozenAt + 3
   const qualityEvidence: TextOpenWorldCreatorReleaseQualityEvidenceV1 = {
@@ -281,8 +287,8 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
   const artifactReceipts = sortedReceipts([
     ...assemblyReceipts.filter(receipt => receipt.artifactKey !== 'text-open-world.source-pin'),
     { artifactKey: 'text-open-world.source-pin', version: 1, contentHash: pinBundle.pin.pinHash, producerReceiptHash: 'd'.repeat(64) },
-    { artifactKey: 'text-open-world.source-manifest', version: 1, contentHash: sourceManifest.manifestHash, producerReceiptHash: 'e'.repeat(64) },
-    { artifactKey: 'text-open-world.integration-report', version: 1, contentHash: integrationReport.integrationReportHash, producerReceiptHash: 'f'.repeat(64) },
+    { artifactKey: 'text-open-world.source-manifest', version: 1, contentHash: await hashProductProductionValueV2(sourceManifest), producerReceiptHash: 'e'.repeat(64) },
+    { artifactKey: 'text-open-world.integration-report', version: 1, contentHash: await hashProductProductionValueV2(integrationReport), producerReceiptHash: 'f'.repeat(64) },
     { artifactKey: 'text-open-world.runtime-package', version: 1, contentHash: runtimePackageHash, producerReceiptHash: '0'.repeat(64) },
     { artifactKey: 'text-open-world.quality-report', version: 1, contentHash: qualityReportHash, producerReceiptHash: '1'.repeat(64) },
     ...pinBundle.pin.units.map((unit, index) => ({
@@ -335,6 +341,6 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
   return {
     scope: creator.scope as WorkspaceScope, creator, pinBundle, sourceManifest,
     runtimePackage, integrationReport, releaseQuality, releaseAuthorization,
-    sourceContracts, manifest, sourceWorkspace, localWorldReleaseId, adoptionIntentHash,
+    sourceContracts, manifest, sourceWorkspace, localWorldReleaseId, adoptionIntentHash, portableRoot,
   }
 }

@@ -28,6 +28,7 @@ import {
   type TextOpenWorldGovernedEntityV1,
 } from '../../lib/open-world/creator-artifact-governance'
 import { prepareTextOpenWorldCreatorArtifactEditV1 } from '../../lib/product-production/service'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import type { WorkspaceScope } from '../../lib/types'
 import TextOpenWorldCreatorArtifactEditor, {
   type TextOpenWorldCreatorArtifactEditSelectionV1,
@@ -265,7 +266,7 @@ export function TextOpenWorldCreatorArtifactBrowser(
   const [mobileDetail, setMobileDetail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const generation = useRef(0)
+  const readQueue = useRef(createLatestSnapshotReadQueue())
   const editPreflightGeneration = useRef(0)
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -276,23 +277,24 @@ export function TextOpenWorldCreatorArtifactBrowser(
     workId: props.scope.workId,
   }), [props.scope.projectId, props.scope.workId, props.scope.worldId])
   const identityKey = `${scope.projectId}:${scope.worldId}:${scope.workId}:${props.productionId}`
-  const load = useCallback(async () => {
-    const current = ++generation.current
+  const load = useCallback(() => {
     setLoading(true)
     setError('')
-    try {
-      const next = await readTextOpenWorldArtifactGovernanceV1({
-        scope,
-        productionId: props.productionId,
-      })
-      if (generation.current === current) setProjection(next)
-    } catch (cause) {
-      if (generation.current === current) {
-        setError(cause instanceof Error ? cause.message : String(cause))
+    return readQueue.current.enqueue(async isCurrent => {
+      try {
+        const next = await readTextOpenWorldArtifactGovernanceV1({
+          scope,
+          productionId: props.productionId,
+        })
+        if (isCurrent()) setProjection(next)
+      } catch (cause) {
+        if (isCurrent()) {
+          setError(cause instanceof Error ? cause.message : String(cause))
+        }
+      } finally {
+        if (isCurrent()) setLoading(false)
       }
-    } finally {
-      if (generation.current === current) setLoading(false)
-    }
+    })
   }, [props.productionId, scope])
 
   useEffect(() => {
@@ -318,8 +320,9 @@ export function TextOpenWorldCreatorArtifactBrowser(
   }, [props.focusArtifact])
 
   useEffect(() => {
+    const queue = readQueue.current
     void load()
-    return () => { generation.current += 1 }
+    return () => { queue.invalidate() }
   }, [load, props.refreshToken])
 
   const kinds = useMemo(() => {

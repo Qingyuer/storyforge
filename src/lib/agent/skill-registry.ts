@@ -3229,7 +3229,7 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3249,7 +3249,7 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3269,7 +3269,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3289,7 +3289,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3309,7 +3309,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3329,7 +3329,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3349,7 +3349,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3369,7 +3369,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3532,7 +3532,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['ttrpgPublicNarration']),
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -3552,7 +3552,7 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -3572,7 +3572,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['ttrpgNpcRuntime']),
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -3969,7 +3969,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界敌人与遭遇目录',
     owner: 'text-open-world-production',
-    promptVersion: 'text-open-world-encounter-catalog-v1',
+    promptVersion: 'text-open-world-encounter-catalog-v2',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],

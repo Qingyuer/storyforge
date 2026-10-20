@@ -14,6 +14,7 @@ import { TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1 } from '../adventu
 import { textAdventureDecisionEchoPresentationV1 } from '../adventure/production-compiler'
 import { isSha256Hash, canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
 import { parseProductProductionCommandV1 } from './contracts'
+import { readVerifiedOrphanRecoveryProvenanceV1 } from './orphan-recovery-evidence'
 import { textAdventureQualityReviewScopeFromTaskKeyV1 } from './plan'
 import {
   textAdventureQualityArcRepairTaskKeysV1,
@@ -44,6 +45,7 @@ export interface ValidatedProductProductionRecoveryDirectiveV1 {
   previousFailure: Record<string, unknown> | null
   snapshot: AgentRunSnapshotV1 | null
   failedAttempt: number | null
+  recoveredFailureProvenance?: boolean
 }
 
 /** Structured production contracts must remain exact JSON, including secrets
@@ -100,8 +102,9 @@ async function productionAndBuild(input: AssembleContextInput) {
  * use `blocked` before accepting a command and `resolved` immediately before
  * execution, so a persisted directive cannot bypass either boundary.
  *
- * Legacy failures without provenance may retain ordinary retry compatibility,
- * but can never authorize a complete author JSON or a capability change.
+ * Legacy failures retain ordinary retry compatibility. A complete author JSON
+ * requires native provenance or an exact orphan Run/ledger witness; an
+ * unverified legacy failure can never authorize it or a capability change.
  */
 export async function validateProductProductionRecoveryDirectiveV1(input: {
   scope: WorkspaceScope
@@ -148,6 +151,14 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 已解决 blocker 缺少合法恢复动作')
   }
   const action = resolvedDirective ? resolvedAction : input.requestedAction ?? null
+  if (failureState.code === 'author-revised-content' && production.productType === 'text-open-world') {
+    if (input.expectedState === 'blocked' || action !== 'author-edit') {
+      throw new ProductProductionRecoveryDirectiveErrorV1('开放世界内容修订必须来自已签收的恢复命令')
+    }
+    const { validateTextOpenWorldContentRevisionAuthorityV1 } = await import('../open-world/production-content-revision')
+    await validateTextOpenWorldContentRevisionAuthorityV1({ scope, production, build, failure: failureState, taskKey: input.productProductionTaskKey })
+    return { resolvedDirective: true, resolution, previousFailure: null, snapshot: null, failedAttempt: null }
+  }
   if (failureState.code === 'author-revised-content') {
     const command = parseProductProductionCommandV1(failureState.revisionCommand)
     if (production.productType !== 'text-adventure' || input.expectedState === 'blocked'
@@ -181,15 +192,27 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     return { resolvedDirective: true, resolution, previousFailure: null, snapshot: null, failedAttempt: null }
   }
   const previousFailureValue = resolvedDirective ? failureState.previousFailure : failureState
-  const previousFailure = previousFailureValue && typeof previousFailureValue === 'object'
+  let previousFailure = previousFailureValue && typeof previousFailureValue === 'object'
     && !Array.isArray(previousFailureValue)
     ? previousFailureValue as Record<string, unknown>
     : null
-  const provenance = previousFailure?.failureProvenance
+  let provenance = previousFailure?.failureProvenance
     && typeof previousFailure.failureProvenance === 'object'
     && !Array.isArray(previousFailure.failureProvenance)
     ? previousFailure.failureProvenance as Record<string, unknown>
     : null
+  let recoveredFailureProvenance = false
+  if (!provenance && previousFailure && !('failureProvenance' in previousFailure)
+    && !resolvedDirective && input.expectedState === 'blocked' && action === 'author-edit') {
+    provenance = await readVerifiedOrphanRecoveryProvenanceV1({
+      scope, build: build as typeof build & { id: number },
+      taskKey: input.productProductionTaskKey, failure: previousFailure,
+    })
+    if (provenance) {
+      previousFailure = { ...previousFailure, failureProvenance: provenance }
+      recoveredFailureProvenance = true
+    }
+  }
   if (!provenance) {
     const legacyInspection = input.expectedState === 'either' && !resolvedDirective && action == null
     if (legacyInspection || (input.allowLegacyRetry === true && action === 'retry')) {
@@ -243,6 +266,7 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     previousFailure,
     snapshot,
     failedAttempt,
+    ...(recoveredFailureProvenance ? { recoveredFailureProvenance: true } : {}),
   }
 }
 

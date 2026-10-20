@@ -27,8 +27,8 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'change-player-resource'; payload: { resource: 'health' | 'skill-resource'; amount: number } }
   | { key: string; operation: 'grant-experience'; payload: { amount: number } }
   | { key: string; operation: 'apply-status' | 'remove-status'; payload: { statusKey: string } }
-  | { key: string; operation: 'grant-item'; payload: { itemKey: string; quantity: number } }
-  | { key: string; operation: 'remove-item'; payload: { itemKey: string; quantity: number; reason: 'consume' | 'drop' | 'sell' | 'craft' } }
+  | { key: string; operation: 'grant-item'; payload: { itemKey: string; quantity: number; ifAbsent?: true } }
+  | { key: string; operation: 'remove-item'; payload: { itemKey: string; quantity: number; reason: 'consume' | 'drop' | 'sell' | 'craft' | 'fulfillment' } }
   | { key: string; operation: 'equip-item' | 'unequip-item'; payload: { itemKey: string } }
   | { key: string; operation: 'learn-skill'; payload: { skillKey: string } }
   | { key: string; operation: 'learn-recipe'; payload: { recipeKey: string } }

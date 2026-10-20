@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import type { WorkspaceScope } from '../../lib/types'
 import { readMediaBlobObjectData } from '../../lib/product-production/media-blob-store'
 import { readTextOpenWorldVisualReviewWorkspaceV1, recordTextOpenWorldVisualReviewV1 } from '../../lib/open-world/creator-quality'
@@ -45,15 +46,24 @@ export default function TextOpenWorldVisualReview(props: {
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const request = useRef({ generation: 0 })
+  const readQueue = useRef(createLatestSnapshotReadQueue())
   useEffect(() => {
     let active = true
     const token = request.current
+    const queue = readQueue.current
     token.generation++; setBusy(false)
     setWorkspace(null); setError(''); setDecisions({}); setViewed(new Set()); setConfirmed(false)
-    void readTextOpenWorldVisualReviewWorkspaceV1({ scope, productionId: props.productionId, buildId: props.buildId })
-      .then(value => { if (active) setWorkspace(value) })
-      .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : '图片审查暂不可用') })
-    return () => { active = false; token.generation++ }
+    void queue.enqueue(async isCurrent => {
+      try {
+        const value = await readTextOpenWorldVisualReviewWorkspaceV1({
+          scope, productionId: props.productionId, buildId: props.buildId,
+        })
+        if (active && isCurrent()) setWorkspace(value)
+      } catch (cause) {
+        if (active && isCurrent()) setError(cause instanceof Error ? cause.message : '图片审查暂不可用')
+      }
+    })
+    return () => { active = false; token.generation++; queue.invalidate() }
   }, [scope, props.productionId, props.buildId, revision])
   const complete = workspace && workspace.assets.length > 0 && workspace.assets.every(asset => viewed.has(asset.artifactKey)
     && decisions[asset.artifactKey] && (decisions[asset.artifactKey].decision !== 'rejected'

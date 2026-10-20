@@ -17,6 +17,32 @@ afterAll(async () => {
 })
 
 describe('TOW-G5-10 · Creator不可变Release合同', () => {
+  it('fresh Release receipts bind complete accepted payloads while legacy body-hash contracts remain readable', async () => {
+    const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release')
+    const source = fixture.sourceContracts
+    expect(source.version).toBe(2)
+    for (const [key, payload] of [
+      ['text-open-world.source-manifest', source.sourceManifest],
+      ['text-open-world.integration-report', source.integrationReport],
+    ] as const) {
+      expect(source.artifactReceipts.find(row => row.artifactKey === key)?.contentHash)
+        .toBe(await hashProductProductionValueV2(payload))
+    }
+    const legacy = structuredClone(source)
+    legacy.version = 1
+    legacy.artifactReceipts.find(row => row.artifactKey === 'text-open-world.source-manifest')!.contentHash = legacy.sourceManifest.manifestHash
+    legacy.artifactReceipts.find(row => row.artifactKey === 'text-open-world.integration-report')!.contentHash = legacy.integrationReport.integrationReportHash
+    legacy.artifactSetHash = await hashProductProductionValueV2(legacy.artifactReceipts)
+    const { contractHash: _contractHash, ...body } = legacy
+    legacy.contractHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldCreatorReleaseSourceContractsV1(legacy, fixture.runtimePackage)).resolves.toEqual(legacy)
+    const invalidFresh = { ...legacy, version: 2 as const }
+    const { contractHash: _invalidHash, ...invalidBody } = invalidFresh
+    invalidFresh.contractHash = await hashProductProductionValueV2(invalidBody)
+    await expect(validateTextOpenWorldCreatorReleaseSourceContractsV1(invalidFresh, fixture.runtimePackage))
+      .rejects.toThrow('正式消费槽、来源单元或终态Artifact receipt集合不闭合')
+  }, 60_000)
+
   it('version 2 assembly and quality retain exact artifact versions and review hashes through portable verification', async () => {
     const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release', 2)
     expect(fixture.integrationReport.version).toBe(2)

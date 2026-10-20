@@ -648,7 +648,7 @@ export function createTextOpenWorldItemRewardCatalogExecutorV1(options: {
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.item-reward-catalog',
+      category: SKILL_ID,
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

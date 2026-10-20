@@ -364,6 +364,33 @@ export interface TextOpenWorldCreatorCalibrationEvidenceV1 {
   evaluatedAt: number
 }
 
+export interface TextOpenWorldCreatorCalibrationUsageSourceV1 {
+  buildNumber: number
+  briefHash: string
+  planHash: string
+  origin: 'creator-start-v1' | 'creator-repair-v1' | 'creator-media-v1' | 'creator-budget-recovery-v1'
+  proofHash: string
+  usage: TextOpenWorldCreatorCalibrationEvidenceV1['productionUsage']
+  observedModelCalls: number
+  observedInputTokens: number
+  observedOutputTokens: number
+  unknownAttemptCount: number
+  chargedUpperBoundAttemptCount: number
+}
+
+/** V1 receipts remain immutable. V2 additionally binds the actual, verified
+ * production ancestors; a media-only child still reports zero new calls. */
+export interface TextOpenWorldCreatorCalibrationEvidenceV2
+  extends Omit<TextOpenWorldCreatorCalibrationEvidenceV1, 'version'> {
+  version: 2
+  productionLineage: TextOpenWorldCreatorCalibrationUsageSourceV1[]
+  reusedReviewReceiptHash: string | null
+}
+
+export type TextOpenWorldCreatorCalibrationEvidence =
+  | TextOpenWorldCreatorCalibrationEvidenceV1
+  | TextOpenWorldCreatorCalibrationEvidenceV2
+
 export interface TextOpenWorldCreatorCalibrationReadinessV1 {
   generator: { provider: string; model: string }
   grader: { provider: string; model: string }
@@ -1076,6 +1103,57 @@ export function parseTextOpenWorldCreatorCalibrationEvidenceV1(value: unknown): 
       budgetMaximumCostUsd: finiteNumber(usage.budgetMaximumCostUsd, 'productionUsage.budgetMaximumCostUsd'),
     },
     checks, passed: row.passed, evaluatedAt: integer(row.evaluatedAt, 'evaluatedAt', 1),
+  }
+}
+
+export function parseTextOpenWorldCreatorCalibrationEvidence(value: unknown): TextOpenWorldCreatorCalibrationEvidence {
+  const row = record(value, 'calibration evidence')
+  if (row.version === 1) return parseTextOpenWorldCreatorCalibrationEvidenceV1(value)
+  if (row.version !== 2 || !Array.isArray(row.productionLineage)
+    || row.productionLineage.length < 1 || row.productionLineage.length > 128) {
+    fail('calibration v2 制作来源无效')
+  }
+  const { productionLineage, reusedReviewReceiptHash, ...legacy } = row
+  const base = parseTextOpenWorldCreatorCalibrationEvidenceV1({ ...legacy, version: 1 })
+  const sources = productionLineage.map((value, index): TextOpenWorldCreatorCalibrationUsageSourceV1 => {
+    const source = record(value, `productionLineage[${index}]`)
+    exactKeys(source, [
+      'buildNumber', 'briefHash', 'planHash', 'origin', 'proofHash', 'usage',
+      'observedModelCalls', 'observedInputTokens', 'observedOutputTokens',
+      'unknownAttemptCount', 'chargedUpperBoundAttemptCount',
+    ], `productionLineage[${index}]`)
+    if (!['creator-start-v1', 'creator-repair-v1', 'creator-media-v1', 'creator-budget-recovery-v1']
+      .includes(String(source.origin))) fail('calibration v2 来源类型无效')
+    const usage = parseTextOpenWorldCreatorCalibrationEvidenceV1({
+      ...legacy, version: 1, productionUsage: source.usage,
+    }).productionUsage
+    const observedModelCalls = integer(source.observedModelCalls, 'observedModelCalls')
+    const observedInputTokens = integer(source.observedInputTokens, 'observedInputTokens')
+    const observedOutputTokens = integer(source.observedOutputTokens, 'observedOutputTokens')
+    if (observedModelCalls > usage.modelCalls || observedInputTokens > usage.inputTokens
+      || observedOutputTokens > usage.outputTokens) fail('实测用量不能大于完整账本用量')
+    return {
+      buildNumber: integer(source.buildNumber, 'source.buildNumber', 1),
+      briefHash: hash(source.briefHash, 'source.briefHash'),
+      planHash: hash(source.planHash, 'source.planHash'),
+      origin: source.origin as TextOpenWorldCreatorCalibrationUsageSourceV1['origin'],
+      proofHash: hash(source.proofHash, 'source.proofHash'), usage,
+      observedModelCalls, observedInputTokens, observedOutputTokens,
+      unknownAttemptCount: integer(source.unknownAttemptCount, 'unknownAttemptCount'),
+      chargedUpperBoundAttemptCount: integer(source.chargedUpperBoundAttemptCount, 'chargedUpperBoundAttemptCount'),
+    }
+  })
+  if (sources[0].origin !== 'creator-start-v1'
+    || sources.some((source, index) => source.briefHash !== sources[0].briefHash
+      || index > 0 && (source.origin === 'creator-start-v1' || source.buildNumber <= sources[index - 1].buildNumber))
+    || sources[sources.length - 1].buildNumber !== base.build.buildNumber
+    || JSON.stringify(sources[sources.length - 1].usage) !== JSON.stringify(base.productionUsage)) {
+    fail('calibration v2 来源顺序、Brief或当前用量不闭合')
+  }
+  return {
+    ...base, version: 2, productionLineage: sources,
+    reusedReviewReceiptHash: reusedReviewReceiptHash === null
+      ? null : hash(reusedReviewReceiptHash, 'reusedReviewReceiptHash'),
   }
 }
 

@@ -44,6 +44,7 @@ import {
   verifyProductReleaseManifestV1,
 } from './runtime-package'
 import { verifyProductBuildRootTerminalReceiptV1 } from './receipts'
+import { verifyStoredProductBuildRootBudgetEvidenceV1 } from './root-budget-evidence-store'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import type { VerifiedProductBuildTerminalArtifactSetV1 } from './artifact-store'
 import { parseProductProductionPortableTaskLedgerV1 } from './task-evidence'
@@ -451,12 +452,16 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || packageArtifact.contentHash !== build.packageHash
     || !qualityArtifact || qualityArtifact.contentHash !== build.qualityReportHash) fail('Runtime/Quality Artifact 缺失')
-  const rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
+  let rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash: build.manifestHash, packageHash: build.packageHash,
     qualityReportHash: build.qualityReportHash, controlEpoch: build.controlEpoch,
     budgetLedgerJson: build.budgetLedgerJson, artifacts,
     expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
   })
+  if (!rootReceiptVerification.valid && build.rootBudgetEvidenceJson) {
+    await verifyStoredProductBuildRootBudgetEvidenceV1({ scope, build, artifacts })
+    rootReceiptVerification = { valid: true, version: 2 }
+  }
   if (!rootReceiptVerification.valid) fail('root terminal receipt 校验失败')
   if (rootReceiptVerification.version !== 2) {
     fail('legacy root terminal receipt 仅供只读兼容；正式发布前必须重新生产 v2 Build')
@@ -569,8 +574,8 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
       report: integrationValue as TextOpenWorldIntegrationReportV1,
       expectedPlanHash: build.planHash,
     })
-    if (sourceManifestArtifact.contentHash !== creatorSourceManifest.manifestHash
-      || integrationArtifact.contentHash !== integrationReport.integrationReportHash) {
+    if (sourceManifestArtifact.contentHash !== await hashProductProductionValueV2(creatorSourceManifest)
+      || integrationArtifact.contentHash !== await hashProductProductionValueV2(integrationReport)) {
       fail('Creator来源或装配Artifact行Hash不匹配')
     }
     const qualityWorkspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
