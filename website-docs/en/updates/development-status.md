@@ -1,5 +1,13 @@
 # Pending development and branch audit
 
+## October 20, 2026 · Longform quality changes entered main
+
+[PR #141](https://github.com/yuanbw2025/storyforge/pull/141) merged as `1b96e80a` on October 20. System-fiction elements, scene tasks, whole-chapter review, and scoped revision are no longer pending development. Instructions now live in [planning](/en/features/longform/planning) and [prose and revision](/en/features/longform/writing); see the [change log](/en/updates/changelog) for version boundaries. Node mode as a whole remains a preview. Existing v4.0.2 downloads do not update automatically; online deployment is verified separately.
+
+Head `fb682a28` passed complete CLI checks (824 files / 4594 tests), complete browser checks (309 passes / 4 environment-dependent skips), and regular CI on the latest main merge tree. Three settings with two ten-chapter workflows each, totaling 60 manuscripts / 30 pairs, plus 12 openings / 6 pairs from new settings and two service models have request, workflow, and lifecycle verification. Poor drafts and failures are retained. The user moved independent reader review and independent author timing to optional follow-up research, so this delivery requires no recruitment. Missing outcomes are not passes; independent quality and time benefits remain unverified. Exposed experiment labels and omitted optional review instructions in sampling limit interpretation; these are not strict blinded tests or platform-quality certification.
+
+Older dated sections below retain their historical branch snapshots. This section supersedes statements that #141 remains unmerged and does not reassess other development branches.
+
 ## October 19, 2026 · Longform author-feedback iteration (development branch)
 
 [PR #141](https://github.com/yuanbw2025/storyforge/pull/141) continues to address character reactions, responsive dialogue, and endings exposed by actual author repairs. Generation, whole-chapter review, scoped revision, and recheck share the existing strategy and explicit adoption chain. Reviews distinguish internal contradictions, omitted explicit task requirements, and optional expression preferences, so polishing does not silently remove important conditions. Four internal author micro-scene repairs have been returned; they do not establish independent formal literary benefit or lower repair cost.

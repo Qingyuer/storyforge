@@ -8,7 +8,9 @@ In Story core (故事核心), specify the protagonist, goal, resistance, cost, a
 
 In Creative rules (创作规则), add viewpoint, style, tone, prohibitions, and consistency requirements. “Do not change the protagonist's identity” is more testable than “write better.”
 
-System-fiction element configuration in the development branch is not included in the current release. See the [longform quality trial](/en/updates/development-status) for its entry, saving, and disabling steps.
+Source versions containing [PR #141](https://github.com/yuanbw2025/storyforge/pull/141) offer optional system-fiction elements. Open Story design → Creative rules → System-fiction elements (故事设计 → 创作规则 → 系统文元素) to enter the protagonist’s situation and goal, system mechanism, rewards and growth, limits and costs, and opposing forces and relationships. Select the genre in Work information. Enable the requirements, choose Save elements (保存元素), and check the acknowledgment. Fields may remain blank; disabling preserves their text. Planned rewards do not become acquired items, and your selected prompt template is preserved.
+
+Previously downloaded v4.0.2 installers do not automatically include these later source changes. See the [change log](/en/updates/changelog).
 
 ## Start from an idea or existing material
 
