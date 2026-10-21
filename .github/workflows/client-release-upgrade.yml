@@ -1,6 +1,7 @@
 name: Verify signed Android release upgrade
 on:
   workflow_dispatch:
+  workflow_call:
   pull_request:
     paths:
       - '.github/workflows/client-release-upgrade.yml'

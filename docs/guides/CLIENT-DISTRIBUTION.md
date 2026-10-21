@@ -49,7 +49,7 @@ node scripts/distribution/build-android.mjs --release
 
 1. 版本唯一来源为 `package.json`。Android `versionCode = major × 1,000,000 + minor × 1,000 + patch`；每段 0–999，正式渠道只接受稳定 `x.y.z`。版本必须递增，不要改公式、应用 ID 或签名。
 2. 先通过项目既有 CI、E2E、客户端定向检查，并完成两版本覆盖安装与备份恢复验证；在维护者授权的版本范围内发布。
-3. 现有 `release.yml` 在便携包和三平台客户端都成功后，向同一个 GitHub Release 上传 `.exe`、`.dmg`、`.blockmap`、`latest.yml`、`.apk`、便携 ZIP 与 `SHA256SUMS.txt`，最后公开 Release。客户端构建工作流手动执行只生成 Actions artifacts，不公开 Release。
+3. 现有 `release.yml` 在便携包、三平台客户端和正式签名 Android 两版本覆盖升级都成功后，核对发行源码已合入 `main`，再向同一个 GitHub Release 上传 `.exe`、`.dmg`、`.blockmap`、`latest.yml`、`.apk`、便携 ZIP 与 `SHA256SUMS.txt`，最后公开 Release。客户端构建工作流手动执行只生成 Actions artifacts，不公开 Release。
 4. 公开后的版本不可覆盖。不要单独提前发布更新元数据，也不要在缺少 Android 包时把 Windows 更新先置为 latest。新版本应使用新 tag 和 release notes。
 5. 安装操作先等待现有待保存编辑协调器完成写入，失败则阻断安装。Windows 由 `electron-updater` 检查与下载；禁用自动下载、退出时自动安装、预发布和降级。下载与退出安装各有原生确认窗口。GitHub 下载失败仍可使用当前安装。可通过 `CSC_LINK` / `CSC_KEY_PASSWORD` 接入 Windows 代码签名；未配置时为未签名安装器，系统可能提示未知发布者。
 6. Android 只检查固定仓库最新稳定 Release，精确匹配 APK 名称与 URL，验证 GitHub asset SHA-256、APK 包名、递增版本号和当前签名，再调用系统安装器。首次需要用户允许“安装未知应用”。下载或校验失败不得启动安装；用户取消系统安装时旧版保留。
