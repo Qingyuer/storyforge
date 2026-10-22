@@ -15,7 +15,7 @@ run_phase() {
 run_phase seed
 adb shell am force-stop com.storyforge.client
 # Establish that the old formal APK can read its own persisted baseline before replacement.
-run_phase restart baseline-restart
+run_phase baseline baseline-restart
 adb shell am force-stop com.storyforge.client
 adb install -r release-test/upgrade-test-new.apk
 run_phase restore

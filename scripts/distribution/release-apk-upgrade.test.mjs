@@ -32,7 +32,7 @@ const calls = fs.readFileSync(process.env.ADB_TRACE, 'utf8').trim().split('\\n')
 if (args.includes('instrument')) {
   const phase = args[args.indexOf('phase') + 1]
   const replaced = calls.some(call => call[0] === 'install' && call[1] === '-r')
-  console.log(process.env.FAIL_BASELINE === '1' && phase === 'restart' && !replaced
+  console.log(process.env.FAIL_BASELINE === '1' && phase === 'baseline' && !replaced
     ? 'FAILURES!!! Tests run: 1, Failures: 1' : 'OK (1 test)')
 } else if (args.includes('dumpsys')) console.log('versionName=4.0.3')
 `, { mode: 0o700 })
@@ -49,7 +49,7 @@ test('formal replacement follows a successful old-package restart and preserves 
   try {
     assert.equal(probe.result.status, 0, probe.result.stdout + probe.result.stderr)
     const phases = probe.calls.filter(call => call.includes('instrument'))
-    assert.deepEqual(phases.map(call => call[call.indexOf('phase') + 1]), ['seed', 'restart', 'restore', 'restart'])
+    assert.deepEqual(phases.map(call => call[call.indexOf('phase') + 1]), ['seed', 'baseline', 'restore', 'restart'])
     const baseline = probe.calls.indexOf(phases[1])
     const replacement = probe.calls.findIndex(call => call[0] === 'install' && call[1] === '-r')
     assert.ok(baseline < replacement)

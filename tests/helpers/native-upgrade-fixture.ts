@@ -33,7 +33,7 @@ async function seed() {
   localStorage.setItem(key, JSON.stringify({ projectId: created.scope.projectId, backup }))
   return { projectId: created.scope.projectId, title, text, backup }
 }
-async function verify(restore = false, externalBackup?: ProjectExportData) {
+async function verify(restore = false, externalBackup?: ProjectExportData, requireRestored = false) {
   const stored = JSON.parse(localStorage.getItem(key) ?? 'null')
   if (!stored) {
     let databasePresent: boolean | 'unavailable' = 'unavailable'
@@ -48,6 +48,7 @@ async function verify(restore = false, externalBackup?: ProjectExportData) {
       origin: location.origin, localStorageEntries: localStorage.length, databasePresent, fileProbeMatches,
     })}`)
   }
+  requireValue(!requireRestored || (Number.isSafeInteger(stored.restoredId) && stored.restoredId > 0), 'Restored work ID missing after restart')
   const before = structuredClone(stored.backup)
   const after = await exportProjectJSON(stored.projectId)
   before.exportedAt = 0; after.exportedAt = 0
