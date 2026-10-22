@@ -35,7 +35,19 @@ async function seed() {
 }
 async function verify(restore = false, externalBackup?: ProjectExportData) {
   const stored = JSON.parse(localStorage.getItem(key) ?? 'null')
-  requireValue(stored, 'Upgrade lost local preferences')
+  if (!stored) {
+    let databasePresent: boolean | 'unavailable' = 'unavailable'
+    let fileProbeMatches: boolean | 'unavailable' = 'unavailable'
+    try { databasePresent = (await indexedDB.databases()).some(database => database.name === db.name) } catch { /* Diagnostic only. */ }
+    try {
+      const directory = await navigator.storage.getDirectory()
+      const probe = await (await directory.getFileHandle('native-upgrade-storage-probe.txt')).getFile()
+      fileProbeMatches = await probe.text() === text
+    } catch { /* Diagnostic only; the missing marker still fails the gate. */ }
+    throw new Error(`Upgrade lost local preferences; synthetic fixture diagnostics: ${JSON.stringify({
+      origin: location.origin, localStorageEntries: localStorage.length, databasePresent, fileProbeMatches,
+    })}`)
+  }
   const before = structuredClone(stored.backup)
   const after = await exportProjectJSON(stored.projectId)
   before.exportedAt = 0; after.exportedAt = 0
