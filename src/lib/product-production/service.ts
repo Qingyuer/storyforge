@@ -475,10 +475,21 @@ export async function readProductProductionTaskEvidenceV1(input: {
     || snapshot.run.parentRelation !== `task:${input.taskKey}`
     || !boundary
     || boundary.productBuildId !== progress.buildId
-    || boundary.controlEpoch !== progress.controlEpoch
     || boundary.planHash !== progress.planHash
     || boundary.taskKey !== input.taskKey) {
     throw new Error('任务证据不属于当前 Build/task Run')
+  }
+  if (boundary.controlEpoch !== progress.controlEpoch) {
+    const build = await db.productBuilds.get(progress.buildId)
+    if (build?.status !== 'recovery-required') throw new Error('任务证据不属于当前 Build/task Run')
+    const { validateProductProductionRecoveryDirectiveV1 } = await import('./context')
+    const recovery = await validateProductProductionRecoveryDirectiveV1({ scope,
+      productProductionId: input.productionId, productBuildId: progress.buildId,
+      productProductionTaskKey: input.taskKey, expectedState: 'blocked' })
+    if (recovery.snapshot?.run.id !== snapshot.run.id
+      || recovery.snapshot.run.contractHash !== snapshot.run.contractHash) {
+      throw new Error('任务证据不属于当前失败 Run')
+    }
   }
   const isCurrentGovernedAttempt = (stepId: string | undefined, attempt: number | undefined) => {
     if (stepId == null || attempt == null) return false

@@ -3179,9 +3179,50 @@ export async function revisedNarrativeQualityRetryTaskV1(input: {
   const review = await latestFailedTextAdventureQualityReviewV1(input.buildId, input.controlEpoch + 1)
   if (!review || review.controlEpoch >= input.controlEpoch) return null
   const rows = await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray()
-  const current = rows.filter(row => row.artifactKey === 'content.narrative'
+  let current = rows.filter(row => row.artifactKey === 'content.narrative'
     && row.controlEpoch === input.controlEpoch
     && (row.status === 'accepted' || row.status === 'carried-forward'))
+  // A pause can interrupt carry settlement before integration.narrative has a
+  // row in the new epoch. Its previous row is already marked invalid by the
+  // epoch rebind, but a failed reviewer still names the exact revised epoch.
+  // Recover only that latest manuscript and verify both immutable Runs; an
+  // arbitrary old failure or an unsigned historical row cannot select it.
+  if (current.length === 0 && ['user-paused', 'user-resumed', 'user-pause-resolved'].includes(String(envelope.code))) {
+    const provenance = failure.failureProvenance as Record<string, unknown> | undefined
+    const sourceEpoch = provenance?.controlEpoch
+    const historical = rows.filter(row => row.artifactKey === 'content.narrative'
+      && row.controlEpoch <= input.controlEpoch)
+    const latestEpoch = Math.max(-1, ...historical.map(row => row.controlEpoch))
+    const candidates = historical.filter(row => row.controlEpoch === sourceEpoch)
+    if (typeof sourceEpoch === 'number' && Number.isSafeInteger(sourceEpoch)
+      && sourceEpoch > review.controlEpoch && sourceEpoch < input.controlEpoch
+      && latestEpoch === sourceEpoch && candidates.length === 1
+      && ['accepted', 'carried-forward', 'invalid'].includes(candidates[0].status)
+      && candidates[0].producerRunId != null && isSha256Hash(candidates[0].producerReceiptHash ?? '')
+      && typeof provenance?.runId === 'number') {
+      const build = await db.productBuilds.get(input.buildId)
+      if (build) {
+        try {
+          const scope = { projectId: build.projectId, worldId: build.worldId, workId: build.workId }
+          const reviewer = await readAgentRunV1(scope, provenance.runId)
+          const producer = await readAgentRunV1(scope, candidates[0].producerRunId)
+          const boundary = reviewer.contract.scope.productProduction
+          const producerBoundary = producer.contract.scope.productProduction
+          if (reviewer.projection.state === 'failed' && reviewer.run.productBuildId === input.buildId
+            && reviewer.run.parentRunId === provenance.rootRunId
+            && boundary?.taskKey === taskKey && boundary.controlEpoch === sourceEpoch
+            && boundary.planHash === provenance.planHash
+            && reviewer.projection.steps[taskKey]?.attempt === provenance.attempt
+            && producer.projection.state === 'completed' && producer.run.productBuildId === input.buildId
+            && producer.run.parentRunId === reviewer.run.parentRunId
+            && producerBoundary?.taskKey === 'integration.narrative'
+            && producerBoundary.controlEpoch === sourceEpoch
+            && producerBoundary.planHash === boundary.planHash
+            && producer.projection.terminalReceiptHash === candidates[0].producerReceiptHash) current = candidates
+        } catch { /* Missing or corrupt durable evidence does not authorize reuse. */ }
+      }
+    }
+  }
   const reviewed = rows.filter(row => row.artifactKey === 'content.narrative'
     && row.controlEpoch === review.controlEpoch)
   if (current.length !== 1 || reviewed.length !== 1
@@ -5600,29 +5641,6 @@ async function runClaimedTask(input: Parameters<typeof runClaimedTaskCore>[0]): 
   }
 }
 
-function attemptHasEvent(
-  snapshot: AgentRunSnapshotV1,
-  type: 'model.requested' | 'model.responded' | 'candidate.persisted',
-  taskKey: string,
-  attempt: number,
-): boolean {
-  return snapshot.events.some(event => event.type === type
-    && event.payload.stepId === taskKey
-    && event.payload.attempt === attempt)
-}
-
-function attemptHasMediaEvent(
-  snapshot: AgentRunSnapshotV1,
-  type: 'tool.called' | 'tool.returned',
-  taskKey: string,
-  attempt: number,
-): boolean {
-  return snapshot.events.some(event => event.type === type
-    && event.payload.stepId === taskKey
-    && event.payload.attempt === attempt
-    && event.payload.toolName === 'game-media-provider')
-}
-
 /**
  * A browser refresh/HMR discards the promise that owned an in-flight child
  * Run, but its append-only events remain. Re-entry must classify those events
@@ -5684,25 +5702,37 @@ async function reconcileAbandonedTaskRunsV1(input: {
       planHash: snapshot.contract.scope.productProduction?.planHash,
       attempt,
     }
-    const providerRequested = task.executionMode === 'model'
-      ? attemptHasEvent(snapshot, 'model.requested', task.taskKey, attempt)
-      : task.executionMode === 'media-provider'
-        ? attemptHasMediaEvent(snapshot, 'tool.called', task.taskKey, attempt)
-        : false
-    const providerResponded = task.executionMode === 'model'
-      ? attemptHasEvent(snapshot, 'model.responded', task.taskKey, attempt)
-      : task.executionMode === 'media-provider'
-        ? attemptHasMediaEvent(snapshot, 'tool.returned', task.taskKey, attempt)
-        : false
-    const candidatePersisted = attemptHasEvent(
-      snapshot, 'candidate.persisted', task.taskKey, attempt,
-    ) || step.candidateHash != null
+    // P1/P9 have independently numbered nested steps in this same child Run.
+    // The outer start sequence, not a nested attempt number, delimits the
+    // current billable attempt. Earlier paid attempts remain history.
+    const starts = snapshot.events.filter(event => event.type === 'step.started'
+      && event.payload.stepId === task.taskKey && event.payload.attempt === attempt)
+    const attemptBoundaryKnown = starts.length === 1
+    const attemptEvents = attemptBoundaryKnown
+      ? snapshot.events.filter(event => event.sequence > starts[0].sequence)
+      : snapshot.events
+    const requests = attemptEvents.filter((event): event is Extract<typeof event,
+      { type: 'model.requested' | 'tool.called' }> => event.type === 'model.requested'
+        || event.type === 'tool.called' && event.payload.toolName === 'game-media-provider')
+    const responses = attemptEvents.filter((event): event is Extract<typeof event,
+      { type: 'model.responded' | 'tool.returned' }> => event.type === 'model.responded'
+        || event.type === 'tool.returned' && event.payload.toolName === 'game-media-provider')
+    const providerRequested = requests.length > 0
+    const providerResponded = responses.length > 0
+    // One earlier batch response cannot settle a later batch's pending call.
+    const pendingProviderRequest = requests.some(request => !responses.some(response =>
+      response.sequence > request.sequence
+      && response.payload.stepId === request.payload.stepId
+      && response.payload.attempt === request.payload.attempt
+      && (request.type === 'model.requested' ? response.type === 'model.responded' : response.type === 'tool.returned')))
+    const candidatePersisted = attemptEvents.some(event => event.type === 'candidate.persisted')
+      || step.candidateHash != null
     const ledger = parseLedger((await db.productBuilds.get(input.build.id))!.budgetLedgerJson)
     const claimed = ledger.tasks[task.taskKey]
     const idempotencyKey = claimed?.runId === snapshot.run.id
       && claimed.attempt === attempt ? claimed.idempotencyKey : ''
 
-    if (!providerRequested && !providerResponded && !candidatePersisted) {
+    if (attemptBoundaryKnown && !providerRequested && !providerResponded && !candidatePersisted) {
       const code = 'task-timeout-before-dispatch'
       const retryable = attempt < task.maxAttempts
       snapshot = await append(input.scope, snapshot, 'step.failed', {
@@ -5727,7 +5757,7 @@ async function reconcileAbandonedTaskRunsV1(input: {
       continue
     }
 
-    const code = providerRequested && !providerResponded && !candidatePersisted
+    const code = pendingProviderRequest
       ? 'provider-result-unknown' : 'task-finalization-failed'
     const detail = code === 'provider-result-unknown'
       ? '调度进程在 provider 请求后中断；结果与实际用量均未知，禁止自动重复调用，必须由作者显式确认重试。'

@@ -4,21 +4,135 @@ import { db } from '../../src/lib/db/schema'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
+import { createTextOpenWorldSourceCurationExecutorV1 } from '../../src/lib/open-world/source-curation'
+import { isTextOpenWorldBudgetRecoveryFailureV1 } from '../../src/lib/open-world/creator-budget-recovery-policy'
 import { readTextOpenWorldArtifactGovernanceV1 } from '../../src/lib/open-world/creator-artifact-governance'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import { readTextOpenWorldBudgetFailureV1 } from '../../src/lib/open-world/creator-budget-recovery-evidence'
 import { assertTextOpenWorldBudgetRecoveryPreparationCurrentV1 } from '../../src/lib/open-world/creator-budget-recovery'
-import { recoverImportedProductProductionProofsV1, runProductProductionSchedulerCycleV1 } from '../../src/lib/product-production/scheduler'
+import { ProductProductionDraftRejectedErrorV1, recoverImportedProductProductionProofsV1, runProductProductionSchedulerCycleV1 } from '../../src/lib/product-production/scheduler'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
-import { resolveScope } from '../../src/lib/workspace/scope'
+import { resolveScope, stampNewRecord } from '../../src/lib/workspace/scope'
 import { previewTextOpenWorldCreatorBudgetRecoveryV1, authorizeTextOpenWorldCreatorBudgetRecoveryV1, setProductProductionPausedV1 } from '../../src/lib/product-production/service'
 import { carryForwardProductBuildArtifactsAcrossBuildsV1, verifyTextOpenWorldBudgetRecoveryPrefixV1, verifyProductBuildTerminalArtifactSetV1, verifyImportedTextOpenWorldHistoricalTasksV1 } from '../../src/lib/product-production/artifact-store'
-import { canonicalProductProductionJsonV2 as json } from '../../src/lib/product-production/hash'
+import { canonicalProductProductionJsonV2 as json, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import { parseProductProductionCommandV1 } from '../../src/lib/product-production/contracts'
+import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { readTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
+import {
+  listTextOpenWorldPausedRevisionTargetsV1, prepareTextOpenWorldPausedRevisionV1,
+  assertTextOpenWorldPausedRevisionPreparationCurrentV1,
+} from '../../src/lib/open-world/production-content-revision'
 
 beforeEach(async () => { await db.delete(); await db.open() })
 afterAll(async () => { await db.delete() })
+
+async function sourceInputBudgetFixture(falseZeroUsage = false) {
+  const world = await seedCurrentProductWorld('creator-source-input-budget')
+  const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: { kind: 'world-release', scope: world.scope, localReleaseRecordId: world.release.id!, expectedReleaseHash: world.release.contentHash },
+    sessionKey: 'creator-source-input-budget',
+  })
+  let inputTokens = 0
+  // Isolated synthetic provider response. The real P1 executor and scheduler
+  // must record the rejected draft and then stop the retry before dispatch.
+  const runModel = vi.fn(async (input: { requirementKey: string }) => ({
+    output: '{}', usage: { inputTokens, outputTokens: 1 },
+    bindingReceipt: {
+      schema: 'storyforge.provider-binding-receipt' as const, version: 1 as const,
+      requirementKey: input.requirementKey, adapterId: 'configured-text.v1' as const, adapterVersion: 1 as const,
+      provider: 'test', model: 'test-model', endpointOrigin: 'https://example.invalid',
+      executionLocation: 'browser-direct' as const, credentialSource: 'existing-ai-config' as const,
+      credentialPresent: true as const, capabilityHash: 'b'.repeat(64),
+      boundAt: Date.now(), receiptHash: 'a'.repeat(64),
+    },
+  }))
+  const source = createTextOpenWorldSourceCurationExecutorV1({ runModel })
+  const production = (await db.productProductions.get(creator.productionId))!
+  const executor = createTextOpenWorldProductionExecutorV1({ production, brief: creator.start.executionBrief,
+    taskExecutors: { 'p1.source-curation': async input => {
+      try { return await source(input) } catch (error) {
+        if (!falseZeroUsage) throw error
+        throw new ProductProductionDraftRejectedErrorV1(
+          'P1本次attempt剩余预算不能覆盖未执行批次:source-curation.batch.001',
+          { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0 },
+        )
+      }
+    } } })
+  const cycleInput = { scope: creator.scope, productionId: creator.productionId, executor,
+    capabilityBindings: [{ requirementKey: 'text-open-world.production.text.v1',
+      adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64) }] }
+  await runProductProductionSchedulerCycleV1(cycleInput)
+  const plan = parseProductProductionPlanV3((await db.productBuilds.get(creator.buildId))!.planJson)
+  inputTokens = plan.tasks.find(task => task.taskKey === 'p1.source-curation')!.budgetReservation.inputTokens - 1
+  for (let cycle = 0; cycle < 3; cycle++) {
+    if ((await runProductProductionSchedulerCycleV1(cycleInput)).buildStatus === 'recovery-required') break
+  }
+  const build = (await db.productBuilds.get(creator.buildId))!
+  expect(build.status).toBe('recovery-required')
+  expect(runModel).toHaveBeenCalledTimes(1)
+  return { ...creator, build, runModel, cycleInput,
+    input: { scope: creator.scope, productionId: creator.productionId, buildId: creator.buildId } }
+}
+
+it('recovers a zero-call P1 input-budget refusal after an earlier paid attempt in the same Run', async () => {
+  const f = await sourceInputBudgetFixture()
+  expect(isTextOpenWorldBudgetRecoveryFailureV1(f.build.failureJson)).toBe(true)
+  const ledger = JSON.parse(f.build.budgetLedgerJson)
+  const failed = ledger.tasks['p1.source-curation']
+  const attempts = ledger.attempts.filter((row: { runId: number }) => row.runId === failed.runId)
+  expect(attempts).toHaveLength(2)
+  expect(attempts[0].usage.modelCalls).toBe(1)
+  expect(attempts[1]).toMatchObject({ attempt: 2, errorCode: 'task-draft-rejected', usageKnown: true,
+    usage: { modelCalls: 0, inputTokens: 0, outputTokens: 0 } })
+  const prepared = await previewTextOpenWorldCreatorBudgetRecoveryV1(f.input)
+  expect(prepared.reuseTaskKeys).toEqual(['p0.source-lock'])
+  expect((await authorizeTextOpenWorldCreatorBudgetRecoveryV1({ prepared })).ok).toBe(true)
+  expect(await db.productBuilds.get(f.buildId)).toEqual(f.build)
+  const child = (await db.productBuilds.where('[productionId+buildNumber]').equals([f.productionId, 2]).first())!
+  expect(child).toMatchObject({ parentBuildNumber: 1, briefHash: f.build.briefHash, budgetLedgerJson: '{}' })
+  await carryForwardProductBuildArtifactsAcrossBuildsV1({ scope: f.scope,
+    sourceBuildId: f.buildId, targetBuildId: child.id!, targetControlEpoch: child.controlEpoch,
+    artifactKeys: prepared.prefix.artifacts.map(row => row.artifactKey) })
+  const cycle = await runProductProductionSchedulerCycleV1(f.cycleInput)
+  expect(cycle.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+  expect(f.runModel).toHaveBeenCalledTimes(2)
+  for (let cycle = 0; cycle < 3; cycle++) {
+    if ((await runProductProductionSchedulerCycleV1(f.cycleInput)).buildStatus === 'recovery-required') break
+  }
+  // The resumed real P1 executor must accept the derived Plan authority and
+  // dispatch its synthetic provider, then preserve its own bounded rejection.
+  expect(f.runModel).toHaveBeenCalledTimes(2)
+  const childFailure = JSON.parse((await db.productBuilds.get(child.id!))!.failureJson)
+  expect(childFailure.code).toBe('task-draft-rejected')
+  expect(childFailure.detail).toContain('P1本次attempt剩余预算')
+  expect(await db.productBuilds.get(f.buildId)).toEqual(f.build)
+  const projectId = await importProjectJSON(await exportProjectJSON(f.scope.projectId))
+  const importedScope = await resolveScope({ projectId })
+  const importedProduction = (await db.productProductions.where('projectId').equals(projectId).first())!
+  await recoverImportedProductProductionProofsV1({ scope: importedScope, productionId: importedProduction.id! })
+  const importedChild = (await db.productBuilds.where('[productionId+buildNumber]').equals([importedProduction.id!, 2]).first())!
+  expect((await readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope: importedScope, buildId: importedChild.id! })).origin)
+    .toBe('creator-budget-recovery-v1')
+}, 30_000)
+
+it('rejects a budget-shaped zero-usage claim when the current attempt actually dispatched a model', async () => {
+  const f = await sourceInputBudgetFixture(true)
+  expect(isTextOpenWorldBudgetRecoveryFailureV1(f.build.failureJson)).toBe(true)
+  await expect(previewTextOpenWorldCreatorBudgetRecoveryV1(f.input)).rejects.toThrow(/派发前拒绝/)
+  expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(1)
+}, 30_000)
+
+it.each([
+  '{',
+  json({ taskKey: 'p2.experience-design', code: 'task-budget-exceeded', detail: '历史预算拒绝，明细格式未知' }),
+  json({ taskKey: 'p9.scene-scripts', code: 'task-draft-rejected', detail: 'P1本次attempt剩余模型预算不足:2/1/100' }),
+  json({ taskKey: 'p1.source-curation', code: 'task-result-unknown', detail: 'P1本次attempt剩余模型预算不足:2/1/100' }),
+  json({ taskKey: 'p1.source-curation', code: 'task-draft-rejected', detail: 'claims[0].coverageTags 枚举无效' }),
+])('does not route a non-budget refusal to Creator budget recovery: %s', failure => {
+  expect(isTextOpenWorldBudgetRecoveryFailureV1(failure)).toBe(false)
+})
 
 async function blockedFixture(limit: 'build-cost' | 'source-calls' = 'build-cost') {
   const world = await seedCurrentProductWorld('creator-budget-recovery')
@@ -81,6 +195,64 @@ it('exhausted task calls stop before provider dispatch and preserve the unknown 
   expect(await db.productBuilds.get(f.buildId)).toEqual(f.build)
   const child = (await db.productBuilds.where('[productionId+buildNumber]').equals([f.productionId, 2]).first())!
   expect(child).toMatchObject({ parentBuildNumber: 1, status: 'authorized', budgetLedgerJson: '{}' })
+}, 30_000)
+
+it('revises a paused budget child through its derived authority and rejects ancestor or command races', async () => {
+  const f = await blockedFixture('source-calls')
+  const recovery = await previewTextOpenWorldCreatorBudgetRecoveryV1(f.input)
+  expect((await authorizeTextOpenWorldCreatorBudgetRecoveryV1({ prepared: recovery })).ok).toBe(true)
+  const child = (await db.productBuilds.where('[productionId+buildNumber]').equals([f.productionId, 2]).first())!
+  const plan = parseProductProductionPlanV3(child.planJson)
+  const task = plan.tasks.find(row => row.taskKey === 'p3.story-architecture')!
+  for (const key of task.outputArtifactKeys) {
+    // Isolated signed-output fixture for the author-revision boundary only;
+    // this is not model, compiler or real-game acceptance evidence.
+    const payload = { fixture: 'budget-child-revision', key }
+    const payloadJson = json(payload)
+    await db.productBuildArtifacts.add(stampNewRecord(f.scope, 'productBuildArtifacts', {
+      buildId: child.id!, artifactKey: key, version: 1, kind: 'json', mediaKind: null, requirementKey: null,
+      status: 'accepted', producerRunId: null, producerReceiptHash: 'a'.repeat(64), controlEpoch: plan.controlEpoch,
+      inputHash: 'b'.repeat(64), contentHash: await hashProductProductionValueV2(payload), payloadJson,
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null, mimeType: null,
+      byteSize: payloadJson.length, parentArtifactHash: null, createdAt: 1, updatedAt: 1,
+    } as never, { owner: 'work' }))
+  }
+  await db.productBuilds.update(child.id!, { status: 'building' })
+  await setProductProductionPausedV1({ scope: f.scope,
+    production: (await db.productProductions.get(f.productionId))!, build: (await db.productBuilds.get(child.id!))! })
+  const authorityInput = { scope: f.scope, productionId: f.productionId, buildId: child.id! }
+  // Frozen authoring authority must not authorize executing an old-epoch Plan.
+  await expect(readTextOpenWorldProductionPlanAuthorityV1(authorityInput)).rejects.toThrow(/Plan 身份/)
+  const targets = await listTextOpenWorldPausedRevisionTargetsV1(authorityInput)
+  expect(targets.map(row => row.taskKey)).toEqual(['p3.story-architecture'])
+  const revision = { ...targets[0], note: 'isolated author revision', authorDraftJson: '{"fixture":"revised"}' }
+  const production = (await db.productProductions.get(f.productionId))!
+  const build = (await db.productBuilds.get(child.id!))!
+  const prepared = await prepareTextOpenWorldPausedRevisionV1({ scope: f.scope, production, build, revision })
+  const assertCurrent = () => db.transaction('rw', db.productProductions, db.productBuilds, db.productBuildArtifacts,
+    db.productProductionBriefs, db.productProductionCommands, () => assertTextOpenWorldPausedRevisionPreparationCurrentV1({
+      productionId: f.productionId, buildId: child.id!, revision, prepared,
+    }))
+  const command = (await db.productProductionCommands.where('productionId').equals(f.productionId).toArray())
+    .find(row => row.type === 'authorize-text-open-world-creator-budget-recovery')!
+  await db.productProductionCommands.update(command.id!, { resultJson: '{"changed":true}' })
+  await expect(listTextOpenWorldPausedRevisionTargetsV1(authorityInput)).rejects.toThrow(/权威/)
+  await expect(assertCurrent()).rejects.toThrow(/原子恢复边界/)
+  await db.productProductionCommands.put(command)
+  const parentArtifact = (await db.productBuildArtifacts.where('buildId').equals(f.buildId).toArray())[0]
+  await db.productBuildArtifacts.update(parentArtifact.id!, { payloadJson: '{"changed":true}' })
+  await expect(assertCurrent()).rejects.toThrow(/原子恢复边界/)
+  await db.productBuildArtifacts.put(parentArtifact)
+  await expect(assertCurrent()).resolves.toBeUndefined()
+  expect((await executeProductProductionCommand({ scope: f.scope, productionId: f.productionId,
+    command: { type: 'resume', commandId: 'budget-child.explicit-revision',
+      expectedStateRevision: production.stateRevision, openWorldContentRevision: revision },
+  })).ok).toBe(true)
+  expect(JSON.parse((await db.productBuilds.get(child.id!))!.failureJson)).toMatchObject({
+    code: 'author-revised-content', resolution: { action: 'author-edit', authorDraftJson: revision.authorDraftJson },
+  })
+  expect(await db.productBuilds.get(f.buildId)).toEqual(f.build)
+  expect(f.providerExecutor).not.toHaveBeenCalled()
 }, 30_000)
 
 it('authorizes a child from verified completed siblings; keeps old ledger and reruns unsigned tasks', async () => {

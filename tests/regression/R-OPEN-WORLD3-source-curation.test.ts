@@ -199,6 +199,7 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     ['fractional-confidence', /不是 0-100 整数/],
     ['combined-coverage', /coverageTags\[0\] 枚举无效/],
     ['spliced-quote', /未读单元或非逐字证据/],
+    ['extra-character', /未读单元或非逐字证据/],
     ['provider-empty', /没有可用的回答文本/],
     ['provider-transient', /暂时不可用/],
   ] as const)('V2逐字引文由系统定位，保留Unicode并拒绝无效证据：%s', async (mode, error) => {
@@ -223,7 +224,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
         selectedContent = selected.content
         const quote = mode === 'missing' ? '未提供的来源证据'
           : mode === 'ambiguous' ? '共同维护潮门'
-            : mode === 'spliced-quote' ? '共同维护...潮门' : exactQuote
+            : mode === 'spliced-quote' ? '共同维护...潮门'
+              : mode === 'extra-character' ? exactQuote.replace('潮门', '潮水门') : exactQuote
         return {
           output: JSON.stringify({
             schema: 'storyforge.text-open-world-source-curation-draft', version: 2,

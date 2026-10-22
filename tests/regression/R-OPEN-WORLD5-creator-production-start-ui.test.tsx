@@ -536,7 +536,7 @@ describe('TOW-G5-04 · production start UI', () => {
     expect(host.textContent).not.toContain('试玩未发布 Build')
   })
 
-  it.each(['task-reservation', 'model-calls'] as const)('Creator %s 预算耗尽时只允许提交非空作者稿，导入证明闸门仍有效', async budgetBoundary => {
+  it.each(['task-reservation', 'model-calls', 'unknown-detail'] as const)('Creator %s 预算耗尽时只允许提交非空作者稿，导入证明闸门仍有效', async budgetBoundary => {
     const exhaustedDetails = {
       ...lockedDetails,
       executionBrief: {
@@ -551,7 +551,7 @@ describe('TOW-G5-04 · production start UI', () => {
           code: 'task-budget-exceeded',
           detail: budgetBoundary === 'task-reservation'
             ? 'Build lifetime budget 不足:task=p2.experience-design,remainingModelCalls=0'
-            : '累计模型调用已达到上限',
+            : budgetBoundary === 'model-calls' ? '累计模型调用已达到上限' : '历史预算拒绝，明细格式未知',
         }),
       },
     } as unknown as ProductProductionDetailsV1
@@ -574,6 +574,9 @@ describe('TOW-G5-04 · production start UI', () => {
     await changeValue(draftInput, '  ')
     expect(host.textContent).not.toContain('校验修订稿并继续')
     expect(host.textContent).not.toContain('修正后继续制作')
+    // A budget code can forbid another paid request without proving that a
+    // historical refusal qualifies for a new child Build.
+    expect(host.querySelector('[aria-label="开放世界预算续建"]')).toBeNull()
     const draft = '{"schema":"complete-author-draft"}'
     await changeValue(draftInput, draft)
     expect(button(host, '校验修订稿并继续').disabled).toBe(true)

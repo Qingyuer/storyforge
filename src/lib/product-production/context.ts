@@ -1,5 +1,5 @@
 import { db } from '../db/schema'
-import type { TtrpgProductionBriefV2, WorkspaceScope } from '../types'
+import type { ProductBuildRecordV1, TtrpgProductionBriefV2, WorkspaceScope } from '../types'
 import type { AssembleContextInput, ContextSourceTransformer } from '../registry/types'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { assertRecordInScope } from '../workspace/scope'
@@ -95,6 +95,48 @@ async function productionAndBuild(input: AssembleContextInput) {
     throw new Error('[product-production-context] Build 不属于当前 Production/Work')
   }
   return { scope, production, build }
+}
+
+/** A failure can cross only complete, durable pause/resume pairs which restore
+ * the same blocked Build. No retry, content revision, foreign Build or missing
+ * receipt may make an older failed Run current again. */
+async function assertRecoveryPauseResumeEpochs(input: {
+  scope: WorkspaceScope
+  build: ProductBuildRecordV1
+  failedControlEpoch: number
+  targetControlEpoch: number
+}): Promise<void> {
+  const { scope, build, failedControlEpoch, targetControlEpoch } = input
+  if (failedControlEpoch === targetControlEpoch) return
+  const invalid = () => new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源暂停/恢复命令链不闭合')
+  if (targetControlEpoch < failedControlEpoch || (targetControlEpoch - failedControlEpoch) % 2 !== 0) throw invalid()
+  const receipts = await db.productProductionCommands.where('productionId').equals(build.productionId).toArray()
+  const byEpoch = new Map<number, typeof receipts>()
+  for (const receipt of receipts) {
+    if (receipt.status !== 'succeeded') continue
+    let result: Record<string, unknown>
+    try { result = JSON.parse(receipt.resultJson) } catch { throw invalid() }
+    const epoch = result?.controlEpoch
+    if (typeof epoch !== 'number' || epoch <= failedControlEpoch || epoch > targetControlEpoch) continue
+    if (result.buildNumber !== build.buildNumber
+      || !await assertRecordInScope(scope, 'productProductionCommands', receipt, { owner: 'work' })) throw invalid()
+    byEpoch.set(epoch, [...(byEpoch.get(epoch) ?? []), receipt])
+  }
+  if (byEpoch.size !== targetControlEpoch - failedControlEpoch) throw invalid()
+  let pausedRevision: number | null = null
+  for (let epoch = failedControlEpoch + 1; epoch <= targetControlEpoch; epoch += 1) {
+    const rows = byEpoch.get(epoch)
+    if (rows?.length !== 1) throw invalid()
+    const receipt = rows[0]
+    const result = JSON.parse(receipt.resultJson) as Record<string, unknown>
+    const pause = (epoch - failedControlEpoch) % 2 === 1
+    if (receipt.type !== (pause ? 'pause' : 'resume')
+      || result[pause ? 'resumeState' : 'restored'] !== 'recovery-required'
+      || result.revisionAuthorization != null
+      || !Number.isSafeInteger(receipt.expectedStateRevision)
+      || (!pause && receipt.expectedStateRevision !== pausedRevision! + 1)) throw invalid()
+    if (pause) pausedRevision = receipt.expectedStateRevision
+  }
 }
 
 /**
@@ -236,12 +278,11 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     || typeof rootRunId !== 'number' || !Number.isInteger(rootRunId) || rootRunId < 1
     || typeof failedControlEpoch !== 'number' || !Number.isInteger(failedControlEpoch) || failedControlEpoch < 0
     || typeof failedPlanHash !== 'string' || !/^[a-f0-9]{64}$/.test(failedPlanHash)
-    || typeof failedAttempt !== 'number' || !Number.isInteger(failedAttempt) || failedAttempt < 1
-    || (resolvedDirective
-      ? failedControlEpoch + 1 !== build.controlEpoch
-      : failedControlEpoch !== build.controlEpoch)) {
+    || typeof failedAttempt !== 'number' || !Number.isInteger(failedAttempt) || failedAttempt < 1) {
     throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源谱系无效')
   }
+  await assertRecoveryPauseResumeEpochs({ scope, build, failedControlEpoch,
+    targetControlEpoch: build.controlEpoch - (resolvedDirective ? 1 : 0) })
   const run = await db.agentRuns.get(runId)
   if (!run || run.productBuildId !== build.id || run.status !== 'failed'
     || run.parentRunId !== rootRunId

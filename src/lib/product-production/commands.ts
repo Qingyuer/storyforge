@@ -1393,6 +1393,7 @@ async function applyCommand(input: {
         detail: '暂停时仍有供应商请求未返回；恢复前必须逐项封账。',
         reason: command.reason,
         pausedProviderReservations: providerReservations,
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
         ...(pendingOpenWorldRevision ? { pendingOpenWorldRevision } : {}),
         automaticallySettledReservations,
       } : {
@@ -1967,6 +1968,13 @@ async function applyCommand(input: {
         resolution: { action: 'author-edit', note: contentRevision.note, authorDraftJson: contentRevision.authorDraftJson },
         resumedFromControlEpoch: build.controlEpoch,
         pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+      }) : restored === 'recovery-required' && typeof previousFailure.taskKey === 'string' ? safeJson({
+        // Resuming a failed Build restores its blocker; it does not authorize
+        // another provider call. Keep the original Run/epoch/attempt unchanged.
+        // Recovery validates every intervening pause/resume receipt separately.
+        ...previousFailure,
+        resumedFromControlEpoch: build.controlEpoch,
+        pausedReservationAccountings,
       }) : pausedReservationAccountings.length ? safeJson({
         code: 'user-pause-resolved',
         previousFailureCode: 'pause-provider-result-unknown',

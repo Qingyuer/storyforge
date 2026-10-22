@@ -103,6 +103,17 @@ describe('TOW paused accepted-task revision', () => {
       productBuildId: f.buildId, productProductionTaskKey: f.target.taskKey, expectedState: 'resolved' })).rejects.toThrow(/修订/)
   })
 
+  it('rejects an invalid origin authority instead of ignoring its returned diagnostic', async () => {
+    const f = await fixture()
+    const command = (await db.productProductionCommands.where('productionId').equals(f.productionId).toArray())
+      .find(row => row.type === 'authorize-text-open-world-creator-start')!
+    await db.productProductionCommands.update(command.id!, { resultJson: '{"damaged":true}' })
+    const build = await db.productBuilds.get(f.buildId)
+    await expect(listTextOpenWorldPausedRevisionTargetsV1({ scope: f.scope, productionId: f.productionId })).rejects.toThrow()
+    expect((await resume(f)).ok).toBe(false)
+    expect(await db.productBuilds.get(f.buildId)).toEqual(build)
+  })
+
   it.each(['artifact', 'start-command', 'brief'])(
     'rejects a %s race after preparation at the write boundary', async damage => {
       const f = await fixture()

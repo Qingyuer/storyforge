@@ -90,6 +90,7 @@ import {
 import { downloadTextFile } from '../../lib/export/text-export'
 import { hashProductProductionValueV2 } from '../../lib/product-production/hash'
 import { isTextAdventureReadableGlyphViolationV1 } from '../../lib/product-production/text-adventure-quality'
+import { isTextOpenWorldBudgetRecoveryFailureV1 } from '../../lib/open-world/creator-budget-recovery-policy'
 
 export function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 | undefined): Array<{
   artifactKey: string
@@ -1859,10 +1860,14 @@ export default function ProductProductionStudio(props: {
   const canRecoverProductionBudget = !!details && canRecoverTextAdventureProductionBudgetV1(details)
   const canRecoverCreatorBudget = isTextOpenWorldCreator && details?.production.status === 'producing'
     && details?.build?.status === 'recovery-required'
-    && details.build.failureJson.includes('Build lifetime budget 不足:')
+    && isTextOpenWorldBudgetRecoveryFailureV1(details.build.failureJson)
+  // Any authoritative budget refusal suppresses another model request, even
+  // when its historical detail cannot prove eligibility for a child Build.
+  const creatorModelBudgetBlocked = isTextOpenWorldCreator
+    && (providerReservationFailureCode === 'task-budget-exceeded' || canRecoverCreatorBudget)
   const canSubmitCreatorDraftWithoutModel = isTextOpenWorldCreator
     && recoveryPolicy?.authorDraftAllowed === true && authorDraftJson.trim().length > 0
-    && (modelBudgetExhausted || canRecoverCreatorBudget)
+    && (modelBudgetExhausted || creatorModelBudgetBlocked)
   const commercialPerformanceRequired = selectedBrief?.qualityProfile === 'commercial-candidate'
   const commercialTextAdventureImageMinimum = selectedBrief?.qualityProfile === 'commercial-candidate'
     && selectedBrief.intent.productType === 'text-adventure' && selectedBrief.textAdventure
@@ -2178,7 +2183,7 @@ export default function ProductProductionStudio(props: {
             {canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={upgradeExecutionPlan} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />生成执行计划升级 Brief</button>}
             {canRepairVisualContract && <button disabled={busy || productionRunning} onClick={repairVisualContract} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建媒资规划 Brief</button>}
             {canRepairRuntimeCopy && <button disabled={busy || productionRunning} onClick={repairRuntimeCopy} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建公开文案运行包</button>}
-            {canRetryBlocker && (canSubmitCreatorDraftWithoutModel || (!modelBudgetExhausted && !canRecoverProductionBudget && !canRecoverCreatorBudget)) && !canUpgradeExecutionPlan && !canRepairRuntimeCopy && <button disabled={busy || productionRunning || importedProofRecoveryRequired || (providerReservationBlocked && !unknownResultDisposition)} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />{canSubmitCreatorDraftWithoutModel ? '校验修订稿并继续' : recoveryPolicy?.repairNoteAllowed ? '修正后继续制作' : '重试失败任务'}</button>}
+            {canRetryBlocker && (canSubmitCreatorDraftWithoutModel || (!modelBudgetExhausted && !canRecoverProductionBudget && !creatorModelBudgetBlocked)) && !canUpgradeExecutionPlan && !canRepairRuntimeCopy && <button disabled={busy || productionRunning || importedProofRecoveryRequired || (providerReservationBlocked && !unknownResultDisposition)} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />{canSubmitCreatorDraftWithoutModel ? '校验修订稿并继续' : recoveryPolicy?.repairNoteAllowed ? '修正后继续制作' : '重试失败任务'}</button>}
             {importedProofRecoveryRequired && <button disabled={busy || productionRunning} onClick={recoverImportedProofs} data-testid="product-production-recover-import-proof" className="flex items-center gap-2 rounded border border-warning/50 bg-warning/10 px-4 py-2 text-xs text-text-main disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />复验导入生产证明</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning || importedProofRecoveryRequired} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && !isTextOpenWorldCreator && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}

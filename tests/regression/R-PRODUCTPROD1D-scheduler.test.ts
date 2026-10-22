@@ -4049,6 +4049,90 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(completed.budget.usage.modelCalls).toBe(6)
   }, 30_000)
 
+  it.each(['retry', 'author-edit'] as const)('失败后两次暂停恢复保留原失败 Run，%s 仍需明确命令且拒绝不闭合控制链', async action => {
+    const owned = await fixture(`blocked-pause-${action}`, { retryModelCallHeadroom: 2 })
+    const executor = vi.fn<ProductProductionTaskExecutorV1>(async () => {
+      throw new ProductProductionDraftRejectedErrorV1('isolated invalid candidate', {
+        modelCalls: 1, inputTokens: 1, outputTokens: 1, mediaCalls: 0,
+        costUsd: 0, durationMs: 1, storageBytes: 0,
+      })
+    })
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!.requirementKey,
+      adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64),
+    }]
+    const cycleInput = { scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings }
+    const blocked = await runProductProductionUntilBlockedV1(cycleInput)
+    expect(blocked.buildStatus).toBe('recovery-required')
+    const original = (await db.productBuilds.get(blocked.buildId))!
+    const originalFailure = JSON.parse(original.failureJson)
+    const originalRun = await readAgentRunV1(owned.scope, originalFailure.failureProvenance.runId)
+    const evidenceInput = { scope: owned.scope, productionId: owned.productionId, taskKey: 'content.design' }
+    const originalEvidence = await readProductProductionTaskEvidenceV1(evidenceInput)
+    expect(originalEvidence.some(row => row.kind === 'failure')).toBe(true)
+    const calls = executor.mock.calls.length
+    for (let pair = 0; pair < 2; pair++) {
+      for (const type of ['pause', 'resume'] as const) {
+        const production = (await db.productProductions.get(owned.productionId))!
+        expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type, commandId: `blocked-pause.${pair}.${type}`, expectedStateRevision: production.stateRevision,
+            ...(type === 'pause' ? { reason: 'preserve failed production during source repair' } : {}) },
+        })).ok).toBe(true)
+      }
+      const resumed = (await db.productBuilds.get(blocked.buildId))!
+      expect(resumed.status).toBe('recovery-required')
+      expect(JSON.parse(resumed.failureJson)).toMatchObject(originalFailure)
+      expect(resumed.budgetLedgerJson).toBe(original.budgetLedgerJson)
+      expect((await runProductProductionSchedulerCycleV1(cycleInput)).buildStatus).toBe('recovery-required')
+      expect(executor).toHaveBeenCalledTimes(calls)
+      if (pair === 0) {
+        // Upgrade compatibility: older versions left the active failure below
+        // user-resumed. The next formal pause/resume must recover that cause.
+        await db.productBuilds.update(blocked.buildId, { failureJson: JSON.stringify({
+          code: 'user-resumed', previousFailure: JSON.parse(resumed.failureJson),
+        }) })
+      }
+    }
+    const recoveryInput = { scope: owned.scope, productProductionId: owned.productionId,
+      productBuildId: blocked.buildId, productProductionTaskKey: 'content.design',
+      expectedState: 'blocked' as const, requestedAction: action }
+    const verify = () => validateProductProductionRecoveryDirectiveV1(recoveryInput)
+    expect((await verify()).snapshot?.run.id).toBe(originalRun.run.id)
+    expect(await readProductProductionTaskEvidenceV1(evidenceInput)).toEqual(originalEvidence)
+    const pause = (await db.productProductionCommands.where('[productionId+commandId]')
+      .equals([owned.productionId, 'blocked-pause.0.pause']).first())!
+    for (const patch of [
+      { status: 'failed' as const },
+      { type: 'resolve-blocker' as const },
+      { workId: pause.workId + 1 },
+      { expectedStateRevision: pause.expectedStateRevision! + 1 },
+      { resultJson: JSON.stringify({ ...JSON.parse(pause.resultJson), buildNumber: original.buildNumber + 1 }) },
+      { resultJson: JSON.stringify({ ...JSON.parse(pause.resultJson), resumeState: 'building' }) },
+    ]) {
+      await db.productProductionCommands.put({ ...pause, ...patch })
+      await expect(verify()).rejects.toThrow(/暂停\/恢复命令链/)
+      await expect(readProductProductionTaskEvidenceV1(evidenceInput)).rejects.toThrow()
+    }
+    await db.productProductionCommands.put(pause)
+    const { id: _id, ...duplicate } = pause
+    const duplicateId = await db.productProductionCommands.add({ ...duplicate, commandId: 'duplicate-control-epoch' })
+    await expect(verify()).rejects.toThrow(/暂停\/恢复命令链/)
+    await db.productProductionCommands.delete(duplicateId)
+    const production = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resolve-blocker', commandId: 'blocked-pause.explicit-repair',
+        expectedStateRevision: production.stateRevision, blockerKey: 'content.design',
+        resolution: { action, note: 'Explicit isolated repair',
+          ...(action === 'author-edit' ? { authorDraftJson: '{"title":"revised candidate"}' } : {}) } },
+    })).ok).toBe(true)
+    const proof = await validateProductProductionRecoveryDirectiveV1({ ...recoveryInput, expectedState: 'resolved' })
+    expect(proof.snapshot?.run.id).toBe(originalRun.run.id)
+    expect(proof.previousFailure?.failureProvenance).toEqual(originalFailure.failureProvenance)
+    expect(await readAgentRunV1(owned.scope, originalRun.run.id!)).toEqual(originalRun)
+    expect((await db.productBuilds.get(blocked.buildId))!.budgetLedgerJson).toBe(original.budgetLedgerJson)
+    expect(executor).toHaveBeenCalledTimes(calls)
+  }, 30_000)
+
   it('provider safety refusal 不自动改写或重试，第一次即暂停等待用户决定', async () => {
     const owned = await fixture('scheduler-safety-refusal')
     let calls = 0
@@ -4099,6 +4183,38 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(ledger.attempts).toContainEqual(expect.objectContaining({
       taskKey: 'content.design', outcome: 'failed', usageKnown: false,
     }))
+    const originalFailure = JSON.parse(build.failureJson)
+    const production = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'pause', commandId: 'unknown-blocked.pause', expectedStateRevision: production.stateRevision,
+        reason: '保留未结算请求证据并暂停生产' },
+    })).ok).toBe(true)
+    const paused = (await db.productProductions.get(owned.productionId))!
+    const pausedBuild = (await db.productBuilds.get(blocked.buildId))!
+    const reservations = JSON.parse(pausedBuild.failureJson).pausedProviderReservations as Array<{
+      taskKey: string; runId: number; attempt: number; controlEpoch: number
+    }>
+    expect(reservations).toHaveLength(1)
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: 'unknown-blocked.no-accounting', expectedStateRevision: paused.stateRevision },
+    })).ok).toBe(false)
+    expect(await db.productBuilds.get(blocked.buildId)).toEqual(pausedBuild)
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: 'unknown-blocked.accounted', expectedStateRevision: paused.stateRevision,
+        pausedReservationDispositions: reservations.map(reservation => ({ ...reservation,
+          disposition: 'charge-reservation-upper-bound' as const })) },
+    })).ok).toBe(true)
+    const resumedBuild = (await db.productBuilds.get(blocked.buildId))!
+    expect(resumedBuild.status).toBe('recovery-required')
+    expect(JSON.parse(resumedBuild.failureJson)).toMatchObject(originalFailure)
+    expect(JSON.parse(resumedBuild.budgetLedgerJson).attempts).toContainEqual(expect.objectContaining({
+      taskKey: 'content.design', usageKnown: true, resolution: 'author-charged-reservation-upper-bound',
+    }))
+    expect((await validateProductProductionRecoveryDirectiveV1({ scope: owned.scope,
+      productProductionId: owned.productionId, productBuildId: blocked.buildId,
+      productProductionTaskKey: 'content.design', expectedState: 'blocked', requestedAction: 'retry',
+    })).previousFailure?.failureProvenance).toEqual(originalFailure.failureProvenance)
+    expect(calls).toBe(1)
   }, 30_000)
 
   it.each(['author-edit', 'retry'] as const)('未知请求已占满费用上限时，%s 仅按实际执行预留且保留历史占用', async action => {

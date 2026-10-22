@@ -72,6 +72,7 @@ import {
   assertProductProductionBudgetLedgerV1,
   executionBindingDriftInvalidatedTaskKeysV1,
   prepareLegacyPausedProductBuildV1,
+  revisedNarrativeQualityRetryTaskV1,
   runProductProductionUntilBlockedV1,
   runProductProductionSchedulerCycleV1,
   recoverImportedProductProductionProofsV1,
@@ -8211,6 +8212,31 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
               ...reservation, disposition: 'charge-reservation-upper-bound' as const,
             })) }) },
       })
+    }
+    const resumedReviewBuild = (await db.productBuilds.get(build.id!))!
+    const reviewRetry = {
+      buildId: build.id!,
+      controlEpoch: (JSON.parse(resumedReviewBuild.planJson) as { controlEpoch: number }).controlEpoch,
+      failureJson: resumedReviewBuild.failureJson,
+    }
+    expect(await revisedNarrativeQualityRetryTaskV1(reviewRetry)).toBe('content.adventure-quality-review.act-2')
+    for (const changedProvenance of [
+      { rootRunId: -1 }, { runId: -1 }, { planHash: 'f'.repeat(64) }, { attempt: 999 },
+    ]) {
+      const changedFailure = JSON.parse(reviewRetry.failureJson)
+      Object.assign(changedFailure.previousFailure.failureProvenance, changedProvenance)
+      expect(await revisedNarrativeQualityRetryTaskV1({
+        ...reviewRetry, failureJson: JSON.stringify(changedFailure),
+      })).toBeNull()
+    }
+    const historicalNarrative = (await db.productBuildArtifacts.get(narrativeBeforeReviewRetry.id!))!
+    for (const changedArtifact of [
+      { producerRunId: null }, { producerReceiptHash: 'f'.repeat(64) },
+      { payloadJson: '{"text":"unsigned replacement"}' },
+    ]) {
+      await db.productBuildArtifacts.update(historicalNarrative.id!, changedArtifact)
+      expect(await revisedNarrativeQualityRetryTaskV1(reviewRetry)).toBeNull()
+      await db.productBuildArtifacts.put(historicalNarrative)
     }
     const repaired = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,

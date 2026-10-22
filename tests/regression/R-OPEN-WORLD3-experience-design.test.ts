@@ -17,7 +17,7 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { appendAgentRunEventV1, createAgentRunV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
-import { recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
+import { readAgentRunArtifactExactV1, recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
 import {
   readContextGatewayManifestV3ForAttemptV1,
   verifyContextGatewayCandidateEvidenceV1,
@@ -7527,6 +7527,103 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       inputArtifacts: tamperedQaInputs, capabilityBindings: [], signal: new AbortController().signal,
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
+
+  it.each(['corrected', 'unchanged'] as const)('P1逐字引文修复带回被拒绝证据，保留原始响应和调用上限：%s', async mode => {
+    const input = await creatorSchedulerFixture()
+    const grounded = curationRunner(input.brief.intent.protagonistRefs[0]!)
+    const systems: string[] = []
+    const contexts: string[] = []
+    const outputs: string[] = []
+    const outputBudgets: number[] = []
+    let taskRunId = -1
+    let rejectedEvidence = { path: 'claims[0].evidence[0]', unitKey: '', quote: '' }
+    let exactQuote = ''
+    const p1 = createTextOpenWorldSourceCurationExecutorV1({ runModel: async request => {
+      systems.push(request.system)
+      contexts.push(request.contextText)
+      outputBudgets.push(request.maximumOutputTokens)
+      const response = await grounded(request)
+      const draft = JSON.parse(response.output)
+      const unitKey = draft.claims[0].evidence[0].unitKey as string
+      const unit = (JSON.parse(request.contextText) as {
+        units: Array<{ unitKey: string; content: string }>
+      }).units.find(row => row.unitKey === unitKey)!
+      const currentQuote = unit.content.slice(0, 80)
+      expect(unit.content.indexOf(currentQuote, 1)).toBe(-1)
+      const rejectedQuote = `${currentQuote.slice(0, 1)}种${currentQuote.slice(1)}`
+      expect(unit.content.includes(rejectedQuote)).toBe(false)
+      if (systems.length === 1) {
+        rejectedEvidence = { path: 'claims[0].evidence[0]', unitKey, quote: rejectedQuote }
+        exactQuote = currentQuote
+      }
+      draft.version = 2
+      draft.claims[0].evidence = [{ unitKey,
+        quote: systems.length === 1 || mode === 'unchanged' ? rejectedQuote : currentQuote }]
+      const output = JSON.stringify(draft)
+      outputs.push(output)
+      return { ...response, output }
+    } })
+    const stopAfterP1 = async () => {
+      throw new ProductProductionDraftRejectedErrorV1('fixture stops after P1 evidence validation', {
+        modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+        costUsd: 0, durationMs: 0, storageBytes: 0,
+      })
+    }
+    const executor = createTextOpenWorldProductionExecutorV1({
+      production: input.production, brief: input.brief,
+      taskExecutors: {
+        'p1.source-curation': execution => { taskRunId = execution.taskRunId!; return p1(execution) },
+        'p2.experience-design': stopAfterP1,
+        'p2.gameplay-ruleset': stopAfterP1,
+        'p2.presentation-profile': stopAfterP1,
+      },
+    })
+    const capabilityBindings = input.brief.capabilityRequirements
+      .filter(row => row.mediaClass === 'text' || row.mediaClass === 'image')
+      .map(row => ({ requirementKey: row.requirementKey, bindingHash: CAPABILITY_HASH,
+        adapterId: row.mediaClass === 'image' ? 'storyforge.procedural-svg.v1' : 'configured-text.v1' }))
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: input.scope, productionId: input.production.id!, executor, capabilityBindings,
+    })
+    expect(projection.tasks.find(task => task.taskKey === 'p1.source-curation')?.status)
+      .toBe(mode === 'corrected' ? 'completed' : 'blocked')
+    // The frozen fixture spans several batches. Only its rejected first
+    // batch may be called twice; every later batch is called exactly once.
+    expect(outputs).toHaveLength(new Set(contexts).size + 1)
+    expect(contexts.filter(context => context === contexts[0])).toHaveLength(2)
+    for (const context of new Set(contexts.slice(2))) {
+      expect(contexts.filter(candidate => candidate === context)).toHaveLength(1)
+    }
+    expect(systems[0]).not.toContain('<validation-feedback>')
+    const encodedFeedback = systems[1]!.split('<validation-feedback>')[1]!.split('</validation-feedback>')[0]!
+    const feedback = JSON.parse(encodedFeedback) as string
+    expect(feedback).toContain(await hashProductProductionValueV2(outputs[0]))
+    expect(feedback).toContain('非逐字证据')
+    expect(JSON.parse(feedback.split('\nrejectedEvidence=')[1]!)).toEqual(rejectedEvidence)
+    expect(contexts[1]).toBe(contexts[0])
+    expect(outputBudgets[1]).toBeLessThan(outputBudgets[0]!)
+    const snapshot = await readAgentRunV1(input.scope, taskRunId)
+    const responses = snapshot.events.filter(event => event.type === 'evidence.artifact.recorded'
+      && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.')
+      && event.payload.artifactKind === 'raw-response')
+    expect(responses).toHaveLength(outputs.length)
+    for (const [index, event] of responses.entries()) {
+      if (event.type !== 'evidence.artifact.recorded') throw new Error('unexpected response event')
+      const raw = JSON.parse(await readAgentRunArtifactExactV1({
+        projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: event.payload.contentHash,
+      }))
+      expect(raw.output).toBe(outputs[index])
+    }
+    const accepted = await readAcceptedBuildArtifacts({ scope: input.scope, buildId: input.build.id! })
+    const ledger = accepted.find(row => row.artifactKey === 'text-open-world.source-ledger')
+    if (mode === 'corrected') {
+      expect(JSON.parse(ledger!.payloadJson).entries[0].evidence[0].quote).toBe(exactQuote)
+    } else {
+      expect(outputs).toHaveLength(2)
+      expect(ledger).toBeUndefined()
+      expect(outputs[1]).toBe(outputs[0])
+    }
+  }, 120_000)
 
   it('正式调度恢复把作者修复说明和失败原文送达真实分发器，原子输入及其他任务不受污染', async () => {
     const input = await creatorSchedulerFixture()

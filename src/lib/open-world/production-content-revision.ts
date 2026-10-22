@@ -1,5 +1,5 @@
 import { db } from '../db/schema'
-import { readTextOpenWorldCreatorStartPlanAuthorityV1 } from './production-authority'
+import { readTextOpenWorldProductionPlanAuthorityV1 } from './production-authority'
 import type {
   ProductBuildRecordV1, ProductProductionRecordV1, ProductProductionPlanV3,
   TextOpenWorldContentRevisionV1, WorkspaceScope,
@@ -97,7 +97,9 @@ async function assertPausedBuild(input: {
     || plan.controlEpoch > build.controlEpoch || await hashProductProductionValueV2(plan) !== build.planHash) {
     fail('冻结计划已变化')
   }
-  await readTextOpenWorldCreatorStartPlanAuthorityV1({ scope, buildId: build.id! })
+  const origin = await readTextOpenWorldProductionPlanAuthorityV1({ scope,
+    productionId: production.id!, buildId: build.id!, purpose: 'paused-content-revision' })
+  if (!origin.authority.valid) fail(origin.authority.diagnostic ?? 'Creator 制作授权无效')
   return plan
 }
 
@@ -141,14 +143,34 @@ async function readPausedRevisionWitness(input: {
 }): Promise<string> {
   const production = await db.productProductions.get(input.productionId)
   const build = await db.productBuilds.get(input.buildId)
-  const parent = build?.parentBuildNumber == null ? null : await db.productBuilds
-    .where('[productionId+buildNumber]').equals([input.productionId, build.parentBuildNumber]).first()
+  // The registered authority router may read a mixed budget/repair/media
+  // ancestry. Snapshot its frozen Build/Brief/artifact inputs as well as the
+  // successful command journal; a direct-parent-only witness misses races in
+  // an earlier authorization. A new Brief ends the reusable ancestry.
+  const ancestors: ProductBuildRecordV1[] = []
+  let child = build
+  const visited = new Set<number>(build ? [build.buildNumber] : [])
+  while (child?.parentBuildNumber != null) {
+    if (ancestors.length >= 128 || visited.has(child.parentBuildNumber)) fail('制作授权祖先链无效')
+    visited.add(child.parentBuildNumber)
+    const parent = await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([input.productionId, child.parentBuildNumber]).first()
+    if (!parent) fail('制作授权父 Build 缺失')
+    ancestors.push(parent)
+    if (parent.briefRevision !== child.briefRevision) break
+    child = parent
+  }
   const brief = build == null ? null : await db.productProductionBriefs
     .where('[productionId+revision]').equals([input.productionId, build.briefRevision]).first()
-  const startCommands = await db.productProductionCommands.where('[productionId+status]')
+  const authorityCommands = await db.productProductionCommands.where('[productionId+status]')
     .equals([input.productionId, 'succeeded'])
-    .filter(row => row.type === 'authorize-text-open-world-creator-start').limit(65_537).toArray()
-  if (startCommands.length > 65_536) fail('Creator Start 命令历史超过安全上限')
+    .limit(65_537).toArray()
+  if (authorityCommands.length > 65_536) fail('Creator 命令历史超过安全上限')
+  const ancestorBriefs = await db.productProductionBriefs.where('productionId').equals(input.productionId)
+    .filter(row => ancestors.some(parent => parent.briefRevision === row.revision)).toArray()
+  const ancestorArtifacts = (await Promise.all(ancestors.filter(parent => parent.briefRevision === build?.briefRevision)
+    .map(parent => db.productBuildArtifacts.where('buildId').equals(parent.id!)
+      .filter(row => row.controlEpoch === parent.controlEpoch).toArray()))).flat()
   const pendingCommandId = build == null ? null : JSON.parse(build.failureJson).pendingOpenWorldRevision?.commandId
   const pendingCommand = typeof pendingCommandId !== 'string' ? null : await db.productProductionCommands
     .where('[productionId+commandId]').equals([input.productionId, pendingCommandId]).first()
@@ -156,8 +178,10 @@ async function readPausedRevisionWitness(input: {
     .filter(row => input.revision.expectedArtifacts.some(expected => expected.artifactKey === row.artifactKey)
       && row.controlEpoch === input.revision.expectedControlEpoch).toArray()
   return canonicalProductProductionJsonV2({ production: production ?? null, build: build ?? null,
-    parent: parent ?? null, brief: brief ?? null, pendingCommand: pendingCommand ?? null,
-    startCommands: startCommands.sort((a, b) => a.id! - b.id!),
+    ancestors, ancestorBriefs: ancestorBriefs.sort((a, b) => a.id! - b.id!),
+    ancestorArtifacts: ancestorArtifacts.sort((a, b) => a.id! - b.id!),
+    brief: brief ?? null, pendingCommand: pendingCommand ?? null,
+    authorityCommands: authorityCommands.sort((a, b) => a.id! - b.id!),
     artifacts: artifacts.sort((a, b) => a.id! - b.id!),
   })
 }

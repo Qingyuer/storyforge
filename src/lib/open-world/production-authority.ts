@@ -427,6 +427,9 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
   scope: WorkspaceScope
   productionId: number
   buildId: number
+  /** Read the frozen origin of a paused, unfinished Build for author revision.
+   * This does not grant current-epoch task execution authority. */
+  purpose?: 'paused-content-revision'
 }): Promise<TextOpenWorldProductionPlanAuthoritySnapshotV1> {
   const { scope } = input
   const [productionValue, buildValue] = await Promise.all([
@@ -444,7 +447,15 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
   const production = productionValue as ProductProductionRecordV1 & { id: number }
   const build = buildValue as ProductBuildRecordV1 & { id: number }
   const plan = parseProductProductionPlanV3(build.planJson, undefined, build.briefHash)
-  if (plan.buildNumber !== build.buildNumber || plan.controlEpoch !== build.controlEpoch
+  const pausedRevision = input.purpose === 'paused-content-revision'
+  if (pausedRevision && (production.status !== 'paused' || build.status !== 'paused'
+    || !['building', 'recovery-required'].includes(build.resumeState ?? '')
+    || production.controlEpoch !== build.controlEpoch
+    || build.releasedProductReleaseId != null || build.rootTerminalReceiptHash != null)) {
+    throw new Error('[text-open-world-production-authority] 只有未完成 Preview 的暂停 Build 可读取修订权威')
+  }
+  if (plan.buildNumber !== build.buildNumber
+    || (pausedRevision ? plan.controlEpoch > build.controlEpoch : plan.controlEpoch !== build.controlEpoch)
     || build.planHash !== await hashProductProductionValueV2(plan)) {
     throw new Error('[text-open-world-production-authority] 当前 Build Plan 身份不闭合')
   }
