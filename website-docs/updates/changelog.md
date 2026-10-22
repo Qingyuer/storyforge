@@ -2,6 +2,10 @@
 
 本页按用户可感知的变化整理功能更新、修复和操作改进。版本信息见[版本与兼容说明](/updates/compatibility)。
 
+## 2026-10-22 · 章纲恢复与文风统计操作指引
+
+补齐[精细章纲中断后的检查和重试步骤](/features/longform/writing#精细章纲中断后怎样继续)，以及文风画像[样本统计“未记录”的含义与保存方式](/features/longform/style-learning#sample-statistics-not-recorded)。[开发记录](/updates/development-status)同步本轮全部分支和工作区的核对结果，列出已合并、草稿 PR、本地未推送及未提交开发。
+
 ## 2026-10-21 · 精细章纲、文风画像与细纲编辑
 
 - 精细章纲分块生成保留前序候选的完整原文快照，修复候选截断后缺少 exact snapshot 导致中断的问题。处理错误后，可从原入口明确重试。
