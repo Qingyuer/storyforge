@@ -2,7 +2,7 @@ import type { ProjectExportData } from '../export/json-export'
 import type { ProductBuildArtifactRecordV1, ProductBuildRecordV1, AgentRunRecord } from '../types'
 import { verifyPortableCompletedAgentRunEvidenceV1 } from '../agent/run/ledger-portability'
 import { createProductBuildRootTerminalReceiptV1, verifyProductBuildRootTerminalReceiptV1 } from './receipts'
-import { createProductBuildRootBudgetEvidenceV1, verifyProductBuildRootBudgetEvidenceV1,
+import { createProductBuildRootBudgetEvidenceV1, parseProductBuildRootBudgetEvidenceV1, verifyProductBuildRootBudgetEvidenceV1,
   type ProductBuildBudgetRunReferenceV1 } from './root-budget-evidence'
 
 type PortableRun = ProjectExportData['agentRuns'][number]
@@ -125,15 +125,23 @@ function positivePortableLedger(value: string): string {
   return JSON.stringify(ledger)
 }
 
-/** Runs before any import write. An optional witness is never accepted without its complete closure. */
+/** Runs before any import write. Active seals require full closure; inactive bytes are audit-only. */
 export async function verifyPortableProductBuildRootBudgetEvidenceV1(data: ProjectExportData): Promise<void> {
   const runs = new Map(data.agentRuns.map(run => [run._exportId, run]))
   const events = indexEvents(data)
   for (const build of data.productBuilds) {
     if (build.rootBudgetEvidenceJson === undefined) continue
-    if (!['preview-ready', 'release-ready', 'released'].includes(build.status)
-      || JSON.parse(build.planJson).productType !== 'text-open-world' || !build.rootTerminalReceiptHash) {
-      fail('封存证据出现在非封存 Build')
+    if (JSON.parse(build.planJson).productType !== 'text-open-world' || !build.rootTerminalReceiptHash) {
+      fail('封存证据的产品或历史回执缺失')
+    }
+    if (!['preview-ready', 'release-ready', 'released'].includes(build.status)) {
+      // Stop/archive invalidate the active epoch; discard may also orphan
+      // Artifacts. Preserve canonical historical bytes without granting
+      // resume, reuse, preview or publication authority.
+      if (!['cancelled', 'archived'].includes(build.status)) fail('封存证据出现在非封存 Build')
+      const retained = parseProductBuildRootBudgetEvidenceV1(build.rootBudgetEvidenceJson)
+      if (retained.rootTerminalReceiptHash !== build.rootTerminalReceiptHash) fail('历史封存证据回执不匹配')
+      continue
     }
     const budgetLedgerJson = positivePortableLedger(build._budgetLedgerPortableJson)
     const ledger = JSON.parse(budgetLedgerJson) as { rootRunId: number }

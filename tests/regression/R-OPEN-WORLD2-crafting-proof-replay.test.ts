@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { executeTextOpenWorldActionV1, recoverTextOpenWorldPendingCommandV1 } from '../../src/lib/open-world/action-executor'
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
+import { projectTextOpenWorldPlayerCraftingEconomyReceiptV1 } from '../../src/lib/open-world/player-crafting-economy'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
 import { hashProductRuntimeStateV1, readProductRuntimeState, replayProductRuntimeEvents } from '../../src/lib/product/runtime-core'
 import type { ProductRuntimeEvent, TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
@@ -89,9 +90,38 @@ describe('Crafting v19 command, proof and recovery', () => {
       sessionId, actionKey: 'action.craft-brine-tonic', targetKey: 'recipe.brine-tonic',
       quantity: 1, commandId: 'command.proof.craft', requestedAt: 2,
     }
-    expect(await executeTextOpenWorldActionV1(input)).toMatchObject({
+    const rawReceipt = await executeTextOpenWorldActionV1(input)
+    expect(rawReceipt).toMatchObject({
       phase: 'terminal', status: 'succeeded', outcomeCommitted: true,
     })
+    const receiptInput = {
+      projection: before.textOpenWorld!, runtimeEventSequence: before.lastSequence,
+      request: { kind: 'craft' as const, sessionId, actionKey: input.actionKey,
+        targetKey: input.targetKey, quantity: input.quantity, expectedBaseSequence: before.lastSequence },
+      receipt: rawReceipt,
+    }
+    const publicReceipt = projectTextOpenWorldPlayerCraftingEconomyReceiptV1(receiptInput)
+    expect(publicReceipt).toMatchObject({
+      status: 'succeeded', outcomeCommitted: true,
+      message: '已制作盐露药剂 × 1。',
+      details: ['消耗 盐晶 × 2', '获得 盐露药剂 × 1', '耗时 15 分钟'],
+    })
+    expect(JSON.stringify(publicReceipt)).not.toContain('flag.fulfillment.recipe')
+    for (const mutation of ['missing', 'extra', 'reversed', 'key', 'operation', 'domain', 'summary', 'before', 'after', 'materials']) {
+      const receipt = structuredClone(rawReceipt)
+      if (mutation === 'missing') receipt.changes.pop()
+      if (mutation === 'extra') receipt.changes.push(structuredClone(receipt.changes[1]))
+      if (mutation === 'reversed') receipt.changes.reverse()
+      if (mutation === 'key') receipt.changes[1].effectKey += '.wrong'
+      if (mutation === 'operation') receipt.changes[1].operation = 'advance-time'
+      if (mutation === 'domain') receipt.changes[1].domain = 'inventory'
+      if (mutation === 'summary') receipt.changes[1].summary += '.wrong'
+      if (mutation === 'before') receipt.changes[1].before = true
+      if (mutation === 'after') receipt.changes[1].after = false
+      if (mutation === 'materials') receipt.changes[0].before = { forged: true }
+      expect(() => projectTextOpenWorldPlayerCraftingEconomyReceiptV1({ ...receiptInput, receipt }), mutation)
+        .toThrow('制作回执')
+    }
     const after = await readProductRuntimeState(sessionId)
     expect(after.textOpenWorld!.state.inventory.stackQuantities['item.salt-crystal'] ?? 0).toBe(0)
     expect(after.textOpenWorld!.state.inventory.stackQuantities['item.brine-tonic']).toBe(1)

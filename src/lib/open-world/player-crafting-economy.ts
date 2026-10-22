@@ -837,7 +837,24 @@ function successfulReceiptCopy(input: {
     const marker = input.modules.actions.actions.find(action => action.key === request.actionKey)?.successEffectKeys
       .map(effectKey => input.modules.actions.effects.find(effect => effect.key === effectKey))
       .find(effect => effect?.operation === 'perform-crafting')
-    const change = input.receipt.changes.length === 1 ? input.receipt.changes[0] : null
+    const changes = input.receipt.changes
+    const change = changes[0]
+    if (input.modules.actions.version >= 19) {
+      const proofKey = `effect.fulfillment.recipe.${request.targetKey}`
+      const flagKey = `flag.fulfillment.recipe.${request.targetKey}`
+      const proof = input.modules.actions.effects.find(effect => effect.key === proofKey)
+      const proofChange = changes[1]
+      const before = Object.prototype.hasOwnProperty.call(input.projection.state.world.flags, flagKey)
+        ? input.projection.state.world.flags[flagKey] : null
+      if (changes.length !== 2 || proof?.operation !== 'set-world-flag'
+        || proof.payload.flagKey !== flagKey || proof.payload.value !== true
+        || !proofChange || proofChange.effectKey !== proofKey
+        || proofChange.operation !== 'set-world-flag' || proofChange.domain !== 'world'
+        || proofChange.summary !== `世界标记:${flagKey}`
+        || proofChange.before !== before || proofChange.after !== true) {
+        fail('制作回执证明与提交时授权不一致')
+      }
+    } else if (changes.length !== 1) fail('旧制作回执不能附加新操作证据')
     const expectedBefore = {
       worldMinute: authorization.baseWorldMinute,
       ingredients: Object.fromEntries(authorization.ingredients.map(item => [item.itemKey, item.beforeQuantity])),

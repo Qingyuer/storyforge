@@ -2734,7 +2734,7 @@ function questFinalizeRunner(options: {
     }
     return {
       output: JSON.stringify({
-        schema: 'storyforge.text-open-world-quest-finalize-draft', version: context.itemAcquisitionContract ? 4 : context.objectiveFulfillmentContract ? 3 : 1,
+        schema: 'storyforge.text-open-world-quest-finalize-draft', version: context.uniqueRewardGrantContract ? 5 : context.itemAcquisitionContract ? 4 : context.objectiveFulfillmentContract ? 3 : 1,
         ...(context.objectiveFulfillmentContract ? { fulfillmentSelections } : {}),
         ...(context.itemAcquisitionContract ? { itemAcquisitionSelections: [] } : {}),
         quests: context.questSkeletons.quests.map((quest, index) => ({
@@ -2974,6 +2974,7 @@ async function legacyKnowledgeQuestFinalizeInput(
   delete context.achievementBindingCandidates
   delete context.objectiveFulfillmentContract
   delete context.itemAcquisitionContract
+  delete context.uniqueRewardGrantContract
   const { contextSelectionHash: _contextSelectionHash, ...body } = context
   context.contextSelectionHash = await hashProductProductionValueV2(body)
 
@@ -5257,6 +5258,75 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
+  it('v5保留跨任务奖励已持有的唯一物品，拒绝新请求降级并保持旧v4封存定义不变', async () => {
+    const input = await questFinalizeFixture()
+    let draft: any
+    const runner = questFinalizeRunner()
+    const result = await executeQuestFinalize(input, async request => {
+      expect(request.system).toContain('"version":5')
+      const response = await runner(request)
+      draft = JSON.parse(response.output)
+      return response
+    })
+    const artifacts = {
+      questDesignDocuments: result.artifacts[0]!.payload as TextOpenWorldQuestDesignDocumentsV1,
+      directorDecks: result.artifacts[1]!.payload as TextOpenWorldDirectorDecksV1,
+    }
+    const uniqueKeys = new Set(input.questFinalizeContext.itemRewardCatalog.items.filter(item => item.unique).map(item => item.key))
+    const rewardGrantsOf = (documents: TextOpenWorldQuestDesignDocumentsV1) => documents.effects
+      .filter((effect): effect is Extract<typeof effect, { operation: 'grant-item' }> => effect.operation === 'grant-item'
+        && effect.key.startsWith('effect.reward.'))
+    const rewardGrants = rewardGrantsOf(artifacts.questDesignDocuments)
+    expect(artifacts.questDesignDocuments.uniqueRewardGrantPolicy).toBe('preserve-held-v1')
+    expect(rewardGrants.filter(effect => uniqueKeys.has(effect.payload.itemKey)).length).toBeGreaterThan(0)
+    expect(rewardGrants.filter(effect => uniqueKeys.has(effect.payload.itemKey))
+      .every(effect => effect.payload.quantity === 1 && effect.payload.ifAbsent === true)).toBe(true)
+    expect(rewardGrants.filter(effect => !uniqueKeys.has(effect.payload.itemKey))
+      .every(effect => effect.payload.ifAbsent === undefined)).toBe(true)
+
+    const legacyContext = structuredClone(input.questFinalizeContext)
+    delete legacyContext.uniqueRewardGrantContract
+    await rehashOwnArtifactV1(legacyContext, 'contextSelectionHash')
+    const legacyDraft = { ...structuredClone(draft), version: 4 }
+    const legacyResult = await executeQuestFinalize({ ...input, questFinalizeContext: legacyContext,
+      questFinalizeContextText: JSON.stringify(legacyContext),
+    }, async request => ({ output: JSON.stringify(legacyDraft), bindingReceipt: bindingReceipt(request.requirementKey), usage: null }))
+    const legacyArtifacts = {
+      questDesignDocuments: legacyResult.artifacts[0]!.payload as TextOpenWorldQuestDesignDocumentsV1,
+      directorDecks: legacyResult.artifacts[1]!.payload as TextOpenWorldDirectorDecksV1,
+    }
+    const original = canonicalProductProductionJsonV2(legacyArtifacts)
+    expect(legacyArtifacts.questDesignDocuments.uniqueRewardGrantPolicy).toBeUndefined()
+    expect(rewardGrantsOf(legacyArtifacts.questDesignDocuments).every(effect => effect.payload.ifAbsent === undefined)).toBe(true)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts: legacyArtifacts, context: legacyContext }))
+      .resolves.toEqual(legacyArtifacts)
+    const projected = await projectTextOpenWorldQuestFinalizeAuthorEditableDraftV1({ artifacts: legacyArtifacts, context: legacyContext })
+    expect(projected).toMatchObject({ version: 4 })
+    await expect(rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1({
+      baseArtifacts: legacyArtifacts, context: legacyContext, draft: projected,
+    })).resolves.toEqual(legacyArtifacts)
+    const upgraded = await rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1({
+      baseArtifacts: legacyArtifacts, context: legacyContext, draft: { ...legacyDraft, version: 5 },
+    })
+    expect(upgraded.questDesignDocuments.effects).toEqual(artifacts.questDesignDocuments.effects)
+    expect(canonicalProductProductionJsonV2(legacyArtifacts)).toBe(original)
+    await expect(executeQuestFinalize(input, async request => ({
+      output: JSON.stringify(legacyDraft), bindingReceipt: bindingReceipt(request.requirementKey), usage: null,
+    }))).rejects.toThrow('必须使用draft v5')
+    const forged = structuredClone(artifacts)
+    forged.questDesignDocuments.uniqueRewardGrantPolicy = 'ignore-uniqueness' as never
+    await rehashOwnArtifactV1(forged.questDesignDocuments, 'questDesignDocumentsHash')
+    forged.directorDecks.questDesignDocumentsHash = forged.questDesignDocuments.questDesignDocumentsHash
+    await rehashOwnArtifactV1(forged.directorDecks, 'directorDecksHash')
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts: forged, context: input.questFinalizeContext }))
+      .rejects.toThrow('被篡改')
+    const invalidContext = { ...input.questFinalizeContext, uniqueRewardGrantContract: 'ignore-uniqueness' as never }
+    await rehashOwnArtifactV1(invalidContext, 'contextSelectionHash')
+    await expect(executeQuestFinalize({ ...input, questFinalizeContext: invalidContext,
+      questFinalizeContextText: JSON.stringify(invalidContext),
+    })).rejects.toThrow('唯一物品奖励合同')
+  }, 210_000)
+
   it('固定任务必须显式绑定实际操作与物料，拒绝跳过制作、消耗关键证物和越界结局证据', async () => {
     const input = await questFinalizeFixture()
     let draft: any
@@ -5272,7 +5342,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     }
     expect(artifacts.questDesignDocuments.governance.fixedObjectiveFulfillmentReady).toBe(true)
     const projected = await projectTextOpenWorldQuestFinalizeAuthorEditableDraftV1({ artifacts, context: input.questFinalizeContext })
-    expect(projected).toMatchObject({ version: 4, fulfillmentSelections: draft.fulfillmentSelections, itemAcquisitionSelections: [] })
+    expect(projected).toMatchObject({ version: 5, fulfillmentSelections: draft.fulfillmentSelections, itemAcquisitionSelections: [] })
     await expect(rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1({ baseArtifacts: artifacts, context: input.questFinalizeContext, draft: projected })).resolves.toEqual(artifacts)
     const reject = async (mutate: (candidate: any) => void, error: RegExp) => {
       const candidate = structuredClone(draft); mutate(candidate)
@@ -5297,6 +5367,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     // Frozen v3 graphs remain byte-compatible and do not acquire new grants.
     const v3Context = structuredClone(input.questFinalizeContext)
     delete v3Context.itemAcquisitionContract
+    delete v3Context.uniqueRewardGrantContract
     await rehashOwnArtifactV1(v3Context, 'contextSelectionHash')
     const v3Draft = structuredClone(draft)
     v3Draft.version = 3
@@ -5309,7 +5380,12 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       directorDecks: v3Result.artifacts[1]!.payload as TextOpenWorldDirectorDecksV1,
     }
     expect(v3Artifacts.questDesignDocuments).not.toHaveProperty('itemAcquisitionSelections')
-    expect(v3Artifacts.questDesignDocuments.effects).toEqual(artifacts.questDesignDocuments.effects)
+    // Only v5 reward grants acquire the preservation policy; legacy runtime definitions stay unchanged.
+    expect(v3Artifacts.questDesignDocuments.effects).toEqual(artifacts.questDesignDocuments.effects.map(effect => {
+      if (effect.operation !== 'grant-item' || !effect.key.startsWith('effect.reward.')) return effect
+      const { ifAbsent: _ifAbsent, ...payload } = effect.payload
+      return { ...effect, payload }
+    }))
     expect(await projectTextOpenWorldQuestFinalizeAuthorEditableDraftV1({ artifacts: v3Artifacts, context: v3Context })).toMatchObject({ version: 3 })
     const incompleteContext = structuredClone(input.questFinalizeContext)
     delete incompleteContext.questLifecycleContract
@@ -5358,6 +5434,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     // Frozen draft v2 remains replayable; fresh contexts require v4.
     delete context.objectiveFulfillmentContract
     delete context.itemAcquisitionContract
+    delete context.uniqueRewardGrantContract
     const plans = context.significantThreads.stages.flatMap(stage => stage.localConsequencePlans)
     Object.assign(plans[0]!, { kind: 'npc-attitude', direction: 'change', targetSemanticKey: 'actor.significant.unresolved' })
     Object.assign(plans[1]!, { kind: 'faction-affinity', direction: 'increase', targetSemanticKey: 'faction.significant.unresolved' })
@@ -5660,6 +5737,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     delete legacyContext.storyOutcomeContract
     delete legacyContext.objectiveFulfillmentContract
     delete legacyContext.itemAcquisitionContract
+    delete legacyContext.uniqueRewardGrantContract
     delete legacyContext.endingEligibilityDemands
     const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
     legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)

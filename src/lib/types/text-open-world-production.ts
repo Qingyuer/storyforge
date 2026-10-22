@@ -3290,6 +3290,8 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
   /** Pinned ordinal selections are recompiled against the exact upstream hashes. */
   fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
   itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
+  /** Explicit P8F draft v5 policy; omitted from frozen draft v1-v4 artifacts. */
+  uniqueRewardGrantPolicy?: 'preserve-held-v1'
   /**
    * Deterministic P8F binding of every authored ending to the final protected
    * mainline quest. P9 may author the visible choice copy, but it must point at

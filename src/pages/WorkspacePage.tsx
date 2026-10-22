@@ -1,5 +1,6 @@
 import ExtensionSurface from '../components/extensions/ExtensionOutlet'
 import { canonicalPowerModule } from '../lib/workspace/module-alias'
+import { resolveLongformChapterNavigationV1, type LongformChapterModuleV1 } from '../lib/authoring/longform-chapter-navigation'
 import ShortNovelHistory from '../components/short-novel/ShortNovelHistory'
 import LongformCompletion from '../components/longform/LongformCompletion'
 import { worldModulePath } from '../components/world-engine/navigation'
@@ -50,16 +51,15 @@ const DetailedOutlinePanel = lazy(() => import('../components/outline/DetailedOu
 const ChaptersListPanel = lazy(() => import('../components/editor/ChaptersListPanel'))
 const ForeshadowPanel = lazy(() => import('../components/foreshadow/ForeshadowPanel'))
 const StyleLearningPanel = lazy(() => import('../components/style/StyleLearningPanel'))
-const GeographyPanel = lazy(() => import('../components/geography/GeographyPanel'))
+const PlacesWorkspace = lazy(() => import('../components/location/PlacesWorkspace'))
+import type { PlacesTab } from '../components/location/PlacesWorkspace'
 const HistoryPanel = lazy(() => import('../components/history/HistoryPanel'))
 const CreativeRulesPanel = lazy(() => import('../components/rules/CreativeRulesPanel'))
 const CharacterRelationPanel = lazy(() => import('../components/relations/CharacterRelationPanel'))
-const WorldMapPanel = lazy(() => import('../components/geography/WorldMapPanel'))
 const StatePanel = lazy(() => import('../components/state/StatePanel'))
 const StoryArcPanel = lazy(() => import('../components/outline/StoryArcPanel'))
 const CharacterDrivenPlotPanel = lazy(() => import('../components/outline/CharacterDrivenPlotPanel'))
 const InspirationPanel = lazy(() => import('../components/project/InspirationPanel'))
-const LocationPanel = lazy(() => import('../components/location/LocationPanel'))
 const InventoryPanel = lazy(() => import('../components/items/InventoryPanel'))
 const FactLibraryPanel = lazy(() => import('../components/facts/FactLibraryPanel'))
 const StoryTimelinePanel = lazy(() => import('../components/timeline/StoryTimelinePanel'))
@@ -131,12 +131,12 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
-  const afterPendingEdits = useCallback((action: () => void, failureMessage: string) => {
+  const afterPendingEdits = useCallback((action: () => void | Promise<void>, failureMessage: string) => {
     const transition = navigationTail.current
       .catch(() => undefined)
       .then(async () => {
         await flushPendingEditsV1()
-        action()
+        await action()
       })
     navigationTail.current = transition
     void transition.catch(error => {
@@ -302,13 +302,18 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     )
   }
 
-  const handleOpenChapter = (nodeId: number) => {
-    afterPendingEdits(() => {
+  const handleOpenChapterModule = (module: LongformChapterModuleV1, nodeId: number) => {
+    const scope = { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }
+    afterPendingEdits(async () => {
+      const target = await resolveLongformChapterNavigationV1({ scope, module, outlineNodeId: nodeId })
       setEditorNodeId(nodeId)
-      setActiveModule('chapters-list')
-      navigate(`/workspace/${projectId}?module=chapters-list&chapter=${nodeId}`)
+      setActiveModule(module)
+      navigate(target)
     }, '当前编辑未能保存，已阻止打开章节')
   }
+  const handleOpenChapter = (nodeId: number) => handleOpenChapterModule('chapters-list', nodeId)
+  const handleOpenDetailedOutline = (nodeId: number) => handleOpenChapterModule('detailed-outline', nodeId)
+  const handleOpenOutline = (nodeId: number) => handleOpenChapterModule('outline', nodeId)
 
 
   const immersiveModules = new Set<SidebarModule>([
@@ -382,6 +387,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
 
   /** 根据当前模块渲染主面板内容 */
   const renderMainPanel = () => {
+    if (['outline', 'detailed-outline', 'chapters-list', 'editor'].includes(activeModule) && query.has('work') && Number(query.get('work')) !== project.activeWorkId) {
+      return <p role="alert" className="p-4 text-error">章节跳转属于其它作品，请从当前作品的章纲重新打开。</p>
+    }
     switch (activeModule) {
       case 'info':
         return <ProjectInfoPanel project={project} onUpdate={() => useProjectStore.getState().loadProjects()} />
@@ -430,9 +438,12 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
       case 'worldview-humanity':
         return <WorldviewHumanityPanel project={project} onOpenHistory={() => selectModule('history')} />
       case 'geography':
-        return <GeographyPanel project={project} />
       case 'world-map':
-        return <WorldMapPanel project={project} />
+      case 'locations': {
+        const requestedTab = query.get('placeTab')
+        const tab: PlacesTab = activeModule !== 'locations' ? activeModule : ['geography', 'world-map', 'city', 'links'].includes(requestedTab ?? '') ? requestedTab as PlacesTab : 'locations'
+        return <PlacesWorkspace project={project} tab={tab} onTab={next => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=locations&placeTab=${next}`), '地点编辑保存失败')} />
+      }
       case 'history':
         return <HistoryPanel project={project} />
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
@@ -481,9 +492,10 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
         return <OutlinePanel
           project={project}
           onOpenChapter={handleOpenChapter}
+          onOpenDetailedOutline={handleOpenDetailedOutline}
           initialNodeId={impactHandoff?.targetModule === 'outline' && impactHandoffTarget?.table === 'outlineNodes'
             ? impactHandoffTarget.moduleRecordId
-            : null}
+            : editorNodeId}
         />
       case 'character-driven-plot':
         return <CharacterDrivenPlotPanel project={project} worldGroupId={copilotWorldGroupId} />
@@ -494,20 +506,20 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
       case 'detailed-outline':
         return <DetailedOutlinePanel
           project={project}
+          onOpenChapter={handleOpenChapter}
+          onOpenOutline={handleOpenOutline}
           initialNodeId={impactHandoff?.targetModule === 'detailed-outline'
             ? impactHandoffTarget?.moduleRecordId ?? null
-            : null}
+            : editorNodeId}
         />
       case 'chapters-list':
-        return <ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} />
+        return <ChaptersListPanel key={`${project.id}:${project.activeWorkId}`} project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} onOpenDetailedOutline={handleOpenDetailedOutline} />
       case 'editor':
         return <div className="h-full flex flex-col"><section className="p-4 border-b border-border"><h3 className="text-xl">改稿影响</h3><p className="mt-2 text-sm text-text-secondary">选择需要修改的章节，使用编辑器中的“改稿影响”检查事实、记忆和后续章节，再逐项确认修正。</p></section><div className="min-h-0 flex-1"><ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} /></div></div>
       case 'foreshadow':
         return <ForeshadowPanel project={project} />
       case 'style-learning':
         return <StyleLearningPanel project={project} />
-      case 'locations':
-        return <LocationPanel project={project} />
       case 'story-arc':
         return <StoryArcPanel
           project={project}
@@ -696,7 +708,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             {isLongform && longSection === 'versions' && <><LongformCompletion project={project}/><ShortNovelHistory project={project}/></>}
             {isLongform && longSection === 'settings' && <nav className="lf-subtabs" aria-label="通用设置">{([['settings', '通用设置'], ['usage-stats', '用量统计']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
             <ExtensionSurface projectId={project.id!} owner={activeModule === 'history' || project.workspacePurpose === 'world-engine' && activeModule !== 'story-timeline' ? 'world' : 'work'} workId={activeWork?.id} target={activeModule}>
-            {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
+            {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel initialDiscussionMode={query.get('discussion') === 'free' ? 'free' : 'plan'} embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
             </ExtensionSurface>
           </Suspense>
         </div>

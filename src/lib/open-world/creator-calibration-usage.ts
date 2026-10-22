@@ -7,6 +7,7 @@ import {
   type ProductBuildTerminalCasReadSetV1,
 } from '../product-production/artifact-store'
 import { canonicalProductProductionJsonV2 as json, hashProductProductionValueV2 as hash } from '../product-production/hash'
+import { createProductBuildRootBudgetEvidenceV1 } from '../product-production/root-budget-evidence'
 import { verifyStoredProductBuildRootBudgetEvidenceV1 } from '../product-production/root-budget-evidence-store'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -160,7 +161,18 @@ export async function readTextOpenWorldCalibrationLineageV1(input: {
     else {
       if (!['preview-ready', 'release-ready', 'released'].includes(build.status)
         || !build.rootTerminalReceiptHash) fail('制作来源尚未封账')
-      await verifyStoredProductBuildRootBudgetEvidenceV1({ scope: input.scope, build, artifacts: proof.artifacts })
+      // Original v2 Builds may predate the optional import preimage. Reconstruct
+      // it only in memory when the complete current envelope still hashes to
+      // the exact original seal; changed/remapped ledgers cannot pass here.
+      const rootBudgetEvidenceJson = build.rootBudgetEvidenceJson
+        ?? await createProductBuildRootBudgetEvidenceV1({
+          planHash: build.planHash, manifestHash: build.manifestHash, packageHash: build.packageHash,
+          qualityReportHash: build.qualityReportHash, controlEpoch: build.controlEpoch,
+          budgetLedgerJson: build.budgetLedgerJson, artifacts: proof.artifacts,
+          expectedReceiptHash: build.rootTerminalReceiptHash,
+        })
+      await verifyStoredProductBuildRootBudgetEvidenceV1({ scope: input.scope,
+        build: { ...build, rootBudgetEvidenceJson }, artifacts: proof.artifacts })
       proofHash = build.rootTerminalReceiptHash
     }
     proof.casReadSet.authorityCommands = [

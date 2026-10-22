@@ -6748,8 +6748,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 60_000)
 
-  // This exercises the full production DAG, runtime traversal and reassembly.
-  // Match the full revision scenarios below in CI, where coverage exceeds the local wall-clock budget.
+  // Coverage CI includes a full production, playthrough and backup replay.
+  // Keep the local deadline and give that workload a bounded CI allowance.
   it('60 分钟文字冒险按 Brief 产出足量主线、空间、支线、区域事件并通过内容量硬门', async () => {
     const owned = await fixtureForProduct('text-adventure', {
       scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true,
@@ -7957,7 +7957,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       scope: owned.scope, productionId: owned.productionId, buildId: reassembled.buildId,
     })
     expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
-  }, process.env.CI ? 240_000 : 120_000)
+  }, process.env.CI ? 180_000 : 120_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none', maximumModelCalls: 64 })
@@ -8593,7 +8593,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(await db.productBuilds.get(before.id!)).toEqual(before)
     const originalPackage = originals.find(row => row.artifactKey === 'runtime.package')!
     expect(originalPackage.payloadJson).not.toContain(marker)
-  }, 240_000)
+  }, process.env.CI ? 360_000 : 240_000)
 
   it.each([
     'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',

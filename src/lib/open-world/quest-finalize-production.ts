@@ -126,6 +126,8 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   objectiveFulfillmentContract?: 'fixed-objectives-v1'
   /** Fresh v4 drafts declare actual pickup paths; old frozen requests omit it. */
   itemAcquisitionContract?: 'fixed-objective-items-v1'
+  /** Fresh v5 drafts preserve unique items already granted by another reward. */
+  uniqueRewardGrantContract?: 'preserve-held-v1'
   endingEligibilityDemands?: EndingEligibilityDemandV1[]
   contextSelectionHash: string
 }
@@ -157,6 +159,7 @@ export type TextOpenWorldQuestFinalizeModelRunnerV1 = (input: {
 interface QuestFinalizeDraftV1 {
   fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
   itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
+  uniqueRewardGrantPolicy?: 'preserve-held-v1'
   consequenceSelections?: Array<{
     consequenceNumber: number
     direction: 'increase' | 'decrease' | 'change'
@@ -531,6 +534,13 @@ function buildStoryConsequenceDemands(context: QuestFinalizeContextWithoutHashV1
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.uniqueRewardGrantContract !== undefined
+    && (context.uniqueRewardGrantContract !== 'preserve-held-v1'
+      || context.itemAcquisitionContract !== 'fixed-objective-items-v1'
+      || context.objectiveFulfillmentContract !== 'fixed-objectives-v1'
+      || context.storyOutcomeContract !== 'governed-v19')) {
+    fail('唯一物品奖励合同缺少有效的固定任务获取基线')
+  }
   if (context.objectiveFulfillmentContract !== undefined
     && (context.objectiveFulfillmentContract !== 'fixed-objectives-v1' || context.storyOutcomeContract !== 'governed-v19')) {
     fail('固定任务操作证据合同无效')
@@ -710,6 +720,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
   body.storyOutcomeContract = 'governed-v19'
   body.objectiveFulfillmentContract = 'fixed-objectives-v1'
   body.itemAcquisitionContract = 'fixed-objective-items-v1'
+  body.uniqueRewardGrantContract = 'preserve-held-v1'
   body.endingEligibilityDemands = buildEndingEligibilityDemands(body)
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -743,10 +754,12 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     fail('Knowledge与成就模型选择字段必须同时存在或同时缺失')
   }
   const explicitKnowledgeSelections = governedKnowledge && hasKnowledgeSelections && hasAchievementSelections
-  const explicitAcquisitions = governedStoryOutcome && root.version === 4
+  const preserveUniqueRewards = governedStoryOutcome && root.version === 5
+  const explicitAcquisitions = governedStoryOutcome && (root.version === 4 || preserveUniqueRewards)
   const explicitFulfillment = governedStoryOutcome && (root.version === 3 || explicitAcquisitions)
   if (context.objectiveFulfillmentContract && !explicitFulfillment) fail('固定任务操作证据合同必须使用draft v3')
   if (context.itemAcquisitionContract && !explicitAcquisitions) fail('任务物品获取合同必须使用draft v4')
+  if (context.uniqueRewardGrantContract && !preserveUniqueRewards) fail('唯一物品奖励合同必须使用draft v5')
   if (explicitFulfillment && (context.questLifecycleContract !== 'governed-v16'
     || context.combatMechanicsContract !== 'governed-v17' || !governedKnowledge)) {
     fail('固定任务操作证据需要完整的受治理生命周期、战斗与Knowledge基线')
@@ -858,6 +871,7 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
   })
   if (randomEvents.some((event, index) => event.seedNumber !== index + 1)) fail('randomEvents必须按序精确覆盖')
   const baseDraft: QuestFinalizeDraftV1 = { quests, objectives, decks, templates, randomEvents }
+  if (preserveUniqueRewards) baseDraft.uniqueRewardGrantPolicy = 'preserve-held-v1'
   if (explicitFulfillment) baseDraft.fulfillmentSelections = parseTextOpenWorldQuestFulfillmentSelectionsV1(root.fulfillmentSelections, context)
   if (explicitAcquisitions) baseDraft.itemAcquisitionSelections = parseTextOpenWorldItemAcquisitionsV1(
     root.itemAcquisitionSelections, context, baseDraft.fulfillmentSelections!,
@@ -1394,12 +1408,15 @@ async function createArtifacts(input: {
     }
     reward.grants.items.forEach((grant, index) => {
       const key = `effect.reward.${reward.key}.item.${String(index + 1).padStart(3, '0')}`
+      const definition = input.context.itemRewardCatalog.items.find(item => item.key === grant.itemKey)!
       const alreadyAcquirable = input.draft.itemAcquisitionSelections?.some(selection => selection.items.some(item => (
         input.context.itemRewardCatalog.items[item.itemNumber - 1]!.key === grant.itemKey
-      ))) && input.context.itemRewardCatalog.items.find(item => item.key === grant.itemKey)!.unique
+      ))) && definition.unique
+      const preserveHeldUnique = input.draft.uniqueRewardGrantPolicy === 'preserve-held-v1' && definition.unique
+      if (preserveHeldUnique && grant.quantity !== 1) fail(`唯一物品奖励数量必须为1:${reward.key}:${grant.itemKey}`)
       addEffect({ key, operation: 'grant-item', payload: {
         itemKey: grant.itemKey, quantity: grant.quantity,
-        ...(alreadyAcquirable ? { ifAbsent: true as const } : {}),
+        ...(alreadyAcquirable || preserveHeldUnique ? { ifAbsent: true as const } : {}),
       } }); rewardEffects.push(key)
     })
     reward.grants.skillKeys.forEach((skillKey, index) => {
@@ -2281,6 +2298,7 @@ async function createArtifacts(input: {
     ...(governedStoryOutcome ? { storyOutcomeBindings } : {}),
     ...(input.draft.fulfillmentSelections ? { fulfillmentSelections: input.draft.fulfillmentSelections } : {}),
     ...(input.draft.itemAcquisitionSelections ? { itemAcquisitionSelections: input.draft.itemAcquisitionSelections } : {}),
+    ...(input.draft.uniqueRewardGrantPolicy ? { uniqueRewardGrantPolicy: input.draft.uniqueRewardGrantPolicy } : {}),
     endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
@@ -2991,6 +3009,7 @@ function draftFromArtifacts(
     body.version = 4
     body.itemAcquisitionSelections = artifacts.questDesignDocuments.itemAcquisitionSelections
   }
+  if (artifacts.questDesignDocuments.uniqueRewardGrantPolicy) body.version = 5
   if (context.storyOutcomeContract === 'governed-v19') {
     const demands = context.endingEligibilityDemands ?? fail('结局资格反向验证缺少候选合同')
     body.endingEligibilitySelections = demands.map((demand, index) => {
@@ -3126,9 +3145,14 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
   const explicitConsequences = context.storyOutcomeContract === 'governed-v19'
   const explicitFulfillment = context.objectiveFulfillmentContract === 'fixed-objectives-v1'
   const explicitAcquisitions = context.itemAcquisitionContract === 'fixed-objective-items-v1'
+  const preserveUniqueRewards = context.uniqueRewardGrantContract === 'preserve-held-v1'
   const system = [
-    '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
-    '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
+    ...(preserveUniqueRewards ? [
+      'Return only the required JSON. Code owns IDs, catalog references, rewards, lifecycle and Action/Condition/Effect; write quest/objective semantics and bounded dealing parameters.',
+    ] : [
+      '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
+      '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
+    ]),
     '主线与重要故事必须等待玩家、不可放弃或过期；不得用地点抵达作为唯一关键触发。随机事件不得阻断主线。',
     ...(context.knowledgeProgressContract === 'governed-v18' ? [
       'Knowledge与成就只能从输入候选编号中选择；不得改写事实、传闻、可靠度、来源或创建稳定键。',
@@ -3167,8 +3191,11 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
       'v4 requires itemAcquisitionSelections:[{objectiveNumber,interactionNumber,items:[{itemNumber,quantity}]}], [] if none. Sort global interactionNumbers ascending, unique. Only an exclusive fixed collect/interact/investigate interaction and its declared quest/misc items; quantity 1..min(8,stack limit). No templates, shared/consumptive interactions or new assets.',
       'Pickups, borrowed records and comparison copies must grant the required item BEFORE objective completion, not only in that quest/later rewards. Pickup checks active stage, earlier required objectives and other required items, then atomically grants items with one-time proof. Restart cannot farm pickups; lost ordinary items rely on existing shops. Preserve story and critical-item protection.',
     ] : []),
+    ...(preserveUniqueRewards ? [
+      'v5 keeps v4 fields; code retains held unique rewards. Do not promise duplicate items or emit reward policy/Effects.',
+    ] : []),
     '不要输出敌人、物品、角色、地点、奖励、Action、Condition、Effect、Quest键或任何未要求字段。',
-    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":${explicitAcquisitions ? 4 : explicitFulfillment ? 3 : explicitConsequences ? 2 : 1},"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${explicitConsequences ? ',"endingEligibilitySelections":[...],"consequenceSelections":[...]' : ''}${explicitFulfillment ? ',"fulfillmentSelections":{...}' : ''}${explicitAcquisitions ? ',"itemAcquisitionSelections":[...]' : ''}}`,
+    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":${preserveUniqueRewards ? 5 : explicitAcquisitions ? 4 : explicitFulfillment ? 3 : explicitConsequences ? 2 : 1},"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${explicitConsequences ? ',"endingEligibilitySelections":[...],"consequenceSelections":[...]' : ''}${explicitFulfillment ? ',"fulfillmentSelections":{...}' : ''}${explicitAcquisitions ? ',"itemAcquisitionSelections":[...]' : ''}}`,
   ].join('\n')
   return { system, user }
 }

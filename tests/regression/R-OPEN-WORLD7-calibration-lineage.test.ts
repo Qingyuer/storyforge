@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createProductBuildRootTerminalReceiptV1, createLegacyProductBuildRootTerminalReceiptV1 } from '../../src/lib/product-production/receipts'
+import { parseProductBuildRootBudgetEvidenceV1 } from '../../src/lib/product-production/root-budget-evidence'
 import type { TextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import type { ProductBuildTerminalCasReadSetV1 } from '../../src/lib/product-production/artifact-store'
 import {
@@ -45,6 +47,8 @@ function authority(id: number, origin: TextOpenWorldCreatorDerivedBuildAuthority
     origin, production: { id: 71 },
     build: { id, buildNumber: id, productionId: 71, briefHash: HASH, planHash: HASH,
       controlEpoch: 1, status: 'preview-ready', rootTerminalReceiptHash: HASH,
+      rootBudgetEvidenceJson: 'stored preimage verified by adapter',
+      manifestHash: HASH, packageHash: HASH, qualityReportHash: HASH,
       parentBuildNumber: parent?.build.buildNumber ?? null,
       budgetLedgerJson: JSON.stringify({ schema: 'storyforge.product-production-budget-ledger', version: 2,
         rootRunId: id * 100, rootClaim: null, tasks: {}, attempts }) },
@@ -99,6 +103,50 @@ describe('G7-11 制作来源用量（验真适配器边界，不冒充模型证�
     await assertTextOpenWorldCalibrationLineageUnchangedV1(lineage)
     expect(mocks.cas.mock.calls.map(([input]) => input.readSet.targetBuildId)).toEqual([2, 1])
   })
+
+  it('历史完整v2封存缺少后来新增的可选原像时，只在内存验证且仍核对全部Run归属', async () => {
+    const root = authority(1, 'creator-start-v1', [attempt(101)])
+    delete root.build.rootBudgetEvidenceJson
+    root.build.rootTerminalReceiptHash = await createProductBuildRootTerminalReceiptV1({
+      ...root.build, artifacts: [],
+    })
+    const before = JSON.stringify(root.build)
+    const lineage = await read(1)
+    expect(mocks.terminal).toHaveBeenCalledOnce()
+    expect(mocks.seal).toHaveBeenCalledOnce()
+    const verifiedBuild = mocks.seal.mock.calls[0][0].build
+    expect(verifiedBuild).not.toBe(root.build)
+    const evidence = parseProductBuildRootBudgetEvidenceV1(verifiedBuild.rootBudgetEvidenceJson)
+    expect(evidence.rootTerminalReceiptHash).toBe(root.build.rootTerminalReceiptHash)
+    expect(JSON.parse(evidence.budgetLedgerJson)).toEqual(JSON.parse(root.build.budgetLedgerJson))
+    expect(JSON.stringify(root.build)).toBe(before)
+    expect(lineage.readSets[0].buildRows[0].rootBudgetEvidenceJson).toBeUndefined()
+    expect(lineage.sources[0].observedModelCalls).toBe(1)
+    mocks.seal.mockRejectedValueOnce(new Error('wrong current Run owner'))
+    await expect(read(1)).rejects.toThrow('wrong current Run owner')
+    expect(JSON.stringify(root.build)).toBe(before)
+  })
+
+  it.each(['changed-usage', 'remapped-run', 'legacy-v1'] as const)(
+    '缺少原像时不能补造%s的封存证明', async problem => {
+      const root = authority(1, 'creator-start-v1', [attempt(101)])
+      delete root.build.rootBudgetEvidenceJson
+      const receiptInput = { ...root.build, artifacts: [] }
+      root.build.rootTerminalReceiptHash = problem === 'legacy-v1'
+        ? await createLegacyProductBuildRootTerminalReceiptV1(receiptInput)
+        : await createProductBuildRootTerminalReceiptV1(receiptInput)
+      if (problem !== 'legacy-v1') {
+        const ledger = JSON.parse(root.build.budgetLedgerJson)
+        if (problem === 'changed-usage') ledger.attempts[0].usage.outputTokens++
+        else ledger.attempts[0].runId = 901
+        root.build.budgetLedgerJson = JSON.stringify(ledger)
+      }
+      const before = JSON.stringify(root.build)
+      await expect(read(1)).rejects.toThrow('不能补造证据')
+      expect(mocks.seal).not.toHaveBeenCalled()
+      expect(JSON.stringify(root.build)).toBe(before)
+    },
+  )
 
   it('预算续建只接受正式已完成前缀，经过repair/media仍不重复计来源', async () => {
     const root = authority(1, 'creator-start-v1', [attempt(101)])

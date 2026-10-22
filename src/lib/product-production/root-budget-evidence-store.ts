@@ -14,6 +14,9 @@ export async function verifyStoredProductBuildRootBudgetEvidenceV1(input: {
   artifacts: ProductBuildArtifactRecordV1[]
 }): Promise<void> {
   const { scope, build } = input
+  if (!['preview-ready', 'release-ready', 'released'].includes(build.status)) {
+    fail('历史封存证据不授予当前 Build 权限')
+  }
   if (!build.id || !build.rootBudgetEvidenceJson || !build.rootTerminalReceiptHash
     || build.projectId !== scope.projectId || build.workId !== scope.workId
     || build.worldId !== scope.worldId) fail('Build owner 或原始封存证据缺失')
