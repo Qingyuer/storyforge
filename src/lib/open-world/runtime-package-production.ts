@@ -66,6 +66,7 @@ import { createInitialTextOpenWorldSessionProjectionV1 } from './session-project
 import { resolveTextOpenWorldSceneRegionV1 } from './scene-region-binding'
 import { validateTextOpenWorldDeterministicPreflightV1 } from './system-finalize-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
+import { assertTextOpenWorldItemSourceClosureV1 } from './item-source-production'
 import {
   evaluateTextOpenWorldMediaCoverageV1,
   verifyTextOpenWorldMediaRightsV1,
@@ -238,6 +239,12 @@ function readV3Artifacts(input: ProductProductionTaskExecutionInputV1): V3Artifa
 }
 
 function validateV3HashChain(artifacts: V3Artifacts): void {
+  assertTextOpenWorldItemSourceClosureV1({ catalog: artifacts.items, economy: artifacts.craftingEconomy,
+    acquisitions: (artifacts.quests.itemAcquisitionSelections ?? []).flatMap(selection => selection.items.map(item => ({
+      itemKey: artifacts.items.items[item.itemNumber - 1]?.key ?? '',
+      objectiveKey: artifacts.skeletons.objectives[selection.objectiveNumber - 1]?.key ?? '',
+    }))),
+  })
   const system = artifacts.system
   const mismatches = [
     artifacts.sourceLedger.sourcePinHash !== artifacts.sourcePin.pinHash,

@@ -7,7 +7,7 @@ import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/eff
 import { createInitialTextOpenWorldSessionProjectionV1, deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-projection'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-function setup() {
+function setup(explicitSources = false) {
   const pkg = createTextOpenWorldVNextFixture()
   const actions = pkg.modules.actions.payload as any
   const items = pkg.modules.items.payload as any
@@ -38,13 +38,20 @@ function setup() {
       items: [{ itemNumber: 1, quantity: 1, consume: false }, { itemNumber: 2, quantity: 1, consume: false }] }],
     interactions: [{ interactionNumber: 1, consumedItems: [] }], endings: [],
   }
+  if (explicitSources) {
+    context.itemRewardCatalog.itemSourceContract = 'explicit-producers-v1'
+    context.itemRewardCatalog.itemSourcePlans = [
+      { itemKey: seal.key, sources: [{ kind: 'acquisition', sourceKey: 'objective.main.1' }] },
+      { itemKey: salt.key, sources: [{ kind: 'initial', sourceKey: salt.key }] },
+    ]
+  }
   const selections = [{ objectiveNumber: 1, interactionNumber: 1, items: [{ itemNumber: 1, quantity: 1 }] }]
   return { pkg, actions, action, context, fulfillment, selections, interactionKey }
 }
 
 describe('fixed objective item acquisition', () => {
-  it('requires the active stage and permit, grants the missing evidence atomically, and cannot farm it again', async () => {
-    const { pkg, actions, action, context, fulfillment, selections, interactionKey } = setup()
+  it.each([false, true])('requires the active stage and permit, grants evidence atomically without farming (explicit sources: %s)', async explicitSources => {
+    const { pkg, actions, action, context, fulfillment, selections, interactionKey } = setup(explicitSources)
     const accepted = parseTextOpenWorldItemAcquisitionsV1(selections, context, fulfillment)
     compileTextOpenWorldItemAcquisitionsV1({ context, selections: accepted, fulfillment,
       conditions: actions.conditions, effects: actions.effects, actions: actions.actions,
@@ -73,6 +80,15 @@ describe('fixed objective item acquisition', () => {
     const repeat = await effects.plan({ effectKeys: action.successEffectKeys.slice(1), state: result.state, claimKey: 'claim.existing-evidence' })
     const kept = await effects.apply({ plan: repeat, state: result.state })
     expect(Object.values(kept.state.inventory.itemInstances).filter(item => item.itemKey === 'item.canal-seal')).toEqual([existing])
+  })
+
+  it('rejects an unplanned pickup even when the item and objective references are otherwise valid', () => {
+    const { context, fulfillment, selections } = setup(true)
+    expect(parseTextOpenWorldItemAcquisitionsV1(selections, context, fulfillment)).toEqual(selections)
+    context.itemRewardCatalog.itemSourcePlans![0]!.sources = [{ kind: 'reward', sourceKey: 'reward.prior' }]
+    expect(() => parseTextOpenWorldItemAcquisitionsV1(selections, context, fulfillment)).toThrow(/未计划|未选择|来源/)
+    context.itemRewardCatalog.itemSourcePlans![0]!.sources = [{ kind: 'acquisition', sourceKey: 'objective.other' }]
+    expect(() => parseTextOpenWorldItemAcquisitionsV1(selections, context, fulfillment)).toThrow(/未计划|未选择|来源/)
   })
 
   it('does not leak pickups before prior required objectives, and preserves all state when a grant fails', async () => {

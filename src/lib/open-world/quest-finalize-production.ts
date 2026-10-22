@@ -43,6 +43,7 @@ import {
   parseTextOpenWorldQuestFulfillmentSelectionsV1,
 } from './objective-fulfillment-production'
 import { compileTextOpenWorldItemAcquisitionsV1, parseTextOpenWorldItemAcquisitionsV1 } from './item-acquisition-production'
+import { assertTextOpenWorldItemSourceClosureV1 } from './item-source-production'
 
 const SKILL_ID = 'text-open-world.production.quest-finalize.v1'
 const MAX_CONTEXT_CHARS = 700_000
@@ -2280,6 +2281,12 @@ async function createArtifacts(input: {
     context: input.context, selections: input.draft.itemAcquisitionSelections,
     fulfillment: input.draft.fulfillmentSelections!, conditions, effects, actions, interactions: interactionBindings,
   })
+  assertTextOpenWorldItemSourceClosureV1({ catalog: input.context.itemRewardCatalog, economy: input.context.craftingEconomyCatalog,
+    acquisitions: (input.draft.itemAcquisitionSelections ?? []).flatMap(selection => selection.items.map(item => ({
+      itemKey: input.context.itemRewardCatalog.items[item.itemNumber - 1]!.key,
+      objectiveKey: input.context.questSkeletons.objectives[selection.objectiveNumber - 1]!.key,
+    }))),
+  })
   const questBody: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'> = {
     schema: 'storyforge.text-open-world-quest-design-documents', version: 1, productType: 'text-open-world',
     productInstanceKey: input.context.productInstanceKey, mainlineThreadHash: input.context.mainlineThread.mainlineThreadHash,
@@ -3190,6 +3197,9 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
     ...(explicitAcquisitions ? [
       'v4 requires itemAcquisitionSelections:[{objectiveNumber,interactionNumber,items:[{itemNumber,quantity}]}], [] if none. Sort global interactionNumbers ascending, unique. Only an exclusive fixed collect/interact/investigate interaction and its declared quest/misc items; quantity 1..min(8,stack limit). No templates, shared/consumptive interactions or new assets.',
       'Pickups, borrowed records and comparison copies must grant the required item BEFORE objective completion, not only in that quest/later rewards. Pickup checks active stage, earlier required objectives and other required items, then atomically grants items with one-time proof. Restart cannot farm pickups; lost ordinary items rely on existing shops. Preserve story and critical-item protection.',
+      ...(context.itemRewardCatalog.itemSourceContract ? [
+        'itemSourcePlans中kind=acquisition的来源必须由itemAcquisitionSelections精确兑现；sourceKey是对应目标的稳定引用，itemKey对应既有物品编号。禁止遗漏、增添未计划领取、以完成奖励替代领取或为普通交付再次发放物品。来源计划本身不产生物品，只有通过实际独占交互才能领取。',
+      ] : []),
     ] : []),
     ...(preserveUniqueRewards ? [
       'v5 keeps v4 fields; code retains held unique rewards. Do not promise duplicate items or emit reward policy/Effects.',

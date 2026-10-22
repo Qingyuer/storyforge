@@ -6,6 +6,7 @@ import type {
 } from '../types'
 import type { TextOpenWorldQuestFinalizeInputContextV1 } from './quest-finalize-production'
 import { buildTextOpenWorldObjectiveFulfillmentDemandsV1 } from './objective-fulfillment-production'
+import { hasTextOpenWorldExplicitItemSourcesV1, itemHasPlannedSourceV1 } from './item-source-production'
 
 type Context = TextOpenWorldQuestFinalizeInputContextV1
 function fail(message: string): never { throw new Error(`[text-open-world-item-acquisition] ${message}`) }
@@ -49,6 +50,10 @@ export function parseTextOpenWorldItemAcquisitionsV1(
       const definition = context.itemRewardCatalog.items[itemNumber - 1]!
       if (itemNumber <= previousItem || !demand.itemNumbers.includes(itemNumber)
         || !['quest', 'misc'].includes(definition.kind)) fail('领取只能使用该目标已有的任务物品，不能重复或生成装备、材料、消耗品')
+      if (hasTextOpenWorldExplicitItemSourcesV1(context.itemRewardCatalog)
+        && !itemHasPlannedSourceV1(context.itemRewardCatalog, definition.key, 'acquisition', demand.objectiveKey)) {
+        fail('领取必须履行物品目录中同一目标的明确来源')
+      }
       previousItem = itemNumber
       const quantity = ordinal(item.quantity, Math.min(8, definition.maximumStack ?? 1))
       if (definition.unique && quantity !== 1) fail('独特物品只能领取一件')

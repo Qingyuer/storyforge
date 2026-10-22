@@ -1,5 +1,9 @@
 # Changelog
 
+## October 22, 2026 · Outline recovery and style statistics instructions
+
+Added [checks and retry steps after detailed-outline interruption](/en/features/longform/writing#continuing-after-detailed-outline-generation-stops) and [the meaning of missing style statistics and how edits save](/en/features/longform/style-learning#when-sample-statistics-show-not-recorded). The [development record](/en/updates/development-status) now covers the complete branch/worktree review, separating merged changes, draft PRs, local unpushed commits, and uncommitted development.
+
 ## October 21, 2026 · Detailed outlines, style profiles and scene editing
 
 - Chunked chapter-outline generation retains the complete predecessor candidate snapshot, fixing interruption when truncated evidence lacked an exact snapshot. After handling an error, explicitly retry from the original entry.

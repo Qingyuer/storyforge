@@ -8,6 +8,8 @@ import { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } from '../../src/li
 import { runProductProductionSchedulerCycleV1 } from '../../src/lib/product-production/scheduler'
 import { setProductProductionPausedV1 } from '../../src/lib/product-production/service'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { estimateTokens } from '../../src/lib/ai/context-budget'
+import { unpackTextOpenWorldItemSourceChoicesV1, unpackTextOpenWorldRewardDemandsV1 } from '../../src/lib/open-world/item-source-production'
 import { db } from '../../src/lib/db/schema'
 import { createContextManifestV1 } from '../../src/lib/agent/run/context-manifest'
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
@@ -123,7 +125,10 @@ import {
 } from '../../src/lib/open-world/encounter-catalog-production'
 import {
   createTextOpenWorldItemRewardCatalogExecutorV1,
+  readTextOpenWorldItemRewardCatalogInputContextV1,
   validateTextOpenWorldItemRewardCatalogV1,
+  projectTextOpenWorldItemRewardCatalogAuthorEditableDraftV1,
+  rebuildTextOpenWorldItemRewardCatalogFromAuthorEditableDraftV1,
   type TextOpenWorldItemRewardCatalogInputContextV1,
   type TextOpenWorldItemRewardCatalogModelRunnerV1,
 } from '../../src/lib/open-world/item-reward-catalog-production'
@@ -2299,6 +2304,37 @@ function itemRewardCatalogRunner(options: {
 } = {}): TextOpenWorldItemRewardCatalogModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldItemRewardCatalogInputContextV1
+    const sourceSelections = context.itemDemands.map(() => [] as number[])
+    if (context.itemSourceChoices) {
+      const choices = unpackTextOpenWorldItemSourceChoicesV1(context.itemSourceChoices)
+      const vendors = choices.filter(choice => choice.kind === 'vendor')
+      const ordinary = context.itemDemands.filter(demand => demand.criticality !== 'protected' && demand.plannedKind !== 'quest')
+      for (const [index, demand] of ordinary.entries()) {
+        sourceSelections[demand.demandNumber - 1]!.push(vendors[index % vendors.length]!.choiceNumber)
+      }
+      const usedCraftOutputs = new Set<number>()
+      const firstMaterial = ordinary.find(demand => demand.plannedKind === 'material')?.demandNumber
+      let craftIndex = 0
+      for (const choice of choices.filter(choice => choice.kind === 'craft' || choice.kind === 'vendor')) {
+        const candidates = context.itemDemands.filter(demand => choice.eligibleItemDemandNumbers.includes(demand.demandNumber))
+        const desiredKind = options.saltRidgeAcceptance && choice.kind === 'craft'
+          ? (['consumable', 'equipment', 'material', 'consumable'] as const)[craftIndex++ % 4]
+          : 'consumable'
+        const eligible = options.saltRidgeAcceptance && choice.kind === 'craft'
+          ? candidates.filter(demand => demand.demandNumber !== firstMaterial && !usedCraftOutputs.has(demand.demandNumber))
+          : candidates
+        const output = eligible.find(demand => demand.plannedKind === desiredKind) ?? eligible[0]!
+        if (choice.kind === 'craft') usedCraftOutputs.add(output.demandNumber)
+        const selected = sourceSelections[output.demandNumber - 1]!
+        if (!selected.includes(choice.choiceNumber)) selected.push(choice.choiceNumber)
+      }
+      for (const demand of context.itemDemands.filter(demand => demand.criticality === 'protected' || demand.plannedKind === 'quest')) {
+        const choice = choices.find(choice => choice.kind === 'reward' && choice.eligibleItemDemandNumbers.includes(demand.demandNumber))
+          ?? choices.find(choice => choice.kind === 'acquisition' && choice.eligibleItemDemandNumbers.includes(demand.demandNumber))
+        if (!choice) throw new Error(`fixture lacks explicit source for ${demand.sourceDemandKey}`)
+        sourceSelections[demand.demandNumber - 1]!.push(choice.choiceNumber)
+      }
+    }
     const items = context.itemDemands.map((demand, index) => ({
       demandNumber: demand.demandNumber,
       title: options.rewriteStarter && demand.demandNumber === 1
@@ -2316,17 +2352,18 @@ function itemRewardCatalogRunner(options: {
               : demand.requestedTraits.includes('slot:accessory') ? 'accessory'
                 : 'weapon')
         : options.invalidSlot && index === context.itemDemands.length - 1 ? 'armor' : null,
+      ...(context.itemSourceContract ? { sourceChoiceNumbers: sourceSelections[index] } : {}),
     }))
-    const rewards = context.rewardDemands.map(demand => ({
+    const rewards = unpackTextOpenWorldRewardDemandsV1(context.rewardDemands).map(demand => ({
       demandNumber: demand.demandNumber,
       title: options.duplicateRewardTitle ? '重复奖励' : demand.title,
       description: `${demand.semanticBrief}奖励在完成时给出明确的成长与资源反馈。`,
-      optionalItemDemandNumbers: [],
+      ...(!context.itemSourceContract ? { optionalItemDemandNumbers: [] } : {}),
     }))
     return {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-item-reward-catalog-draft',
-        version: 1,
+        version: context.itemSourceContract ? 2 : 1,
         items: options.omitItem ? items.slice(0, -1) : items,
         rewards: options.omitReward ? rewards.slice(0, -1) : rewards,
       }),
@@ -2421,7 +2458,7 @@ function craftingEconomyRunner(options: {
       usedOutputKeys.add(output.key)
       return {
         demandNumber: demand.demandNumber,
-        title: options.saltRidgeAcceptance ? `${output.title}配方` : `${demand.title}配方${index + 1}`,
+        title: options.saltRidgeAcceptance ? `${output.title}配方${index + 1}` : `${demand.title}配方${index + 1}`,
         description: `${demand.description}制作过程符合${demand.requestedTraits[0] ?? '当地生活'}。`,
         category: output.kind === 'equipment' || output.kind === 'consumable' || output.kind === 'material' ? output.kind : 'tool',
         stationLocationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
@@ -2439,7 +2476,11 @@ function craftingEconomyRunner(options: {
           : `${demand.title}${index + 1}`,
       description: `${demand.description}店铺供应日常成长所需物资。`,
       locationNumber: 1,
-      inventoryItemNumbers: [options.criticalInventory && index === 0 ? firstCritical : firstTradeable],
+      inventoryItemNumbers: options.criticalInventory && index === 0 ? [firstCritical]
+        : context.itemRewardCatalog.itemSourcePlans
+          ? context.itemRewardCatalog.items.flatMap((item, itemIndex) => context.itemRewardCatalog.itemSourcePlans!
+            .find(plan => plan.itemKey === item.key)!.sources.some(source => source.kind === 'vendor' && source.sourceKey === demand.sourceDemandKey) ? [itemIndex + 1] : [])
+          : [firstTradeable],
     }))
     return {
       output: JSON.stringify({
@@ -2452,9 +2493,9 @@ function craftingEconomyRunner(options: {
   }
 }
 
-async function craftingEconomyFixture() {
+async function craftingEconomyFixture(runItems: TextOpenWorldItemRewardCatalogModelRunnerV1 = itemRewardCatalogRunner()) {
   const input = await itemRewardCatalogFixture()
-  const itemResult = await executeItemRewardCatalog(input)
+  const itemResult = await executeItemRewardCatalog(input, runItems)
   await acceptTaskArtifacts(input, itemResult.artifacts, 'P8-item-reward-catalog')
   const plan = await createTextOpenWorldProductionPlanV1({
     buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
@@ -4839,6 +4880,123 @@ describe('R-OPEN-WORLD3 · P8 ItemRewardCatalog', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
+  it('紧凑输入与已冻结展开输入编译出相同物品来源，旧候选可原样重放', async () => {
+    const input = await itemRewardCatalogFixture()
+    const compact = input.itemRewardContext
+    expect(compact.itemSourceChoices).toMatchObject({ format: 'item-source-choice-table-v1' })
+    const expanded = structuredClone(compact)
+    expanded.itemSourceChoices = unpackTextOpenWorldItemSourceChoicesV1(expanded.itemSourceChoices)
+    expanded.rewardDemands = unpackTextOpenWorldRewardDemandsV1(expanded.rewardDemands)
+    const { contextSelectionHash: _hash, ...body } = expanded
+    expanded.contextSelectionHash = await hashProductProductionValueV2(body)
+    const expandedText = canonicalProductProductionJsonV2(expanded)
+    expect(estimateTokens(input.itemRewardContextText)).toBeLessThan(estimateTokens(expandedText))
+    const oldInput = { ...input, itemRewardContext: expanded, itemRewardContextText: expandedText }
+    const old = (await executeItemRewardCatalog(oldInput)).artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    const current = (await executeItemRewardCatalog(input)).artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    for (const key of ['items', 'rewardContracts', 'dropTables', 'itemSourcePlans', 'coverage', 'governance'] as const) {
+      expect(current[key]).toEqual(old[key])
+    }
+    const draft = await projectTextOpenWorldItemRewardCatalogAuthorEditableDraftV1({ artifact: old, context: expanded })
+    await expect(rebuildTextOpenWorldItemRewardCatalogFromAuthorEditableDraftV1({ baseArtifact: old, context: expanded, draft })).resolves.toEqual(old)
+    expect(canonicalProductProductionJsonV2(expanded)).toBe(expandedText)
+    const badTable = structuredClone(compact)
+    if (Array.isArray(badTable.itemSourceChoices)) throw new Error('expected compact table')
+    badTable.itemSourceChoices!.rows[0]![4] = 999
+    const { contextSelectionHash: _badHash, ...badBody } = badTable
+    badTable.contextSelectionHash = await hashProductProductionValueV2(badBody)
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact: current, context: badTable })).rejects.toThrow(/来源候选不是上游确定性投影/)
+  }, 180_000)
+
+  it('登记输入在调用前把提示词与消息封装计入原任务预算', async () => {
+    const input = await itemRewardCatalogFixture()
+    const selectors = { projectId: input.scope.projectId, scope: input.scope,
+      productProductionId: input.production.id!, productBuildId: input.build.id! }
+    await expect(readTextOpenWorldItemRewardCatalogInputContextV1({ ...selectors,
+      inputBudgetTokens: estimateTokens(input.itemRewardContextText),
+    })).rejects.toThrow(/完整输入含提示词.*未调用模型/)
+    await expect(readTextOpenWorldItemRewardCatalogInputContextV1({ ...selectors,
+      inputBudgetTokens: input.task.budgetReservation.inputTokens,
+    })).resolves.toBe(input.itemRewardContextText)
+  }, 180_000)
+
+  it('旧冻结Context与候选原样重放；新旧草稿不能互换或移除来源合同降级', async () => {
+    const input = await itemRewardCatalogFixture()
+    const legacy = structuredClone(input.itemRewardContext)
+    delete legacy.itemSourceContract
+    delete legacy.itemSourceChoices
+    legacy.rewardDemands = unpackTextOpenWorldRewardDemandsV1(legacy.rewardDemands)
+    for (const reward of legacy.rewardDemands.filter(reward => reward.sourceKind === 'quest')) {
+      const objectiveKeys = legacy.questSkeletons.objectives.filter(objective => objective.questKey === reward.sourceSemanticKey).map(objective => objective.key)
+      reward.mandatoryItemDemandNumbers = legacy.contentRequirementManifest.requirements
+        .filter(requirement => requirement.consumerRefs.some(ref => ref.kind === 'quest-objective' && objectiveKeys.includes(ref.consumerKey)))
+        .flatMap(requirement => legacy.itemDemands.filter(item => item.requirementKey === requirement.key).map(item => item.demandNumber))
+    }
+    const { contextSelectionHash: _oldHash, ...legacyBody } = legacy
+    legacy.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
+    const legacyInput = { ...input, itemRewardContext: legacy, itemRewardContextText: canonicalProductProductionJsonV2(legacy) }
+    const old = (await executeItemRewardCatalog(legacyInput)).artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    expect(old.itemSourceContract).toBeUndefined()
+    const original = canonicalProductProductionJsonV2(old)
+    const draft = await projectTextOpenWorldItemRewardCatalogAuthorEditableDraftV1({ artifact: old, context: legacy })
+    await expect(rebuildTextOpenWorldItemRewardCatalogFromAuthorEditableDraftV1({ baseArtifact: old, context: legacy, draft })).resolves.toEqual(old)
+    expect(canonicalProductProductionJsonV2(old)).toBe(original)
+    const downgrade: TextOpenWorldItemRewardCatalogModelRunnerV1 = async request => itemRewardCatalogRunner()({ ...request, contextText: legacyInput.itemRewardContextText })
+    await expect(executeItemRewardCatalog(input, downgrade)).rejects.toThrow(/schema\/version/)
+    const upgrade: TextOpenWorldItemRewardCatalogModelRunnerV1 = async request => itemRewardCatalogRunner()({ ...request, contextText: input.itemRewardContextText })
+    await expect(executeItemRewardCatalog(legacyInput, upgrade)).rejects.toThrow(/schema\/version/)
+    const partial = structuredClone(input.itemRewardContext)
+    delete partial.itemSourceContract
+    const { contextSelectionHash: _partialHash, ...partialBody } = partial
+    partial.contextSelectionHash = await hashProductProductionValueV2(partialBody)
+    await expect(executeItemRewardCatalog({ ...input, itemRewardContextText: canonicalProductProductionJsonV2(partial) })).rejects.toThrow(/来源合同/)
+  }, 180_000)
+
+  it('重新计算Hash也不能伪造来源候选或移除已冻结物品来源', async () => {
+    const input = await itemRewardCatalogFixture()
+    const artifact = (await executeItemRewardCatalog(input)).artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    const forgedContext = structuredClone(input.itemRewardContext)
+    forgedContext.itemSourceChoices = unpackTextOpenWorldItemSourceChoicesV1(forgedContext.itemSourceChoices)
+    forgedContext.itemSourceChoices[0]!.eligibleItemDemandNumbers.push(999)
+    const { contextSelectionHash: _contextHash, ...contextBody } = forgedContext
+    forgedContext.contextSelectionHash = await hashProductProductionValueV2(contextBody)
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact, context: forgedContext })).rejects.toThrow(/来源候选不是上游确定性投影/)
+    const forged = structuredClone(artifact)
+    forged.itemSourcePlans![2]!.sources = []
+    const { itemRewardCatalogHash: _hash, ...body } = forged
+    forged.itemRewardCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact: forged, context: input.itemRewardContext })).rejects.toThrow(/缺来源|精确覆盖/)
+  }, 180_000)
+
+  it('六件消费材料都有明确来源，不被四件奖励截断或在交付后倒发', async () => {
+    const input = await itemRewardCatalogFixture()
+    const manifest = structuredClone(input.itemRewardContext.contentRequirementManifest)
+    const material = manifest.requirements.find(requirement => requirement.kind === 'material')!
+    material.minimumCount = 6
+    const { contentRequirementManifestHash: _oldHash, ...body } = manifest
+    manifest.contentRequirementManifestHash = await hashProductProductionValueV2(body)
+    const row = await db.productBuildArtifacts.where('buildId').equals(input.build.id!)
+      .filter(row => row.artifactKey === 'text-open-world.content-requirement-manifest' && row.status === 'accepted').first()
+    await db.productBuildArtifacts.update(row!.id!, {
+      payloadJson: canonicalProductProductionJsonV2(manifest), contentHash: await hashProductProductionValueV2(manifest),
+    })
+    input.itemRewardContextText = await readTextOpenWorldItemRewardCatalogInputContextV1({
+      projectId: input.scope.projectId, scope: input.scope,
+      productProductionId: input.production.id!, productBuildId: input.build.id!,
+    })
+    input.itemRewardContext = JSON.parse(input.itemRewardContextText)
+    const result = await executeItemRewardCatalog(input)
+    const catalog = result.artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    const materials = catalog.items.filter(item => item.fulfilledRequirementKeys.includes(material.key))
+    expect(materials).toHaveLength(6)
+    const consumers = new Set(material.consumerRefs.filter(ref => ref.kind === 'quest-objective').map(ref => (
+      input.itemRewardContext.questSkeletons.objectives.find(objective => objective.key === ref.consumerKey)!.questKey
+    )))
+    expect(catalog.rewardContracts.filter(reward => consumers.has(reward.sourceSemanticKey))
+      .flatMap(reward => reward.grants.items).some(grant => materials.some(item => item.key === grant.itemKey))).toBe(false)
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact: catalog, context: input.itemRewardContext })).resolves.toEqual(catalog)
+  }, 180_000)
+
   it('闭合初始物品、内容需求、全部任务/遭遇奖励、敌人掉落与主线1到5级经验预算', async () => {
     const input = await itemRewardCatalogFixture()
     expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.item-reward-catalog-input')).toMatchObject({
@@ -4852,7 +5010,7 @@ describe('R-OPEN-WORLD3 · P8 ItemRewardCatalog', () => {
       expect.objectContaining({ key: 'text-open-world.item-reward-catalog-input', status: 'included', delivery: 'full' }),
     ])
     expect(input.itemRewardContext.itemDemands).toHaveLength(9)
-    expect(input.itemRewardContext.rewardDemands).toHaveLength(28)
+    expect(unpackTextOpenWorldRewardDemandsV1(input.itemRewardContext.rewardDemands)).toHaveLength(28)
 
     const result = await executeItemRewardCatalog(input)
     const artifact = result.artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
@@ -4926,16 +5084,52 @@ describe('R-OPEN-WORLD3 · P8 CraftingEconomyCatalog', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
+  it('制作专属产物可进入配方，原料另有来源且商店不得暗补产物', async () => {
+    let craftedItemNumber = 0
+    const runItems: TextOpenWorldItemRewardCatalogModelRunnerV1 = async request => {
+      const response = await itemRewardCatalogRunner()(request)
+      const context = JSON.parse(request.contextText) as TextOpenWorldItemRewardCatalogInputContextV1
+      const draft = JSON.parse(response.output)
+      const recipe = unpackTextOpenWorldItemSourceChoicesV1(context.itemSourceChoices).find(choice => choice.kind === 'craft')!
+      craftedItemNumber = context.itemDemands.find(item => item.demandKind === 'content-requirement'
+        && item.plannedKind === 'material' && recipe.eligibleItemDemandNumbers.includes(item.demandNumber))!.demandNumber
+      draft.items.forEach((item: { sourceChoiceNumbers: number[] }) => {
+        item.sourceChoiceNumbers = item.sourceChoiceNumbers.filter(number => number !== recipe.choiceNumber)
+      })
+      draft.items[craftedItemNumber - 1].sourceChoiceNumbers = [recipe.choiceNumber]
+      return { ...response, output: JSON.stringify(draft) }
+    }
+    const input = await craftingEconomyFixture(runItems)
+    const catalog = input.craftingEconomyContext.itemRewardCatalog
+    const craftedKey = catalog.items[craftedItemNumber - 1]!.key
+    expect(catalog.rewardContracts.flatMap(reward => reward.grants.items).some(item => item.itemKey === craftedKey)).toBe(false)
+    expect(input.craftingEconomyContext.recipeDemands[0]!.candidateOutputItemKeys).toEqual([craftedKey])
+    expect(input.craftingEconomyContext.recipeDemands.every(demand => !demand.candidateIngredientItemKeys.includes(craftedKey))).toBe(true)
+    const result = await executeCraftingEconomy(input)
+    const economy = result.artifacts[0]!.payload as TextOpenWorldCraftingEconomyCatalogV1
+    expect(economy.recipes[0]!.outputs.map(output => output.itemKey)).toEqual([craftedKey])
+    expect(economy.vendors.flatMap(vendor => vendor.inventoryEntries).some(item => item.itemKey === craftedKey)).toBe(false)
+    await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact: economy, context: input.craftingEconomyContext })).resolves.toEqual(economy)
+    await expect(executeCraftingEconomy(input, async request => {
+      const response = await craftingEconomyRunner()(request)
+      const draft = JSON.parse(response.output)
+      draft.vendors[0].inventoryItemNumbers.push(craftedItemNumber)
+      return { ...response, output: JSON.stringify(draft) }
+    })).rejects.toThrow(/商店不得增添未选择的物品来源/)
+  }, 210_000)
+
   it('保留多项商店选货顺序并在完整目录复验时拒绝库存缺件', async () => {
     const input = await craftingEconomyFixture()
     const tradeable = input.craftingEconomyContext.itemRewardCatalog.items
-      .flatMap((item, index) => !item.critical && item.sellable ? [index + 1] : [])
-    expect(tradeable.length).toBeGreaterThan(2)
+      .flatMap((item, index) => input.craftingEconomyContext.itemRewardCatalog.itemSourcePlans!
+        .find(plan => plan.itemKey === item.key)!.sources.some(source => source.kind === 'vendor'
+          && source.sourceKey === input.craftingEconomyContext.vendorDemands[0]!.sourceDemandKey) ? [index + 1] : [])
+    expect(tradeable.length).toBeGreaterThan(1)
     const selections = tradeable.slice(0, 12).reverse()
     const runModel: TextOpenWorldCraftingEconomyModelRunnerV1 = async request => {
       const response = await craftingEconomyRunner()(request)
       const draft = JSON.parse(response.output)
-      for (const vendor of draft.vendors) vendor.inventoryItemNumbers = selections
+      draft.vendors[0].inventoryItemNumbers = selections
       return { ...response, output: JSON.stringify(draft) }
     }
     const result = await executeCraftingEconomy(input, runModel)
@@ -4949,7 +5143,7 @@ describe('R-OPEN-WORLD3 · P8 CraftingEconomyCatalog', () => {
     const { craftingEconomyCatalogHash: _hash, ...body } = missingStock
     missingStock.craftingEconomyCatalogHash = await hashProductProductionValueV2(body)
     await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact: missingStock, context: input.craftingEconomyContext }))
-      .rejects.toThrow(/配方、商店、价格、来源\/消耗或运行绑定被篡改/)
+      .rejects.toThrow(/配方、商店、价格、来源\/消耗或运行绑定被篡改|实际奖励、掉落、配方、库存或领取不闭合/)
   }, 210_000)
 
   it('把任务需求和地区保底供给编译为来源/消耗闭合且无风险套利的配方商店目录', async () => {

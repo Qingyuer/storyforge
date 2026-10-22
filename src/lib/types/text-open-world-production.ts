@@ -2612,6 +2612,13 @@ export interface TextOpenWorldEnemyEncounterCatalogV1 {
   enemyEncounterCatalogHash: string
 }
 
+export type TextOpenWorldItemSourceKindV1 = 'initial' | 'reward' | 'drop' | 'craft' | 'vendor' | 'acquisition'
+
+export interface TextOpenWorldItemSourcePlanV1 {
+  itemKey: string
+  sources: Array<{ kind: TextOpenWorldItemSourceKindV1; sourceKey: string }>
+}
+
 export interface TextOpenWorldItemRewardCatalogV1 {
   schema: 'storyforge.text-open-world-item-reward-catalog'
   version: 1
@@ -2623,6 +2630,9 @@ export interface TextOpenWorldItemRewardCatalogV1 {
   contentRequirementManifestHash: string
   progressionCatalogsHash: string
   enemyEncounterCatalogHash: string
+  /** Omission preserves the original frozen v1 compiler, including its hashes. */
+  itemSourceContract?: 'explicit-producers-v1'
+  itemSourcePlans?: TextOpenWorldItemSourcePlanV1[]
   equipmentSlots: TextOpenWorldGameplayRulesetSkeletonV1['inventory']['equipmentSlots']
   items: Array<{
     key: string
