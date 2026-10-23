@@ -779,7 +779,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== authorization.vendorKey
         || projection.protocol.pendingActionQuantity !== authorization.quantity || projection.protocol.pendingActionItemKey !== authorization.itemKey
         || action.category !== authorization.transactionKind || action.actorScope !== 'player' || action.targetScope !== 'vendor'
-        || applied.plan.effectKeys.length !== 1 || applied.plan.effectKeys[0] !== action.successEffectKeys[0]
+        || canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(action.successEffectKeys)
         || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('交易授权与命令或Action不一致')
       const marker = applied.plan.effects[0]
       if (marker.operation !== 'perform-transaction' || marker.payload.kind !== authorization.transactionKind || marker.payload.vendorKey !== authorization.vendorKey) fail('交易Effect与授权不一致')
@@ -975,6 +975,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       health: state.player.health, maximumHealth: playerStats.maximumHealth,
       skillResource: state.player.skillResource, maximumSkillResource: playerStats.maximumSkillResource,
       morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys],
+      ...(modules.actions.version >= 20 ? { learnedSkillKeys: state.player.learnedSkillKeys } : {}),
     },
     inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory)).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
     quests: { ...questCondition, resultTags: [...state.quests.resultTags] },

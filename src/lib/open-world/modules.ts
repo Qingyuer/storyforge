@@ -521,7 +521,7 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -1510,11 +1510,11 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
     costs.forEach(effect => {
       const payload = row(effect.payload, 'objective fulfillment cost')
       const item = itemRows.find(item => item.key === payload.itemKey)
-      if (effect.operation !== 'remove-item' || payload.reason !== 'fulfillment' || !item || item.critical || item.stackPolicy !== 'stacked'
-        || !Number.isSafeInteger(payload.quantity) || Number(payload.quantity) < 1 || Number(payload.quantity) > Number(item.maximumStack)
+      if (effect.operation !== 'remove-item' || payload.reason !== 'fulfillment' || !item || item.critical || (item.stackPolicy !== 'stacked' && (Number(actions.version) < 20 || item.unique || item.kind !== 'equipment'))
+        || !Number.isSafeInteger(payload.quantity) || Number(payload.quantity) < 1 || Number(payload.quantity) > Number(item.maximumStack ?? 1)
         || !requirementExpressions.some(expression => canonicalProductProductionJsonV2(expression) === canonicalProductProductionJsonV2({
           op: 'inventory-quantity', itemKey: item.key, comparator: 'gte', value: payload.quantity,
-        }))) fail('目标交付只能原子扣除有持有条件的非关键堆叠物品')
+        }))) fail('目标交付必须原子扣除有持有条件且符合当前合同的非关键物品')
     })
     if (new Set(costs.map(effect => row(effect.payload, 'objective cost').itemKey)).size !== costs.length) fail('目标交付不能重复扣除同种物品')
     if (String(action.key).startsWith('action.interaction.')) {
@@ -2252,7 +2252,7 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
         if (action.category !== transactionKind || action.actorScope !== 'player' || action.targetScope !== 'vendor'
           || strings(action.costEffectKeys, `vendor ${vendor.key} ${transactionKind} costs`).length
           || strings(action.failureEffectKeys, `vendor ${vendor.key} ${transactionKind} failures`).length
-          || successEffectKeys.length !== 1 || markers.length !== 1 || Number(action.timeCostMinutes) !== 0
+          || successEffectKeys.length !== (Number(actions.version) >= 20 && transactionKind === 'buy' ? 2 : 1) || markers.length !== 1 || successEffectKeys[0] !== markers[0].key || Number(action.timeCostMinutes) !== 0
           || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) {
           fail(`商店交易Action合同无效:${vendor.key}:${transactionKind}`)
         }
@@ -2261,6 +2261,11 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
         const marker = row(markers[0].payload, `vendor ${vendor.key} ${transactionKind} marker`)
         exact(marker, ['kind', 'vendorKey'], `vendor ${vendor.key} ${transactionKind} marker`)
         if (marker.kind !== transactionKind || marker.vendorKey !== vendor.key) fail(`商店交易Effect与Vendor不一致:${vendor.key}:${transactionKind}`)
+        if (Number(actions.version) >= 20 && transactionKind === 'buy') {
+          const proof = effects.find(effect => effect.key === successEffectKeys[1])!
+          if (proof.operation !== 'prove-purchase' || proof.key !== `effect.fulfillment.purchase.${vendor.key}`
+            || canonicalProductProductionJsonV2(proof.payload) !== canonicalProductProductionJsonV2({ vendorKey: vendor.key })) fail('购买证明必须绑定本商店交易')
+        }
         ownedActionKeys.push(String(actionKey))
         ownedEffectKeys.push(String(markers[0].key))
       }
@@ -2277,6 +2282,16 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
       if (owners.length !== 1) fail(`perform-transaction Effect必须且只能属于一个交易Action:${String(effect.key)}`)
     })
   } else if (performTransactionEffects.length) fail('旧Economy模块不能包含正式交易Effect')
+  const purchaseProofs = effects.filter(effect => effect.operation === 'prove-purchase')
+  if (Number(actions.version) < 20 && purchaseProofs.length) fail('旧Action不能携带购买证明')
+  if (Number(actions.version) >= 20) {
+    requireSameKeys(purchaseProofs.map(effect => String(effect.key)), normalizedVendors.map(vendor => `effect.fulfillment.purchase.${vendor.key}`), '购买证明覆盖')
+    purchaseProofs.forEach(effect => {
+      const owners = actionRows.filter(action => [...strings(action.costEffectKeys, 'purchase costs'), ...strings(action.successEffectKeys, 'purchase success'), ...strings(action.failureEffectKeys, 'purchase failure')].includes(String(effect.key)))
+      if (owners.length !== 1 || owners[0].category !== 'buy' || rewardContracts.some(reward => strings(reward.effectKeys, 'purchase reward').includes(String(effect.key)))) fail('购买证明只能归属一个实际购买操作')
+    })
+    if (effects.some(effect => effect.operation === 'set-world-flag' && String(row(effect.payload, 'purchase flag').flagKey).startsWith('flag.fulfillment.purchase.'))) fail('不能以任意标志伪造购买证明')
+  }
   const normalizedEconomy: TextOpenWorldParsedModulesV1['economy'] = {
     version: 2, sourceVersion: modernEconomy ? 2 : 1,
     currency: { key: 'currency', label: String(currency.label) },

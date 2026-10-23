@@ -323,6 +323,7 @@ function effectDetail(
     case 'initialize-combat':
     case 'settle-combat-state':
     case 'perform-combat-action':
+    case 'prove-purchase':
     case 'perform-transaction':
     case 'settle-director': return null
   }

@@ -67,6 +67,7 @@ import { resolveTextOpenWorldSceneRegionV1 } from './scene-region-binding'
 import { validateTextOpenWorldDeterministicPreflightV1 } from './system-finalize-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
 import { assertTextOpenWorldItemSourceClosureV1 } from './item-source-production'
+import { resolveTextOpenWorldVendorServiceV1 } from './npc-runtime-catalog-production'
 import {
   evaluateTextOpenWorldMediaCoverageV1,
   verifyTextOpenWorldMediaRightsV1,
@@ -442,10 +443,12 @@ function compileModulePayloads(
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
   if (actionModuleVersion !== 15 && actionModuleVersion !== 16
-    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19) {
+    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19 && actionModuleVersion !== 20) {
     fail('SystemConfigs任务Action版本无效')
   }
-  const expectedActionModuleVersion = qdd.governance.fixedObjectiveFulfillmentReady === true
+  const expectedActionModuleVersion = qdd.governance.actionPathEvidenceReady === true
+    ? 20
+    : qdd.governance.fixedObjectiveFulfillmentReady === true
     ? 19
     : qdd.governance.protectedStoryRevealActionsReady === true
     ? 18
@@ -501,9 +504,35 @@ function compileModulePayloads(
   const encounterBindingByKey = new Map(binding.encounters.map(item => [item.encounterKey, item]))
   const recipeBindingByKey = new Map(binding.recipes.map(item => [item.recipeKey, item]))
   const vendorBindingByKey = new Map(binding.vendors.map(item => [item.vendorKey, item]))
-  const runtimeVendorKeys = new Set(artifacts.craftingEconomy.vendors.map(vendor => vendor.key))
+  const canonicalVendorOwners = artifacts.npcs.vendorIdentityContract === 'canonical-vendor-owners-v1'
+  const vendorServices: Array<{
+    catalog: TextOpenWorldCraftingEconomyCatalogV1['vendors'][number]
+    binding: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['vendors'][number]
+    title: string
+  }> = artifacts.craftingEconomy.vendors.flatMap(vendor => {
+    const runtime = vendorBindingByKey.get(vendor.key) ?? fail(`商店未完成P8F绑定:${vendor.key}`)
+    const { actor, replacement } = resolveTextOpenWorldVendorServiceV1(artifacts.npcs, {
+      ...vendor, actorRequirementKey: vendor.runtimeBinding.actorRequirementKey,
+    })
+    if (runtime.actorKey !== actor.key || runtime.factionKey !== actor.factionKey) fail(`商店P8F角色身份不匹配:${vendor.key}`)
+    if (replacement) {
+      const expectedKey = `vendor.replacement.${vendor.key}`
+      if (!runtime.replacement || runtime.replacement.actorKey !== replacement.key
+        || runtime.replacement.vendorKey !== expectedKey
+        || runtime.replacement.buyActionKey !== `action.buy.${expectedKey}`
+        || runtime.replacement.sellActionKey !== `action.sell.${expectedKey}`) fail(`商店接替未在P8F完整绑定:${vendor.key}`)
+      return [
+        { catalog: vendor, binding: runtime, title: vendor.title },
+        { catalog: vendor, title: `${vendor.title}接替服务`, binding: {
+          ...runtime.replacement, factionKey: runtime.factionKey, availabilityConditionKeys: runtime.availabilityConditionKeys,
+        } },
+      ]
+    }
+    if (runtime.replacement) fail(`商店不允许额外接替绑定:${vendor.key}`)
+    return [{ catalog: vendor, binding: runtime, title: vendor.title }]
+  })
   const serviceKeysByActor = new Map<string, string[]>()
-  for (const vendor of binding.vendors) {
+  for (const { binding: vendor } of vendorServices) {
     serviceKeysByActor.set(vendor.actorKey, [...(serviceKeysByActor.get(vendor.actorKey) ?? []), vendor.vendorKey])
   }
   const edgeBindingByKey = new Map(binding.edges.map(item => [item.edgeKey, item]))
@@ -730,17 +759,19 @@ function compileModulePayloads(
         key: schedule.key, actorKey: schedule.actorKey,
         entries: schedule.entries.map(entry => ({
           ...entry,
-          availableServiceKeys: (serviceKeysByActor.get(schedule.actorKey) ?? []).filter(serviceKey => (
-            artifacts.craftingEconomy.vendors.find(vendor => vendor.key === serviceKey)?.locationKey === entry.locationKey
-          )),
+          availableServiceKeys: vendorServices.filter(service => service.binding.actorKey === schedule.actorKey
+            && service.catalog.locationKey === entry.locationKey
+            && (!canonicalVendorOwners || entry.availableServiceKeys.includes(`service.${service.catalog.key}`)))
+            .map(service => service.binding.vendorKey),
         })),
       })),
-      serviceContinuity: [...runtimeVendorKeys].map(serviceKey => {
-        const ownerActorKey = vendorBindingByKey.get(serviceKey)?.actorKey ?? fail(`商店没有Actor绑定:${serviceKey}`)
+      serviceContinuity: vendorServices.map(({ binding: runtime }) => {
+        const serviceKey = runtime.vendorKey
         return {
-          key: `service-continuity.${serviceKey}`, ownerActorKey, serviceKey,
-          policy: 'disappear-on-owner-death' as const,
-          replacementActorKey: null, replacementServiceKey: null,
+          key: `service-continuity.${serviceKey}`, ownerActorKey: runtime.actorKey, serviceKey,
+          policy: runtime.replacement ? 'replace-on-owner-death' as const : 'disappear-on-owner-death' as const,
+          replacementActorKey: runtime.replacement?.actorKey ?? null,
+          replacementServiceKey: runtime.replacement?.vendorKey ?? null,
         }
       }),
     },
@@ -948,10 +979,9 @@ function compileModulePayloads(
         maximumTransactionQuantity: artifacts.craftingEconomy.economyRules.maximumTransactionQuantity,
         maximumTransactionTotal: artifacts.craftingEconomy.economyRules.maximumTransactionTotal,
       },
-      vendors: artifacts.craftingEconomy.vendors.map(vendor => {
-        const runtime = vendorBindingByKey.get(vendor.key) ?? fail(`商店未完成P8F绑定:${vendor.key}`)
+      vendors: vendorServices.map(({ catalog: vendor, binding: runtime, title }) => {
         return {
-          key: vendor.key, title: vendor.title, actorKey: runtime.actorKey,
+          key: runtime.vendorKey, title, actorKey: runtime.actorKey,
           locationKey: vendor.locationKey, factionKey: runtime.factionKey,
           buyPriceMultiplierBasisPoints: vendor.buyPriceMultiplierBasisPoints,
           sellPriceMultiplierBasisPoints: vendor.sellPriceMultiplierBasisPoints,

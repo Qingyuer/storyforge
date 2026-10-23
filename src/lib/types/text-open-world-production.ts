@@ -2864,6 +2864,8 @@ export type TextOpenWorldNpcRuntimeDemandKindV1 =
 export interface TextOpenWorldNpcRuntimeCatalogV1 {
   schema: 'storyforge.text-open-world-npc-runtime-catalog'
   version: 1
+  /** Absent on frozen legacy catalogs: vendor reservations remain separate actors. */
+  vendorIdentityContract?: 'canonical-vendor-owners-v1'
   productType: 'text-open-world'
   productInstanceKey: string
   gameplayRulesetHash: string
@@ -3128,10 +3130,12 @@ export type TextOpenWorldQuestBindingDefinitionKindV1 =
  * Template instances retain their own runtime lifecycle; historical operation
  * flags must never be used to claim fresh work by a repeated template. */
 export interface TextOpenWorldQuestFulfillmentSelectionsV1 {
-  version: 1
+  version: 1 | 2
   objectives: Array<{
     objectiveNumber: number
     anyActionGroups: number[][]
+    /** v2: inventory held on each alternative path, parallel to anyActionGroups. */
+    groupItems?: Array<Array<{ itemNumber: number; quantity: number }>>
     items: Array<{ itemNumber: number; quantity: number; consume: boolean }>
   }>
   interactions: Array<{
@@ -3144,6 +3148,8 @@ export interface TextOpenWorldQuestFulfillmentSelectionsV1 {
 /** P8F v4: one-time acquisition at a fixed objective's frozen interaction.
  * These are candidate ordinals, never model-authored runtime effects. */
 export interface TextOpenWorldItemAcquisitionSelectionV1 {
+  /** Fresh contracts permit bounded replacement of missing ordinary deliveries. */
+  replacementPolicy?: 'never' | 'missing-ordinary'
   objectiveNumber: number
   interactionNumber: number
   items: Array<{ itemNumber: number; quantity: number }>
@@ -3382,6 +3388,12 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
       availabilityConditionKeys: string[]
       buyActionKey: string
       sellActionKey: string
+      replacement?: {
+        vendorKey: string
+        actorKey: string
+        buyActionKey: string
+        sellActionKey: string
+      }
     }>
     actors: Array<{ actorKey: string; questKeys: string[]; actionKeys: string[] }>
     interactions: Array<{
@@ -3461,6 +3473,7 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     storyOutcomesRuntimeBound?: true
     /** Action v19 records successful crafts and explicitly settled repairs. */
     fixedObjectiveFulfillmentReady?: true
+    actionPathEvidenceReady?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true

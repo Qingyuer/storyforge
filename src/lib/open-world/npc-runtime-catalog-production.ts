@@ -78,6 +78,7 @@ interface ActorDemandV1 {
 export interface TextOpenWorldNpcRuntimeInputContextV1 {
   schema: 'storyforge.text-open-world-npc-runtime-input'
   version: 1
+  vendorIdentityContract?: 'canonical-vendor-owners-v1'
   productInstanceKey: string
   gameplayRuleset: TextOpenWorldGameplayRulesetSkeletonV1
   regionNarrativePacks: TextOpenWorldRegionNarrativePacksV1
@@ -249,6 +250,7 @@ function buildDemands(input: {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldNpcRuntimeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.vendorIdentityContract !== undefined && context.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('商店身份合同无效')
   const { gameplayRuleset, regionNarrativePacks, questSkeletons, contentRequirementManifest, craftingEconomyCatalog } = context
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   for (const [value, hashKey, label] of [
@@ -301,6 +303,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
   const demands = buildDemands({ packs: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest, crafting: craftingEconomyCatalog })
   const body: Omit<TextOpenWorldNpcRuntimeInputContextV1, 'contextSelectionHash'> = {
     schema: 'storyforge.text-open-world-npc-runtime-input', version: 1, productInstanceKey: production.productionKey,
+    vendorIdentityContract: 'canonical-vendor-owners-v1',
     gameplayRuleset, regionNarrativePacks, questSkeletons, contentRequirementManifest, craftingEconomyCatalog, ...demands,
   }
   await validateUpstream(body)
@@ -330,6 +333,7 @@ function identityReuses(
   fixedKeys: Array<string | null>,
   field: 'reuseActorDemandNumber' | 'reuseFactionDemandNumber',
   version: number,
+  vendorActors?: ActorDemandV1[],
 ): Map<number, number> {
   const reuses = new Map<number, number>()
   const label = field === 'reuseActorDemandNumber' ? '角色' : '势力'
@@ -337,23 +341,33 @@ function identityReuses(
     const row = record(value, `${label}[${index}]`)
     if (row.demandNumber !== index + 1) fail(`${label}必须按需求顺序精确覆盖`)
     if (!Object.prototype.hasOwnProperty.call(row, field)) return
-    if (version !== 2) fail('身份复用需要draft version 2')
+    if (version !== 2 && version !== 3) fail('身份复用需要draft version 2或3')
     exactKeys(row, ['demandNumber', field], `${label}复用`)
-    if (fixedKeys[index]) fail(`已预留${label}身份不得合并`)
+    const vendorRole = version === 3 && vendorActors?.[index]?.demandKind === 'vendor-service'
+    if (fixedKeys[index] && !vendorRole) fail(`已预留${label}身份不得合并`)
     const target = integer(row[field], field, 1, index)
     if (!fixedKeys[target - 1] || !demands[target - 1]!.requirementKey) fail(`${label}只能复用此前已预留的同类身份`)
+    if (vendorRole) {
+      const source = vendorActors![index]!
+      const owner = vendorActors![target - 1]!
+      if (owner.demandKind !== 'content-requirement' || owner.regionKey !== source.regionKey
+        || owner.homeLocationKey !== source.homeLocationKey) fail('商店岗位只能绑定同地区同家园的固定内容角色')
+    }
     reuses.set(index + 1, target)
   })
   for (const target of new Set(reuses.values())) {
     const members = demands.filter(demand => demand.demandNumber === target || reuses.get(demand.demandNumber) === target)
-    if (new Set(members.map(demand => demand.requirementKey)).size !== members.length) fail(`${label}复用不得降低同一需求的最小数量`)
+    const countedMembers = version === 3 && vendorActors ? members.filter(demand => demand.requirementKey !== null) : members
+    if (new Set(countedMembers.map(demand => demand.requirementKey)).size !== countedMembers.length) fail(`${label}复用不得降低同一需求的最小数量`)
   }
   return reuses
 }
 
 function parseDraft(value: unknown, context: TextOpenWorldNpcRuntimeInputContextV1): CatalogDraftV1 {
   const root = record(value, 'draft'); exactKeys(root, ['schema', 'version', 'factions', 'actors', 'attitudeBands'], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-npc-runtime-draft' || (root.version !== 1 && root.version !== 2)) fail('draft schema/version无效')
+  if (root.schema !== 'storyforge.text-open-world-npc-runtime-draft'
+    || ![1, 2, 3].includes(Number(root.version)) || typeof root.version !== 'number') fail('draft schema/version无效')
+  if (root.version === 3 && context.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('draft version 3需要新商店身份合同')
   if (!Array.isArray(root.factions) || root.factions.length !== context.factionDemands.length) fail(`factions必须与${context.factionDemands.length}项需求一一对应`)
   const factionRows = root.factions
   const factionReuses = identityReuses(factionRows, context.factionDemands, context.factionDemands.map(demand => demand.fixedFactionKey), 'reuseFactionDemandNumber', root.version)
@@ -370,7 +384,8 @@ function parseDraft(value: unknown, context: TextOpenWorldNpcRuntimeInputContext
   if (factions.some((faction, index) => faction.demandNumber !== index + 1)) fail('factions必须按需求顺序精确覆盖')
   if (!Array.isArray(root.actors) || root.actors.length !== context.actorDemands.length) fail(`actors必须与${context.actorDemands.length}项需求一一对应`)
   const actorRows = root.actors
-  const actorReuses = identityReuses(actorRows, context.actorDemands, context.actorDemands.map(demand => demand.fixedActorKey), 'reuseActorDemandNumber', root.version)
+  const actorReuses = identityReuses(actorRows, context.actorDemands, context.actorDemands.map(demand => demand.fixedActorKey), 'reuseActorDemandNumber', root.version,
+    context.vendorIdentityContract ? context.actorDemands : undefined)
   const actors = root.actors.map((value, index) => {
     const reuse = actorReuses.get(index + 1)
     const primaryNumber = reuse ?? index + 1
@@ -402,6 +417,49 @@ function factionKey(demand: FactionDemandV1, index: number): string {
 }
 function serviceKey(actorKeyValue: string, label: string, index: number): string {
   return label.startsWith('vendor.catalog.') ? `service.${label}` : `service.${actorKeyValue}.${String(index).padStart(3, '0')}`
+}
+
+/** Vendor reservations describe service roles; only a fresh, explicit identity
+ * contract may resolve them through canonical actor provenance. */
+export function resolveTextOpenWorldVendorActorV1(
+  catalog: Pick<TextOpenWorldNpcRuntimeCatalogV1, 'actors' | 'vendorIdentityContract'>,
+  vendor: { key: string; actorRequirementKey: string; regionKey: string; locationKey: string },
+) {
+  if (!catalog.vendorIdentityContract) return catalog.actors.find(actor => (
+    actor.sourceDemandKey === vendor.actorRequirementKey || actor.key === vendor.actorRequirementKey
+  )) ?? fail(`商店Actor预留未兑现:${vendor.key}`)
+  if (catalog.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('商店身份合同无效')
+  const matches = catalog.actors.filter(actor => actor.demandKind !== 'service-replacement'
+    && actor.sourceRefs.includes(`vendor-service.${vendor.key}`))
+  if (matches.length !== 1) fail(`商店岗位缺少唯一角色来源映射:${vendor.key}`)
+  const actor = matches[0]!
+  if (!actor.serviceKeys.includes(`service.${vendor.key}`)
+    || actor.regionKey !== vendor.regionKey || actor.homeLocationKey !== vendor.locationKey) fail(`商店岗位的服务或地点不匹配:${vendor.key}`)
+  return actor
+}
+
+export function resolveTextOpenWorldVendorServiceV1(
+  catalog: Pick<TextOpenWorldNpcRuntimeCatalogV1, 'actors' | 'vendorIdentityContract' | 'serviceContinuity'>,
+  vendor: { key: string; actorRequirementKey: string; regionKey: string; locationKey: string },
+) {
+  const actor = resolveTextOpenWorldVendorActorV1(catalog, vendor)
+  if (!catalog.vendorIdentityContract) return { actor, replacement: null }
+  const rules = catalog.serviceContinuity.filter(rule => rule.ownerActorKey === actor.key && rule.serviceKey === `service.${vendor.key}`)
+  if (rules.length !== 1) fail(`商店缺少唯一服务连续性:${vendor.key}`)
+  const rule = rules[0]!
+  if (actor.protected) {
+    if (rule.policy !== 'disappear-on-owner-death' || rule.replacementActorKey !== null || rule.replacementServiceKey !== null) fail(`受保护商店不得绑定替身:${vendor.key}`)
+    return { actor, replacement: null }
+  }
+  const replacement = catalog.actors.find(row => row.key === rule.replacementActorKey)
+  if (rule.policy !== 'replace-on-owner-death' || rule.replacementServiceKey !== rule.serviceKey
+    || !replacement || replacement.demandKind !== 'service-replacement'
+    || replacement.sourceRefs.length !== 1 || replacement.sourceRefs[0] !== `replacement.${actor.key}`
+    || replacement.protected || replacement.mortalityPolicy !== 'mortal'
+    || replacement.homeLocationKey !== actor.homeLocationKey || replacement.regionKey !== actor.regionKey
+    || replacement.factionKey !== actor.factionKey || !replacement.serviceKeys.includes(rule.serviceKey)
+    || replacement.fulfilledRequirementKeys.length || replacement.questConsumerKeys.length) fail(`商店死亡接替来源或身份不闭合:${vendor.key}`)
+  return { actor, replacement }
 }
 
 async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputContextV1; draft: CatalogDraftV1; createdAt: number }): Promise<TextOpenWorldNpcRuntimeCatalogV1> {
@@ -488,6 +546,7 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
   const functionalMortalActors = baseActors.filter(actor => !actor.protected && actor.serviceKeys.length).map(actor => actor.key)
   const body: Omit<TextOpenWorldNpcRuntimeCatalogV1, 'npcRuntimeCatalogHash'> = {
     schema: 'storyforge.text-open-world-npc-runtime-catalog', version: 1, productType: 'text-open-world',
+    ...(input.context.vendorIdentityContract ? { vendorIdentityContract: input.context.vendorIdentityContract } : {}),
     productInstanceKey: input.context.productInstanceKey,
     gameplayRulesetHash: input.context.gameplayRuleset.gameplayRulesetHash,
     regionNarrativePacksHash: input.context.regionNarrativePacks.regionNarrativePacksHash,
@@ -506,7 +565,12 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
       requiredFactionRequirementKeys: factionRequirements,
       coveredFactionRequirementKeys: [...new Set(factions.flatMap(faction => faction.fulfilledRequirementKeys))],
       requiredVendorActorReservationKeys: vendorReservations,
-      coveredVendorActorReservationKeys: baseActors.filter(actor => actor.demandKind === 'vendor-service').map(actor => actor.key),
+      coveredVendorActorReservationKeys: input.context.vendorIdentityContract
+        ? input.context.craftingEconomyCatalog.vendors.map(vendor => {
+          resolveTextOpenWorldVendorActorV1({ actors: baseActors, vendorIdentityContract: input.context.vendorIdentityContract }, vendor)
+          return vendor.actorRequirementKey
+        })
+        : baseActors.filter(actor => actor.demandKind === 'vendor-service').map(actor => actor.key),
       requiredRegionKeys: input.context.regionNarrativePacks.packs.map(pack => pack.regionKey),
       regionsWithResidentActors: [...new Set(baseActors.filter(actor => actor.tier === 'resident').map(actor => actor.regionKey))],
       protectedQuestActorKeys: protectedActors,
@@ -543,8 +607,10 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
 function draftFromArtifact(artifact: TextOpenWorldNpcRuntimeCatalogV1, context: TextOpenWorldNpcRuntimeInputContextV1): unknown {
   const baseActors = artifact.actors.filter(actor => actor.demandKind !== 'service-replacement')
   const hasReuses = baseActors.some(actor => actor.sourceRefs.length > 1) || artifact.factions.some(faction => faction.sourceRefs.length > 1)
+  const hasVendorReuse = context.actorDemands.some(demand => demand.demandKind === 'vendor-service'
+    && baseActors.some(actor => actor.sourceDemandKey !== demand.sourceDemandKey && actor.sourceRefs.includes(demand.sourceDemandKey)))
   return {
-    schema: 'storyforge.text-open-world-npc-runtime-draft', version: hasReuses ? 2 : 1,
+    schema: 'storyforge.text-open-world-npc-runtime-draft', version: hasVendorReuse ? 3 : hasReuses ? 2 : 1,
     factions: context.factionDemands.map(demand => {
       const matches = artifact.factions.filter(faction => faction.sourceRefs.includes(demand.sourceDemandKey))
       if (matches.length !== 1) fail('势力需求缺少唯一身份映射')
@@ -620,7 +686,9 @@ function systemPrompt(context: TextOpenWorldNpcRuntimeInputContextV1): string {
     `factions共${context.factionDemands.length}项、actors共${context.actorDemands.length}项，必须按demandNumber顺序精确覆盖。factionNumber为0表示无阵营，否则从1开始引用factions。`,
     'agent-maintained角色的scheduleActivities必须为空；rule-driven角色必须依次填写清晨、白天、傍晚、夜晚四条简单活动。moralityMultiplier只能是-1、0、1，表示该势力如何看待玩家道德方向。',
     '只写姓名、小传、演绎、日常活动、势力目标和三档招呼语气。不得输出Actor/Faction/Service/Schedule Key、保护/死亡策略、Action、Scene、Condition、Effect、Quest绑定或数值阈值。',
-    '若任务需求明确指向前面已经预留的同一人物或势力，使用version:2并将该需求行仅写为{"demandNumber":本项编号,"reuseActorDemandNumber":前面的角色需求编号}，或势力行的reuseFactionDemandNumber；目标必须已有fixedActorKey/fixedFactionKey，当前需求必须没有预留身份。不同人物不得因名字相近而合并，两个预留身份及商店岗位不能合并。同一人物只保留目标行的小传/演绎；若任一复用需求是agent-maintained，目标行scheduleActivities填[]，代码保留全部任务与最强保护。没有复用的旧version:1仍有效。',
+    context.vendorIdentityContract
+      ? '同一人物或势力必须显式复用：使用version:3，复用行仅含demandNumber及reuseActorDemandNumber（势力用reuseFactionDemandNumber），引用前面已有固定身份的内容需求。未预留的任务角色可复用；vendor-service商店岗位也可绑定同地区、同homeLocationKey的固定content-requirement角色，多家店可由一人经营。两个固定内容人物不能合并，不按姓名猜测，不得引用另一岗位、别名或不同地点人物。目标保留完整小传、演绎、阵营与家园，所有服务和任务来源汇总，采用最强保护；任一角色需求为agent-maintained时目标scheduleActivities必须[]。旧version:1/2仍有效但不允许商店岗位复用。'
+      : '若任务需求明确指向前面已经预留的同一人物或势力，使用version:2并将该需求行仅写为{"demandNumber":本项编号,"reuseActorDemandNumber":前面的角色需求编号}，或势力行的reuseFactionDemandNumber；目标必须已有fixedActorKey/fixedFactionKey，当前需求必须没有预留身份。不同人物不得因名字相近而合并，两个预留身份及商店岗位不能合并。同一人物只保留目标行的小传/演绎；若任一复用需求是agent-maintained，目标行scheduleActivities填[]，代码保留全部任务与最强保护。没有复用的旧version:1仍有效。',
     '只输出字段精确的JSON：',
     '{"schema":"storyforge.text-open-world-npc-runtime-draft","version":1,"factions":[{"demandNumber":1,"description":"...","publicGoal":"...","moralityMultiplier":0}],"actors":[{"demandNumber":1,"name":"...","biography":"...","portrayal":"...","factionNumber":0,"scheduleActivities":[]}],"attitudeBands":[{"attitude":"bad","label":"...","greetingTone":"..."},{"attitude":"neutral","label":"...","greetingTone":"..."},{"attitude":"good","label":"...","greetingTone":"..."}]}',
   ].join('\n')

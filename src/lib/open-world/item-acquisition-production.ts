@@ -27,7 +27,9 @@ export function parseTextOpenWorldItemAcquisitionsV1(
   const demands = buildTextOpenWorldObjectiveFulfillmentDemandsV1(context)
   let previous = 0
   return value.map(value => {
-    const selection = row(value, ['objectiveNumber', 'interactionNumber', 'items'])
+    const modern = context.objectiveEvidenceContract === 'action-paths-v2'
+    const selection = row(value, ['objectiveNumber', 'interactionNumber', 'items', ...(modern ? ['replacementPolicy'] : [])])
+    if (modern && selection.replacementPolicy !== 'never' && selection.replacementPolicy !== 'missing-ordinary') fail('领取补给策略无效')
     const objectiveNumber = ordinal(selection.objectiveNumber, context.questSkeletons.objectives.length)
     const interactionNumber = ordinal(selection.interactionNumber, context.mapInteractionCatalog.interactions.length)
     if (interactionNumber <= previous) fail('领取交互必须严格升序且唯一')
@@ -59,13 +61,26 @@ export function parseTextOpenWorldItemAcquisitionsV1(
       if (definition.unique && quantity !== 1) fail('独特物品只能领取一件')
       return { itemNumber, quantity }
     })
-    return { objectiveNumber, interactionNumber, items }
+    if (selection.replacementPolicy === 'missing-ordinary') {
+      const definition = context.itemRewardCatalog.items[items[0]!.itemNumber - 1]!
+      const quest = context.questSkeletons.quests.find(quest => quest.key === demand.questKey)!
+      const deliveries = fulfillment.objectives.filter(other => other.items.some(item => item.itemNumber === items[0]!.itemNumber && item.consume && item.quantity === 1))
+        .map(other => context.questSkeletons.objectives[other.objectiveNumber - 1]!)
+      const pickup = context.questSkeletons.objectives[objectiveNumber - 1]!
+      const later = (delivery: typeof pickup) => delivery.questKey === pickup.questKey && (delivery.stageKey === pickup.stageKey
+        ? delivery.order > pickup.order
+        : context.questSkeletons.stages.some(stage => stage.key === delivery.stageKey && stage.order
+          > (context.questSkeletons.stages.find(stage => stage.key === pickup.stageKey)?.order ?? Number.POSITIVE_INFINITY)))
+      if (quest.type !== 'ordinary' || items.length !== 1 || items[0]!.quantity !== 1 || definition.critical || definition.unique || definition.sellable
+        || deliveries.length !== 1 || !deliveries.every(later)) fail('补领只能服务普通任务的单件不可售非关键交付物，且必须有唯一后续交付')
+    }
+    return { objectiveNumber, interactionNumber, items, ...(modern ? { replacementPolicy: selection.replacementPolicy as 'never' | 'missing-ordinary' } : {}) }
   })
 }
 
-/** A pickup is an ordinary, governed location Action. Its one-time proof and
- * grants commit in the same existing Effect batch. It cannot be replayed for
- * resale, including after abandoning/restarting an ordinary quest. */
+/** Pickup proof and grants commit in the same governed Effect batch. Legacy
+ * and critical pickups remain one-time. Explicit ordinary replacement requires
+ * an active delivery, no held parcel and an unsellable, noncritical item. */
 export function compileTextOpenWorldItemAcquisitionsV1(input: {
   context: Context
   selections: TextOpenWorldItemAcquisitionSelectionV1[]
@@ -78,11 +93,20 @@ export function compileTextOpenWorldItemAcquisitionsV1(input: {
     const objective = context.questSkeletons.objectives[selection.objectiveNumber - 1]!
     const interaction = context.mapInteractionCatalog.interactions[selection.interactionNumber - 1]!
     const owner = actions.find(action => action.key === `action.interaction.${interaction.key}`)!
+    const replacement = selection.replacementPolicy === 'missing-ordinary'
+    const deliveries = replacement ? fulfillment.objectives.filter(other => other.items.some(item => item.itemNumber === selection.items[0]!.itemNumber && item.consume))
+      .map(other => context.questSkeletons.objectives[other.objectiveNumber - 1]!) : []
     const prerequisites: TextOpenWorldConditionExpressionV1[] = [
       { op: 'quest-status', questKey: objective.questKey, statuses: ['active'] },
-      { op: 'quest-stage', questKey: objective.questKey, stageKey: objective.stageKey },
-      { op: 'not', condition: { op: 'quest-objective', objectiveKey: objective.key, status: 'completed' } },
-      { op: 'not', condition: { op: 'world-flag', flagKey: `flag.fulfillment.interaction.${interaction.key}`, value: true } },
+      ...(replacement ? [
+        { op: 'any' as const, conditions: [...new Set([objective.stageKey, ...deliveries.map(item => item.stageKey)])].map(stageKey => ({ op: 'quest-stage' as const, questKey: objective.questKey, stageKey })) },
+        ...deliveries.map(item => ({ op: 'not' as const, condition: { op: 'quest-objective' as const, objectiveKey: item.key, status: 'completed' as const } })),
+        { op: 'inventory-quantity' as const, itemKey: context.itemRewardCatalog.items[selection.items[0]!.itemNumber - 1]!.key, comparator: 'eq' as const, value: 0 },
+      ] : [
+        { op: 'quest-stage' as const, questKey: objective.questKey, stageKey: objective.stageKey },
+        { op: 'not' as const, condition: { op: 'quest-objective' as const, objectiveKey: objective.key, status: 'completed' as const } },
+        { op: 'not' as const, condition: { op: 'world-flag' as const, flagKey: `flag.fulfillment.interaction.${interaction.key}`, value: true } },
+      ]),
       ...context.questSkeletons.objectives.filter(other => other.stageKey === objective.stageKey
         && other.order < objective.order && !other.optional).map(other => ({
           op: 'quest-objective' as const, objectiveKey: other.key, status: 'completed' as const,
@@ -99,7 +123,7 @@ export function compileTextOpenWorldItemAcquisitionsV1(input: {
     }
     const conditionKey = `condition.acquisition.${interaction.key}`
     conditions.push({ key: conditionKey, expression: { op: 'all', conditions: prerequisites },
-      failureMessage: '需进入对应任务阶段、完成前置目标并持有所需凭据；这处物品只能领取一次。' })
+      failureMessage: replacement ? '仅限当前任务交付前遗失补领；持有包件时不能重复领取。' : '需进入对应任务阶段、完成前置目标并持有所需凭据；这处物品只能领取一次。' })
     owner.requirementConditionKeys.push(conditionKey)
     for (const item of selection.items) {
       const definition = context.itemRewardCatalog.items[item.itemNumber - 1]!

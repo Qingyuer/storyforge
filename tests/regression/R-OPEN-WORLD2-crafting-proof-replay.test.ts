@@ -3,66 +3,14 @@ import { db } from '../../src/lib/db/schema'
 import { executeTextOpenWorldActionV1, recoverTextOpenWorldPendingCommandV1 } from '../../src/lib/open-world/action-executor'
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { projectTextOpenWorldPlayerCraftingEconomyReceiptV1 } from '../../src/lib/open-world/player-crafting-economy'
-import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
 import { hashProductRuntimeStateV1, readProductRuntimeState, replayProductRuntimeEvents } from '../../src/lib/product/runtime-core'
-import type { ProductRuntimeEvent, TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
+import type { ProductRuntimeEvent } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextP9Fixture } from '../helpers/text-open-world-vnext-fixture'
-
-// An isolated authored fixture, never the live sample or a player receipt.
-function craftingProofFixture(): TextOpenWorldRuntimePackageV1 {
-  const runtimePackage = createTextOpenWorldVNextP9Fixture()
-  const actions = runtimePackage.modules.actions.payload as any
-  const progression = runtimePackage.modules.progression.payload as any
-  const combat = runtimePackage.modules.combat.payload as any
-  const stagedAbandon = actions.actions.find((action: any) => action.key === 'action.abandon-supplies')
-  const stagedBinding = actions.inputBindings.actions.find((binding: any) => binding.actionKey === stagedAbandon.key)
-  const actionKey = 'action.abandon-supplies-unstarted-craft-proof'
-  const effectKey = 'effect.abandon-supplies-unstarted-craft-proof'
-  const actionDefinitionHash = 'd'.repeat(64)
-  actions.effects.push({
-    key: effectKey, operation: 'transition-quest',
-    payload: { questKey: 'quest.template.supplies', status: 'abandoned', stageKey: null },
-  })
-  actions.actions.push({ ...structuredClone(stagedAbandon), key: actionKey, successEffectKeys: [effectKey] })
-  actions.inputBindings.actions.push({
-    ...structuredClone(stagedBinding),
-    key: `binding.${actionKey}`, order: actions.inputBindings.actions.length + 1, actionKey, actionDefinitionHash,
-    resultAuthority: { ...structuredClone(stagedBinding.resultAuthority), actionKey, actionDefinitionHash },
-    naturalLanguage: {
-      ...structuredClone(stagedBinding.naturalLanguage),
-      exampleUtterances: ['放弃尚未开始的物资请求', '不接这一轮物资委托'],
-    },
-  })
-  actions.version = 19
-  runtimePackage.modules.actions.schemaVersion = 19
-  progression.version = 2
-  progression.skills = progression.skills.map((candidate: any) => {
-    const { activation: _activation, kind, ...skill } = candidate
-    if (kind !== 'attack') throw new Error(`Unexpected fixture skill ${String(kind)}`)
-    return { ...skill, mechanic: { kind: 'attack' } }
-  })
-  progression.statuses = progression.statuses.map((status: any) => ({
-    ...status, duration: { clock: 'combat' }, reapplyPolicy: 'reject', maxStacks: 1, modifiers: [],
-  }))
-  runtimePackage.modules.progression.schemaVersion = 2
-  combat.version = 4
-  delete combat.transientPlayerStatusKeys
-  runtimePackage.modules.combat.schemaVersion = 4
-  const craft = actions.actions.find((action: any) => action.key === 'action.craft-brine-tonic')
-  const proofKey = 'effect.fulfillment.recipe.recipe.brine-tonic'
-  actions.effects.push({
-    key: proofKey, operation: 'set-world-flag',
-    payload: { flagKey: 'flag.fulfillment.recipe.recipe.brine-tonic', value: true },
-  })
-  craft.successEffectKeys.push(proofKey)
-  expect(parseTextOpenWorldModulesV1(runtimePackage).actions.version).toBe(19)
-  return runtimePackage
-}
+import { createActionEvidenceV19Fixture } from '../helpers/text-open-world-action-evidence-fixture'
 
 async function suppliedSession() {
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `Craft proof replay ${crypto.randomUUID()}`, textOpenWorldVNext: craftingProofFixture(),
+    name: `Craft proof replay ${crypto.randomUUID()}`, textOpenWorldVNext: createActionEvidenceV19Fixture(),
     runtimeShape: 'vnext-only', title: 'Craft proof replay', seed: 'craft-proof-replay',
   })
   const sessionId = created.session.id!

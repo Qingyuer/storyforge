@@ -173,6 +173,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
   }
   contentRequirementManifestHash: string
   npcRuntimeCatalog: {
+    vendorIdentityContract?: TextOpenWorldNpcRuntimeCatalogV1['vendorIdentityContract']
     productInstanceKey: string
     regionNarrativePacksHash: string
     questSkeletonsHash: string
@@ -217,6 +218,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
         'actors' | 'encounters' | 'items' | 'recipes' | 'vendors' | 'interactions' | 'rewards'>
       governance: Pick<TextOpenWorldQuestDesignDocumentsV1['governance'],
         | 'questAndEncounterBindingsReady' | 'sceneBindingsDeferred' | 'restartActionsRequireOriginalOfferRoute'
+        | 'actionPathEvidenceReady'
         | 'knowledgeProgressReady' | 'allRumorsHaveUniquePropagationPath'
         | 'allKnowledgeHasConfirmationPath' | 'allAchievementsOneTimeReachable'>
     }
@@ -728,6 +730,10 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldSceneScriptsInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.questDesignDocuments.governance.actionPathEvidenceReady !== undefined
+    && context.questDesignDocuments.governance.actionPathEvidenceReady !== true) fail('P9行动证据合同无效')
+  if (context.npcRuntimeCatalog.vendorIdentityContract !== undefined
+    && context.npcRuntimeCatalog.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('P9商店身份合同无效')
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.sourceLedger as unknown as Record<string, unknown>, 'ledgerHash', 'SourceLedger'],
     [context.experienceContract as unknown as Record<string, unknown>, 'experienceContractHash', 'ExperienceContract'],
@@ -913,6 +919,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     },
     contentRequirementManifestHash: contentRequirementManifest.contentRequirementManifestHash,
     npcRuntimeCatalog: {
+      ...(npcRuntimeCatalog.vendorIdentityContract ? { vendorIdentityContract: npcRuntimeCatalog.vendorIdentityContract } : {}),
       productInstanceKey: npcRuntimeCatalog.productInstanceKey,
       regionNarrativePacksHash: npcRuntimeCatalog.regionNarrativePacksHash,
       questSkeletonsHash: npcRuntimeCatalog.questSkeletonsHash,
@@ -989,6 +996,9 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
       governance: {
         questAndEncounterBindingsReady: questDesignDocuments.governance.questAndEncounterBindingsReady,
         sceneBindingsDeferred: questDesignDocuments.governance.sceneBindingsDeferred,
+        ...(questDesignDocuments.governance.actionPathEvidenceReady === true
+          ? { actionPathEvidenceReady: true as const }
+          : {}),
         ...(questDesignDocuments.governance.restartActionsRequireOriginalOfferRoute === true
           ? { restartActionsRequireOriginalOfferRoute: true as const }
           : {}),
@@ -1484,8 +1494,25 @@ export async function createTextOpenWorldSceneScriptsModelContextV1(
         rumorRequirementKey: demand.rumorRequirementKey,
       }
     }),
-    knowledgePresentationDemands: view.knowledgePresentationDemands.map(demand => ({ ...demand })),
-    achievementPresentationDemands: view.achievementPresentationDemands.map(demand => ({ ...demand })),
+    // These optional collections are always empty for an isolated Scene. New
+    // vendor-owner contexts omit that repeated transport scaffolding; shared
+    // presentations and frozen older contexts retain every original field.
+    ...(slice.kind === 'scene' && context.npcRuntimeCatalog.vendorIdentityContract === 'canonical-vendor-owners-v1'
+      ? {}
+      : {
+          knowledgePresentationDemands: view.knowledgePresentationDemands.map(demand => ({ ...demand })),
+          achievementPresentationDemands: view.achievementPresentationDemands.map(demand => ({ ...demand })),
+        }),
+  }
+  // A v20 single-Scene slice has no shared demands. Keep the durable context,
+  // shared slice and every populated field unchanged; omit only empty arrays
+  // whose meaning is stated in the versioned single-Scene prompt.
+  if (slice.kind === 'scene' && context.questDesignDocuments.governance.actionPathEvidenceReady === true) {
+    const transport = body as Record<string, unknown>
+    for (const key of ['actionLanguageDemands', 'templateVariantDemands', 'randomEventPresentationDemands']) {
+      if (!Array.isArray(transport[key]) || transport[key].length !== 0) fail(`P9单场景共享需求必须为空:${key}`)
+      delete transport[key]
+    }
   }
   return {
     ...body,
@@ -1705,6 +1732,9 @@ function fixedTarget(input: {
   if (action.targetScope === 'vendor') {
     const binding = context.questDesignDocuments.catalogBindings.vendors.find(item => item.buyActionKey === action.key || item.sellActionKey === action.key)
     if (binding) return { targetPolicy: 'fixed', targetKey: binding.vendorKey }
+    const replacement = context.questDesignDocuments.catalogBindings.vendors.map(item => item.replacement)
+      .find(item => item && (item.buyActionKey === action.key || item.sellActionKey === action.key))
+    if (replacement) return { targetPolicy: 'fixed', targetKey: replacement.vendorKey }
   }
   return { targetPolicy: 'runtime-valid-target', targetKey: null }
 }
@@ -2170,6 +2200,7 @@ function prompts(context: TextOpenWorldSceneScriptsInputContextV1) {
       && (context.achievementPresentationDemands?.length ?? 0) === 0
     if (isolatedScene) {
       const demand = context.sceneDemands[0]!
+      const actionEvidence = context.questDesignDocuments.governance.actionPathEvidenceReady === true
       const publicLabels = demand.actionKeys.map(key => (
         safeActionPublicWritingMaterial(context, demand, actionByKey(context, key)).label
       ))
@@ -2180,10 +2211,16 @@ function prompts(context: TextOpenWorldSceneScriptsInputContextV1) {
           })
         : null
       return {
-        system: "Use only public input. Do not invent hidden/future facts, rewards or resource changes. Write in the input's language.",
+        system: actionEvidence
+          ? "Use public input only, in its language; invent no hidden/future facts, rewards or resource changes."
+          : "Use only public input. Do not invent hidden/future facts, rewards or resource changes. Write in the input's language.",
         user: [
-          'Return full JSON, keeping schema/version. Limits: title 1..160; openingText/successText 1..2000; bodyText 1..4000. successText must be nonempty (never null); use neutral completion if no new result. failureText may be null.',
-          `choiceLabels依actionKeys顺序共${demand.choiceCount}个唯一字符串（1..100字；同名编号）。attitudeOpenings必填：${demand.sourceKind === 'actor-dialogue' ? 'bad/neutral/good各1..500字' : 'null'}。`,
+          actionEvidence
+            ? 'Full JSON, keeping schema/version. Char limits: title 1..160; openingText/successText 1..2000; bodyText 1..4000. successText nonempty, never null, neutral if no new result. failureText nullable.'
+            : 'Return full JSON, keeping schema/version. Limits: title 1..160; openingText/successText 1..2000; bodyText 1..4000. successText must be nonempty (never null); use neutral completion if no new result. failureText may be null.',
+          actionEvidence
+            ? `choiceLabels: ${demand.choiceCount} unique strings in actionKeys order, 1..100 chars, number duplicates. Required attitudeOpenings:${demand.sourceKind === 'actor-dialogue' ? 'bad/neutral/good, each 1..500 chars' : 'null'}. Omitted shared-demand arrays are empty.`
+            : `choiceLabels依actionKeys顺序共${demand.choiceCount}个唯一字符串（1..100字；同名编号）。attitudeOpenings必填：${demand.sourceKind === 'actor-dialogue' ? 'bad/neutral/good各1..500字' : 'null'}。`,
           ...(duplicateSafeChoices ? [
             '同名行动的choiceLabels逐项原样采用示例编号文案。',
           ] : []),

@@ -906,7 +906,15 @@ function successfulReceiptCopy(input: {
   const marker = input.modules.actions.actions.find(action => action.key === request.actionKey)?.successEffectKeys
     .map(effectKey => input.modules.actions.effects.find(effect => effect.key === effectKey))
     .find(effect => effect?.operation === 'perform-transaction')
-  const change = input.receipt.changes.length === 1 ? input.receipt.changes[0] : null
+  const purchaseProof = input.modules.actions.version >= 20 && request.kind === 'buy'
+  const change = input.receipt.changes.length === (purchaseProof ? 2 : 1) ? input.receipt.changes[0] : null
+  if (purchaseProof) {
+    const proof = input.receipt.changes[1]
+    const flagKey = `flag.fulfillment.purchase.${vendor.key}.${item.key}`
+    if (proof?.effectKey !== `effect.fulfillment.purchase.${vendor.key}` || proof.operation !== 'prove-purchase' || proof.domain !== 'world'
+      || proof.summary !== `购买证据:${vendor.key}:${item.key}` || proof.after !== true
+      || proof.before !== (input.projection.state.world.flags[flagKey] ?? null)) fail('购买证据回执不匹配本次交易')
+  }
   if (marker?.operation !== 'perform-transaction' || !change
     || change.effectKey !== marker.key || change.operation !== 'perform-transaction'
     || change.summary !== `${request.kind === 'buy' ? '购买' : '出售'}:${request.itemKey}×${request.quantity}`

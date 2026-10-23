@@ -221,6 +221,32 @@ describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
     }
     const actorDialogue = await createTextOpenWorldSceneScriptsModelContextV1(actorContext, { kind: 'scene', sceneIndex: 2 })
     const shared = await createTextOpenWorldSceneScriptsModelContextV1(context, { kind: 'shared-presentations' })
+    const vendorOwnerContext = structuredClone(context)
+    vendorOwnerContext.npcRuntimeCatalog.vendorIdentityContract = 'canonical-vendor-owners-v1'
+    const compactScene = await createTextOpenWorldSceneScriptsModelContextV1(vendorOwnerContext, { kind: 'scene', sceneIndex: 0 })
+    const originalSceneBody = { ...firstScene } as Record<string, unknown>
+    const compactSceneBody = { ...compactScene } as Record<string, unknown>
+    delete originalSceneBody.contextSelectionHash
+    delete compactSceneBody.contextSelectionHash
+    // No writing material, action target, disclosure boundary or stable
+    // reference can disappear when the two empty optional collections do.
+    expect({ ...compactSceneBody, knowledgePresentationDemands: [], achievementPresentationDemands: [] })
+      .toEqual(originalSceneBody)
+    expect(JSON.stringify(compactScene).length).toBeLessThan(JSON.stringify(firstScene).length)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(vendorOwnerContext, { kind: 'shared-presentations' }))
+      .resolves.toEqual(shared)
+    const actionEvidenceContext = structuredClone(vendorOwnerContext)
+    actionEvidenceContext.questDesignDocuments.governance.actionPathEvidenceReady = true
+    const actionScene = await createTextOpenWorldSceneScriptsModelContextV1(actionEvidenceContext, { kind: 'scene', sceneIndex: 0 })
+    const actionSceneBody = { ...actionScene } as Record<string, unknown>
+    delete actionSceneBody.contextSelectionHash
+    expect({ ...actionSceneBody, actionLanguageDemands: [], templateVariantDemands: [], randomEventPresentationDemands: [] })
+      .toEqual(compactSceneBody)
+    expect(JSON.stringify(actionScene).length).toBeLessThan(JSON.stringify(compactScene).length)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(actionEvidenceContext, { kind: 'shared-presentations' }))
+      .resolves.toEqual(shared)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(context, { kind: 'scene', sceneIndex: 0 }))
+      .resolves.toEqual(firstScene)
     const calls = [firstScene, secondScene, actorDialogue, shared] as Array<Record<string, unknown>>
 
     await expect(createTextOpenWorldSceneScriptsModelContextV1(context))

@@ -419,6 +419,11 @@ export interface TextOpenWorldActionModuleV19 extends Omit<TextOpenWorldActionMo
   version: 19
 }
 
+/** Exact purchase proof, learned skills and noncritical equipment handover. */
+export interface TextOpenWorldActionModuleV20 extends Omit<TextOpenWorldActionModuleV19, 'version'> {
+  version: 20
+}
+
 export interface TextOpenWorldProgressionModuleV1 {
   version: 1
   rules: {
@@ -1026,7 +1031,7 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18 | TextOpenWorldActionModuleV19
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18 | TextOpenWorldActionModuleV19 | TextOpenWorldActionModuleV20
   progression: TextOpenWorldProgressionModuleV1 | TextOpenWorldProgressionModuleV2
   combat: TextOpenWorldCombatModuleV1 | TextOpenWorldCombatModuleV4
   items: TextOpenWorldItemModuleV1

@@ -44,7 +44,7 @@ export const TEXT_OPEN_WORLD_COMPILER_OWNED_EFFECT_OPERATIONS_V1 = [
   'claim-quest-reward', 'track-quest', 'untrack-quest',
   'fast-travel', 'settle-weather', 'settle-actor-schedules',
   'initialize-combat', 'settle-combat-state', 'perform-combat-action',
-  'rest', 'respawn', 'perform-crafting', 'perform-transaction', 'settle-director',
+  'rest', 'respawn', 'perform-crafting', 'perform-transaction', 'prove-purchase', 'settle-director',
 ] as const satisfies readonly TextOpenWorldEffectOperationV1[]
 
 export const TEXT_OPEN_WORLD_MODEL_PROPOSABLE_EFFECT_OPERATIONS_V1 = [
