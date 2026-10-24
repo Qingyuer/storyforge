@@ -6,6 +6,8 @@ import type {
 } from '../types'
 import type { RewardDemandV1, TextOpenWorldItemRewardCatalogInputContextV1 } from './item-reward-catalog-production'
 
+import { assertTextOpenWorldOrdinaryDeliveryCatalogV1 } from './ordinary-delivery-production'
+
 export const ITEM_SOURCE_CONTRACT_V1 = 'explicit-producers-v1' as const
 export interface TextOpenWorldItemSourceChoiceV1 {
   choiceNumber: number
@@ -190,6 +192,7 @@ export function compileTextOpenWorldItemSourcePlansV1(input: {
 }
 
 export function hasTextOpenWorldExplicitItemSourcesV1(catalog: TextOpenWorldItemRewardCatalogV1): boolean {
+  assertTextOpenWorldOrdinaryDeliveryCatalogV1(catalog)
   if (catalog.itemSourceContract === undefined && catalog.itemSourcePlans === undefined) return false
   if (catalog.itemSourceContract !== ITEM_SOURCE_CONTRACT_V1 || !Array.isArray(catalog.itemSourcePlans)
     || catalog.itemSourcePlans.length !== catalog.items.length) fail('物品来源合同缺失或版本不匹配')

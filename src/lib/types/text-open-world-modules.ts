@@ -424,6 +424,11 @@ export interface TextOpenWorldActionModuleV20 extends Omit<TextOpenWorldActionMo
   version: 20
 }
 
+/** One-time mainline recognition in the governed objective completion batch. */
+export interface TextOpenWorldActionModuleV21 extends Omit<TextOpenWorldActionModuleV20, 'version'> {
+  version: 21
+}
+
 export interface TextOpenWorldProgressionModuleV1 {
   version: 1
   rules: {
@@ -1031,7 +1036,7 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18 | TextOpenWorldActionModuleV19 | TextOpenWorldActionModuleV20
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18 | TextOpenWorldActionModuleV19 | TextOpenWorldActionModuleV20 | TextOpenWorldActionModuleV21
   progression: TextOpenWorldProgressionModuleV1 | TextOpenWorldProgressionModuleV2
   combat: TextOpenWorldCombatModuleV1 | TextOpenWorldCombatModuleV4
   items: TextOpenWorldItemModuleV1

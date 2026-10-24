@@ -8,6 +8,8 @@ import type { TextOpenWorldQuestFinalizeInputContextV1 } from './quest-finalize-
 import { buildTextOpenWorldObjectiveFulfillmentDemandsV1 } from './objective-fulfillment-production'
 import { hasTextOpenWorldExplicitItemSourcesV1, itemHasPlannedSourceV1 } from './item-source-production'
 
+import { assertTextOpenWorldOrdinaryDeliveryFulfillmentV1 } from './ordinary-delivery-production'
+
 type Context = TextOpenWorldQuestFinalizeInputContextV1
 function fail(message: string): never { throw new Error(`[text-open-world-item-acquisition] ${message}`) }
 function row(value: unknown, fields: string[]): Record<string, unknown> {
@@ -26,7 +28,7 @@ export function parseTextOpenWorldItemAcquisitionsV1(
   if (!Array.isArray(value) || value.length > context.mapInteractionCatalog.interactions.length) fail('领取选择必须是有界数组')
   const demands = buildTextOpenWorldObjectiveFulfillmentDemandsV1(context)
   let previous = 0
-  return value.map(value => {
+  const parsed = value.map(value => {
     const modern = context.objectiveEvidenceContract === 'action-paths-v2'
     const selection = row(value, ['objectiveNumber', 'interactionNumber', 'items', ...(modern ? ['replacementPolicy'] : [])])
     if (modern && selection.replacementPolicy !== 'never' && selection.replacementPolicy !== 'missing-ordinary') fail('领取补给策略无效')
@@ -76,6 +78,8 @@ export function parseTextOpenWorldItemAcquisitionsV1(
     }
     return { objectiveNumber, interactionNumber, items, ...(modern ? { replacementPolicy: selection.replacementPolicy as 'never' | 'missing-ordinary' } : {}) }
   })
+  assertTextOpenWorldOrdinaryDeliveryFulfillmentV1(context, fulfillment, parsed)
+  return parsed
 }
 
 /** Pickup proof and grants commit in the same governed Effect batch. Legacy

@@ -1,3 +1,11 @@
+import { readTextOpenWorldSceneScriptsRepairCandidatesV1, readTextOpenWorldCraftingEconomyRepairCandidatesV1, readTextOpenWorldNpcRuntimeRepairCandidatesV1, type TextOpenWorldCatalogRepairCandidatePageV1 } from '../../lib/open-world/catalog-author-repair'
+import { SCENE_SCRIPTS_REPAIR_SECTIONS_V1, type SceneScriptsRepairSectionV1 } from '../../lib/open-world/scene-scripts-production'
+import { CRAFTING_ECONOMY_REPAIR_SECTIONS_V1, type CraftingEconomyRepairSectionV1 } from '../../lib/open-world/crafting-economy-catalog-production'
+import { NPC_RUNTIME_REPAIR_SECTIONS_V1, type NpcRuntimeRepairSectionV1 } from '../../lib/open-world/npc-runtime-catalog-production'
+import { readTextOpenWorldItemRewardRepairCandidatesV1, type TextOpenWorldItemRewardRepairCandidatePageV1 } from '../../lib/open-world/item-reward-author-repair'
+import { ITEM_REWARD_REPAIR_SECTIONS_V1, type ItemRewardRepairSectionV1 } from '../../lib/open-world/item-reward-catalog-production'
+import { readTextOpenWorldQuestFinalizeRepairCandidatesV1, type TextOpenWorldQuestFinalizeRepairCandidatePageV1 } from '../../lib/open-world/quest-finalize-author-repair'
+import { QUEST_FINALIZE_REPAIR_SECTIONS_V1, type QuestFinalizeRepairSectionV1 } from '../../lib/open-world/quest-finalize-production'
 import { canReviseTextContentBuildV1 } from '../../lib/product-production/text-content-revision'
 import TextAdventureContentRevisionPanel from './TextAdventureContentRevisionPanel'
 import type { ChatAuthoringSettingsV1 } from '../../lib/character-interaction/authoring-contract'
@@ -91,6 +99,8 @@ import { downloadTextFile } from '../../lib/export/text-export'
 import { hashProductProductionValueV2 } from '../../lib/product-production/hash'
 import { isTextAdventureReadableGlyphViolationV1 } from '../../lib/product-production/text-adventure-quality'
 import { isTextOpenWorldBudgetRecoveryFailureV1 } from '../../lib/open-world/creator-budget-recovery-policy'
+
+type RepairCandidateSectionV1 = SceneScriptsRepairSectionV1 | QuestFinalizeRepairSectionV1 | ItemRewardRepairSectionV1 | CraftingEconomyRepairSectionV1 | NpcRuntimeRepairSectionV1
 
 export function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 | undefined): Array<{
   artifactKey: string
@@ -705,6 +715,8 @@ export default function ProductProductionStudio(props: {
   } | null>(null)
   const [repairNote, setRepairNote] = useState('')
   const [authorDraftJson, setAuthorDraftJson] = useState('')
+  const [repairCandidatePage, setRepairCandidatePage] = useState<((TextOpenWorldQuestFinalizeRepairCandidatePageV1 | TextOpenWorldItemRewardRepairCandidatePageV1 | TextOpenWorldCatalogRepairCandidatePageV1) & { taskKey: string }) | null>(null)
+  const [repairCandidateSection, setRepairCandidateSection] = useState<RepairCandidateSectionV1>('objectives')
   const [contentRevision, setContentRevision] = useState<import('../../lib/types').TextAdventureContentRevisionV1 | null>(null)
   const [unknownResultDisposition, setUnknownResultDisposition] = useState<
     '' | 'confirmed-not-charged' | 'charge-reservation-upper-bound'
@@ -732,6 +744,7 @@ export default function ProductProductionStudio(props: {
     }
     if (!productionChanged && !controlEpochChanged) return
     setTaskEvidence(null)
+    setRepairCandidatePage(null)
     setRepairNote('')
     setAuthorDraftJson('')
     setContentRevision(null)
@@ -1656,14 +1669,42 @@ export default function ProductProductionStudio(props: {
     setMessage(`Visual QA 的 ${result.artifactKeys.length} 张退回图片已进入受治理返修：Build #${result.parentBuildNumber} 保持不可变，新 Build #${result.buildNumber} 将按逐图审查意见重生成并重跑审计、Visual QA 与装配。`)
   }, '批量修复 Visual QA')
 
+  const inspectRepairCandidates = (page = 0, reset = false) => run(async () => {
+    if (!details?.production.id || !details.build) throw new Error('缺少当前制作版本。')
+    if (!repairCandidateSections.length || !blockerTaskKey) throw new Error('此任务没有登记修订候选入口。')
+    const selectors = {
+      scope: props.scope, productionId: details.production.id,
+      expectedBuildId: details.build.id!, expectedControlEpoch: details.build.controlEpoch,
+      page, ...(!reset && currentRepairCandidatePage
+        ? { expectedContextSelectionHash: currentRepairCandidatePage.contextSelectionHash } : {}),
+    }
+    const result = blockerTaskKey === 'p8.catalog.items-rewards'
+      ? await readTextOpenWorldItemRewardRepairCandidatesV1({ ...selectors, section: activeRepairCandidateSection as ItemRewardRepairSectionV1 })
+      : blockerTaskKey === 'p8.catalog.crafting-economy'
+        ? await readTextOpenWorldCraftingEconomyRepairCandidatesV1({ ...selectors, section: activeRepairCandidateSection as CraftingEconomyRepairSectionV1 })
+        : blockerTaskKey === 'p8.catalog.npc-runtime'
+          ? await readTextOpenWorldNpcRuntimeRepairCandidatesV1({ ...selectors, section: activeRepairCandidateSection as NpcRuntimeRepairSectionV1 })
+          : blockerTaskKey === 'p9.scene-scripts'
+            ? await readTextOpenWorldSceneScriptsRepairCandidatesV1({ ...selectors, section: activeRepairCandidateSection as SceneScriptsRepairSectionV1 })
+            : await readTextOpenWorldQuestFinalizeRepairCandidatesV1({ ...selectors, section: activeRepairCandidateSection as QuestFinalizeRepairSectionV1 })
+    setRepairCandidatePage({ ...result, taskKey: blockerTaskKey })
+  }, '读取当前修订候选')
+
   const retryBlocker = () => run(async () => {
     if (!details) throw new Error('缺少 Production。')
     const productionId = details.production.id!
+    let boundDraft = authorDraftJson.trim() || undefined
+    if (boundDraft && repairCandidateSections.length) {
+      if (!currentRepairCandidatePage) throw new Error('请先读取当前修订候选。')
+      const draft: unknown = JSON.parse(boundDraft)
+      if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw new Error('作者修订稿必须是完整 JSON 对象。')
+      boundDraft = JSON.stringify({ ...draft, authorContextSelectionHash: currentRepairCandidatePage.contextSelectionHash })
+    }
     const unknownResultAccounting = await retryProductProductionBlockerV1({
       scope: props.scope,
       details,
       ...(recoveryPolicy?.repairNoteAllowed ? { repairNote } : {}),
-      ...(recoveryPolicy?.authorDraftAllowed ? { authorDraftJson: authorDraftJson.trim() || undefined } : {}),
+      ...(recoveryPolicy?.authorDraftAllowed ? { authorDraftJson: boundDraft } : {}),
       ...(unknownResultDisposition ? { unknownResultDisposition } : {}),
     })
     setRepairNote('')
@@ -1818,6 +1859,21 @@ export default function ProductProductionStudio(props: {
     ? buildFailureSummary(details.build.failureJson) : ''
   const blockerTaskKey = details?.build?.status === 'recovery-required'
     ? readProductProductionRecoveryTaskKeyV1(details.build.failureJson) : null
+  const itemRepair = blockerTaskKey === 'p8.catalog.items-rewards'
+  const economyRepair = blockerTaskKey === 'p8.catalog.crafting-economy'
+  const npcRepair = blockerTaskKey === 'p8.catalog.npc-runtime'
+  const sceneRepair = blockerTaskKey === 'p9.scene-scripts'
+  const repairCandidateSections: readonly RepairCandidateSectionV1[] = itemRepair ? ITEM_REWARD_REPAIR_SECTIONS_V1
+    : economyRepair ? CRAFTING_ECONOMY_REPAIR_SECTIONS_V1 : npcRepair ? NPC_RUNTIME_REPAIR_SECTIONS_V1
+      : sceneRepair ? SCENE_SCRIPTS_REPAIR_SECTIONS_V1 : blockerTaskKey === 'p8f.quest-finalize' ? QUEST_FINALIZE_REPAIR_SECTIONS_V1 : []
+  const repairCandidateTestId = itemRepair ? 'item-reward-repair-candidates' : economyRepair ? 'crafting-economy-repair-candidates'
+    : npcRepair ? 'npc-runtime-repair-candidates' : sceneRepair ? 'scene-scripts-repair-candidates' : 'quest-finalize-repair-candidates'
+  const repairCandidateLabel = itemRepair ? '物品奖励' : economyRepair ? '配方经济' : npcRepair ? '人物运行' : sceneRepair ? '场景文字' : '任务履约'
+  const activeRepairCandidateSection = repairCandidateSections.includes(repairCandidateSection)
+    ? repairCandidateSection : repairCandidateSections[0]!
+  const currentRepairCandidatePage = repairCandidatePage?.taskKey === blockerTaskKey
+    && repairCandidatePage?.buildId === details?.build?.id
+    && repairCandidatePage?.controlEpoch === details?.build?.controlEpoch ? repairCandidatePage : null
   const providerReservationFailureCode = details?.build
     && (details.build.status === 'recovery-required'
       || (details.production.status === 'paused' && details.build.status === 'paused'))
@@ -2165,7 +2221,17 @@ export default function ProductProductionStudio(props: {
           </div>}
           {canRetryBlocker && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || '执行能力返回失败；可检查全局 AI 配置后重试。'}</span></div>}
           {canRetryBlocker && recoveryPolicy?.repairNoteAllowed && <label className="mt-3 block text-xs text-text-muted">本次修复要求（可选）<textarea aria-label="本次修复要求" maxLength={4000} value={repairNote} onChange={event => setRepairNote(event.target.value)} className="mt-2 block min-h-24 w-full rounded border border-border bg-bg-base p-3 text-text-main" placeholder="指出需要修正的内容；仍需遵守已确认的世界、规则和安全边界。" /></label>}
-          {canRetryBlocker && recoveryPolicy?.authorDraftAllowed && <details className="mt-3 text-xs text-text-muted"><summary className="cursor-pointer">直接修订任务草稿（高级）</summary><p className="my-2">填写完整 JSON 将跳过本次模型重写，按原任务规则校验；保留原始模型证据，记录为作者修订。只适用于失败的文本任务。</p><textarea aria-label="作者修订的完整任务 JSON" maxLength={120000} value={authorDraftJson} onChange={event => setAuthorDraftJson(event.target.value)} className="min-h-60 w-full rounded border border-border bg-bg-base p-3 font-mono text-text-main" /></details>}
+          {canRetryBlocker && recoveryPolicy?.authorDraftAllowed && <details className="mt-3 text-xs text-text-muted"><summary className="cursor-pointer">直接修订任务草稿（高级）</summary><p className="my-2">填写完整 JSON 将跳过本次模型重写，按原任务规则校验；保留原始模型证据，记录为作者修订。只适用于失败的文本任务。</p>{repairCandidateSections.length > 0 && <div className="my-3 rounded border border-border p-3" data-testid={repairCandidateTestId}>
+              <p>当前修订候选来自已签收内容，不是历史请求快照；读取不调用模型。提交时核对上下文，来源变化后须重新读取。</p>
+              <label className="my-2 block">候选分类<select aria-label={`${repairCandidateLabel}修订候选分类`} value={activeRepairCandidateSection}
+                onChange={event => setRepairCandidateSection(event.target.value as RepairCandidateSectionV1)} className="ml-2 rounded border border-border bg-bg-base p-1">
+                {repairCandidateSections.map(section => <option key={section} value={section}>{({ scenes: '逐场景文字', actions: '行动说法', vendors: '商店', locations: '地点', factions: '势力', actors: '人物', contract: '合同与规模', sources: '物品来源', rewards: '奖励', ordinaryDeliveries: '普通交付', requirements: '内容需求', objectives: '目标操作', objectiveDescriptions: '全部目标说明', interactions: '地图交互', items: '物品', acquisitions: '领取来源', endings: '结局资格', recognition: '主线认可', consequences: '故事后果', knowledge: '传闻', achievements: '成就', quests: '任务', recipes: '配方', events: '事件', templates: '模板', regions: '地区' })[section]}</option>)}
+              </select></label>
+              <div className="flex gap-3"><button type="button" disabled={busy} onClick={() => inspectRepairCandidates()}>读取所选候选</button><button type="button" disabled={busy} onClick={() => inspectRepairCandidates(0, true)}>重新读取当前来源</button></div>
+              {currentRepairCandidatePage && <><p className="my-2 break-all">上下文指纹：{currentRepairCandidatePage.contextSelectionHash} · {currentRepairCandidatePage.section} · 第 {currentRepairCandidatePage.page + 1} 页 / {Math.max(1, Math.ceil(currentRepairCandidatePage.total / currentRepairCandidatePage.pageSize))} 页 · {currentRepairCandidatePage.total} 项</p>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-[10px]" aria-label={`当前${repairCandidateLabel}修订候选`}>{JSON.stringify(currentRepairCandidatePage.rows, null, 2)}</pre>
+                <div className="mt-2 flex gap-3"><button type="button" disabled={busy || activeRepairCandidateSection !== currentRepairCandidatePage.section || currentRepairCandidatePage.page === 0} onClick={() => inspectRepairCandidates(currentRepairCandidatePage.page - 1)}>上一页候选</button><button type="button" disabled={busy || activeRepairCandidateSection !== currentRepairCandidatePage.section || (currentRepairCandidatePage.page + 1) * currentRepairCandidatePage.pageSize >= currentRepairCandidatePage.total} onClick={() => inspectRepairCandidates(currentRepairCandidatePage.page + 1)}>下一页候选</button></div></>}
+            </div>}<textarea aria-label="作者修订的完整任务 JSON" maxLength={120000} value={authorDraftJson} onChange={event => setAuthorDraftJson(event.target.value)} className="min-h-60 w-full rounded border border-border bg-bg-base p-3 font-mono text-text-main" /></details>}
           {providerReservationBlocked && <fieldset className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-xs text-text-muted" data-testid="product-production-unknown-result-disposition"><legend className="px-1 font-medium text-error">先结算供应商请求</legend><p className="mb-2 text-[10px] leading-5">{pausedProviderReservationBlocked ? '暂停时仍有供应商请求在途。恢复前必须把冻结的每个 Run、attempt 和 epoch 一起封账；本次选择应用于全部在途请求。' : observedUncheckpointedResponseBlocked ? '系统已持久化供应商响应证据，但完整用量未能回传。为避免少记账，只能按该 attempt 的冻结预留上限封账。' : '系统不会猜测这次请求是否扣费。请选择与你核对结果一致的处置，选择会与失败 Run、attempt 和 epoch 一起冻结。'}</p>{!observedUncheckpointedResponseBlocked && <label className="mr-4 inline-flex items-center gap-2"><input type="radio" name="unknown-result-disposition" checked={unknownResultDisposition === 'confirmed-not-charged'} onChange={() => setUnknownResultDisposition('confirmed-not-charged')} />已确认未计费</label>}<label className="inline-flex items-center gap-2"><input type="radio" name="unknown-result-disposition" checked={unknownResultDisposition === 'charge-reservation-upper-bound'} onChange={() => setUnknownResultDisposition('charge-reservation-upper-bound')} />{pausedProviderReservationBlocked ? '全部按冻结预留上限封账' : observedUncheckpointedResponseBlocked ? '按冻结预留上限封账并重试' : '无法确认，按预留上限记账'}</label></fieldset>}
           {canRetryBlocker && !recoveryPolicy?.repairNoteAllowed && <p className="mt-3 rounded border border-border bg-bg-base p-3 text-xs text-text-muted" data-testid="product-production-retry-only">当前任务暂不支持修复要求或直接 JSON 修订；可先查看制作记录，再按原冻结输入重试。</p>}
           <div className="mt-4 flex flex-wrap gap-2">

@@ -1,3 +1,11 @@
+import * as compatibilityModule from '../../src/lib/product-production/compatibility'
+import { resolveProductBuildCompatibilityPackageV1 } from '../../src/lib/product-production/compatibility-baseline'
+import { createLegacyProductBuildRootTerminalReceiptV1, createProductBuildRootTerminalReceiptV1,
+  verifyProductBuildRootTerminalReceiptV1 } from '../../src/lib/product-production/receipts'
+import { productProductionTerminalArtifactKeysV1 } from '../../src/lib/product-production/runtime-package'
+import { createLegacyTextOpenWorldProductRuntimePackageFixtureV1,
+  createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 import { appendAgentRunEventV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -16,7 +24,7 @@ import {
   carryForwardProductBuildArtifactsAcrossBuildsV1,
   carryForwardProductBuildArtifactsToEpochV1,
 } from '../../src/lib/product-production/artifact-store'
-import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
+import { createProductProductionPlanV3, parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   assertProductProductionBudgetLedgerV1,
   prepareLegacyPausedProductBuildV1,
@@ -2640,6 +2648,339 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(feedback.baselineArtifact.contentHash).not.toBe(baselineHash)
     expect(feedback.baselineArtifact.contentHash).toMatch(/^[a-f0-9]{64}$/)
   })
+
+  it.each(['unchanged', 'stop-keep', 'archive-restore'] as const)(
+    '兼容性历史封存 %s：控制轮次变化不丢失原包比较，也不复活旧 Build',
+    async retirement => {
+      const name = `compatibility-frozen-package-${retirement}`
+      const owned = await fixture(name)
+      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+      const capabilityBindings = [{ requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }) }]
+      const run = () => runProductProductionUntilBlockedV1({
+        scope: owned.scope, productionId: owned.productionId,
+        executor: executorFor(owned, new Map(), { active: 0, peak: 0 }), capabilityBindings,
+      })
+      const first = await run()
+      expect(first.terminal).toBe(true)
+      const sealed = (await db.productBuilds.get(first.buildId))!
+      const sealedArtifacts = await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray()
+      if (retirement === 'stop-keep') {
+        const production = (await db.productProductions.get(owned.productionId))!
+        const stopped = await executeProductProductionCommand({
+          scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'stop', commandId: `${name}.stop`,
+            expectedStateRevision: production.stateRevision, retention: 'keep-build' },
+        })
+        expect(stopped.ok).toBe(true)
+      } else if (retirement === 'archive-restore') {
+        const production = (await db.productProductions.get(owned.productionId))!
+        const archived = await executeProductProductionCommand({
+          scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'archive', commandId: `${name}.archive`,
+            expectedStateRevision: production.stateRevision, reason: '保留封存比较证据' },
+        })
+        expect(archived.ok).toBe(true)
+        const current = (await db.productProductions.get(owned.productionId))!
+        const restored = await executeProductProductionCommand({
+          scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'restore', commandId: `${name}.restore`,
+            expectedStateRevision: current.stateRevision },
+        })
+        expect(restored.ok).toBe(true)
+      }
+      const historical = (await db.productBuilds.get(first.buildId))!
+      expect(historical.packageHash).toBe(sealed.packageHash)
+      expect(historical.manifestJson).toBe(sealed.manifestJson)
+      if (retirement !== 'unchanged') expect(historical.controlEpoch).toBeGreaterThan(sealed.controlEpoch)
+      const production = (await db.productProductions.get(owned.productionId))!
+      const saved = await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'save-brief-revision', commandId: `${name}.brief2`,
+          expectedStateRevision: production.stateRevision, parentRevision: 1, brief: owned.brief },
+      })
+      expect(saved.ok).toBe(true)
+      const ready = (await db.productProductions.get(owned.productionId))!
+      const started = await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'authorize-start', commandId: `${name}.start2`,
+          expectedStateRevision: ready.stateRevision, briefRevision: 2,
+          briefHash: saved.result.briefHash as string, authorizationNonce: `${name}.click2` },
+      })
+      expect(started.ok).toBe(true)
+      const second = await run()
+      expect(second.terminal).toBe(true)
+      const current = (await db.productBuilds.get(second.buildId))!
+      expect(current.parentBuildNumber).toBe(sealed.buildNumber)
+      expect(JSON.parse(current.compatibilityJson)).toMatchObject({
+        fromBuildNumber: sealed.buildNumber, fromPackageHash: sealed.packageHash,
+        toBuildNumber: current.buildNumber, toPackageHash: current.packageHash,
+        level: 'compatible', migrationPolicy: 'identity',
+      })
+      expect(await db.productBuilds.get(first.buildId)).toEqual(historical)
+      expect(await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray()).toEqual(sealedArtifacts)
+      expect(await db.productReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+    }, 30_000,
+  )
+
+  it('兼容性历史封存严格拒绝篡改、丢失和丢弃，不跳过选中的旧包', async () => {
+    const owned = await fixture('compatibility-frozen-negative')
+    const requirement = owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!
+    const first = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: executorFor(owned, new Map(), { active: 0, peak: 0 }),
+      capabilityBindings: [{ requirementKey: requirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }) }],
+    })
+    const original = {
+      production: (await db.productProductions.get(owned.productionId))!,
+      build: (await db.productBuilds.get(first.buildId))!,
+      artifacts: (await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray())
+        .filter(row => row.artifactKey === 'runtime.package'),
+    }
+    const originalBytes = canonicalProductProductionJsonV2(original)
+    await expect(resolveProductBuildCompatibilityPackageV1(original)).resolves.toMatchObject({
+      buildNumber: original.build.buildNumber, packageHash: original.build.packageHash,
+    })
+    type Input = typeof original
+    const changes: Array<[string, (input: Input) => void | Promise<void>]> = [
+      ['owner', input => { input.build.workId = input.build.workId! + 1 }],
+      ['row owner', input => { input.artifacts[0].workId = input.artifacts[0].workId! + 1 }],
+      ['row build', input => { input.artifacts[0].buildId += 1 }],
+      ['version', input => { input.artifacts[0].version += 1 }],
+      ['producer receipt', input => { input.artifacts[0].producerReceiptHash = 'e'.repeat(64) }],
+      ['payload', input => {
+        const pkg = JSON.parse(input.artifacts[0].payloadJson)
+        pkg.narrative.choices[0].text = '被替换的旧包内容'
+        input.artifacts[0].payloadJson = canonicalProductProductionJsonV2(pkg)
+      }],
+      ['orphaned', input => { input.artifacts[0].status = 'orphaned' }],
+      ['missing', input => { input.artifacts = [] }],
+      ['duplicate', input => { input.artifacts.push({ ...input.artifacts[0], id: 999999 }) }],
+      ['manifest bytes', input => { input.build.manifestJson += ' ' }],
+      ['manifest hash', input => { input.build.manifestHash = 'f'.repeat(64) }],
+      ['future epoch', async input => {
+        const manifest = JSON.parse(input.build.manifestJson)
+        manifest.controlEpoch = input.build.controlEpoch + 1
+        input.build.manifestJson = canonicalProductProductionJsonV2(manifest)
+        input.build.manifestHash = await hashProductProductionValueV2(manifest)
+      }],
+      ['manifest package identity', async input => {
+        const manifest = JSON.parse(input.build.manifestJson)
+        manifest.runtimePackageHash = 'e'.repeat(64)
+        input.build.manifestJson = canonicalProductProductionJsonV2(manifest)
+        input.build.manifestHash = await hashProductProductionValueV2(manifest)
+      }],
+      ['manifest duplicate member', async input => {
+        const manifest = JSON.parse(input.build.manifestJson)
+        manifest.artifactReceipts.push(manifest.artifactReceipts.find((row: { artifactKey: string }) => row.artifactKey === 'runtime.package'))
+        input.build.manifestJson = canonicalProductProductionJsonV2(manifest)
+        input.build.manifestHash = await hashProductProductionValueV2(manifest)
+      }],
+    ]
+    for (const [label, mutate] of changes) {
+      const input = structuredClone(original)
+      await mutate(input)
+      await expect(resolveProductBuildCompatibilityPackageV1(input), label).rejects.toThrow()
+    }
+    expect(canonicalProductProductionJsonV2(original)).toBe(originalBytes)
+  }, 30_000)
+
+  it.each(['package', 'build'] as const)('兼容性历史封存 %s 在读取后变化，CAS 拒绝旧报告并允许同 Build 无模型重发恢复', async changed => {
+    const name = `compatibility-baseline-cas-${changed}`
+    const owned = await fixture(name)
+    const requirement = owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!
+    const bindings = [{ requirementKey: requirement.requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: await hashProductProductionValueV2({ provider: 'configured' }) }]
+    const calls = new Map<string, number>()
+    const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+    const run = () => runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor, capabilityBindings: bindings,
+    })
+    const first = await run()
+    const parent = (await db.productBuilds.get(first.buildId))!
+    const production = (await db.productProductions.get(owned.productionId))!
+    const saved = await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'save-brief-revision', commandId: `${name}.brief2`,
+        expectedStateRevision: production.stateRevision, parentRevision: 1, brief: owned.brief },
+    })
+    expect(saved.ok).toBe(true)
+    const ready = (await db.productProductions.get(owned.productionId))!
+    const start = await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'authorize-start', commandId: `${name}.start2`,
+        expectedStateRevision: ready.stateRevision, briefRevision: 2,
+        briefHash: saved.result.briefHash as string, authorizationNonce: `${name}.click2` },
+    })
+    expect(start.ok).toBe(true)
+    const originalCreate = compatibilityModule.createProductBuildCompatibilityReportV1
+    let changedAfterRead = false
+    const spy = vi.spyOn(compatibilityModule, 'createProductBuildCompatibilityReportV1')
+      .mockImplementation(async input => {
+        const report = await originalCreate(input)
+        if (input.previous && !changedAfterRead) {
+          changedAfterRead = true
+          if (changed === 'build') await db.productBuilds.update(parent.id!, { stateRevision: parent.stateRevision + 1 })
+          else {
+            const row = (await db.productBuildArtifacts.where('buildId').equals(parent.id!).toArray())
+              .find(artifact => artifact.artifactKey === 'runtime.package')!
+            await db.productBuildArtifacts.update(row.id!, { metadataJson: '{"changedAfterRead":true}' })
+          }
+        }
+        return report
+      })
+    try {
+      await expect(run()).rejects.toThrow('compatibility baseline CAS 已过期')
+      expect(changedAfterRead).toBe(true)
+      const current = (await db.productBuilds.get(start.result.buildId as number))!
+      expect(current).toMatchObject({ packageHash: '', compatibilityJson: '{}', rootTerminalReceiptHash: null })
+      expect(await db.productReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+    } finally { spy.mockRestore() }
+    const callsBeforeRecovery = [...calls.entries()]
+    const beforePause = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'pause', commandId: `${name}.pause`,
+        expectedStateRevision: beforePause.stateRevision, reason: '保留全部任务签收后修复装配' },
+    })).ok).toBe(true)
+    const paused = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: `${name}.resume`,
+        expectedStateRevision: paused.stateRevision },
+    })).ok).toBe(true)
+    const recovered = await run()
+    expect(recovered.terminal).toBe(true)
+    expect(recovered.buildId).toBe(start.result.buildId)
+    // Resume preserves paid content tasks; deterministic assembly and QA
+    // deliberately rebuild their receipts for the new control epoch.
+    const beforeCalls = new Map(callsBeforeRecovery)
+    const rerunKeys = [...calls].filter(([key, count]) => count !== beforeCalls.get(key)).map(([key]) => key)
+    expect(rerunKeys).toEqual(['integration.package', 'qa.release'])
+    const recoveredPlan = parseProductProductionPlanV3((await db.productBuilds.get(recovered.buildId))!.planJson)
+    for (const key of rerunKeys) {
+      expect(recoveredPlan.tasks.find(task => task.taskKey === key)?.executionMode).toBe('deterministic')
+      expect(calls.get(key)).toBe(beforeCalls.get(key)! + 1)
+    }
+    expect(await db.productBuilds.where('productionId').equals(owned.productionId).count()).toBe(2)
+  }, 30_000)
+
+  it.each(['legacy-v1-generic', 'current-v2-dedicated'] as const)(
+    '兼容性历史封存 %s 保持旧原文、原 hash 和只读比较边界', async variant => {
+      const owned = await fixture(`compatibility-readonly-${variant}`)
+      const requirement = owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!
+      const first = await runProductProductionUntilBlockedV1({
+        scope: owned.scope, productionId: owned.productionId,
+        executor: executorFor(owned, new Map(), { active: 0, peak: 0 }),
+        capabilityBindings: [{ requirementKey: requirement.requirementKey,
+          adapterId: 'configured-text-provider.v1',
+          bindingHash: await hashProductProductionValueV2({ provider: 'configured' }) }],
+      })
+      // Isolated in-memory reader fixtures. They are never written to the
+      // product DB, and are not a production or real-model acceptance result.
+      const production = { ...(await db.productProductions.get(owned.productionId))!,
+        productType: 'text-open-world' as const }
+      const build = { ...(await db.productBuilds.get(first.buildId))! }
+      const artifacts = structuredClone(await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray())
+      const original = artifacts.find(row => row.artifactKey === 'runtime.package')!
+      const legacy = variant === 'legacy-v1-generic'
+      const runtimePackage = legacy ? createLegacyTextOpenWorldProductRuntimePackageFixtureV1()
+        : createTextOpenWorldProductRuntimePackageFixtureV1(createTextOpenWorldVNextFixture())
+      const packageHash = await hashProductProductionValueV2(runtimePackage)
+      const artifactKey = legacy ? 'runtime.package'
+        : productProductionTerminalArtifactKeysV1('text-open-world').runtimePackage
+      Object.assign(original, { artifactKey, contentHash: packageHash,
+        payloadJson: canonicalProductProductionJsonV2(runtimePackage) })
+      const manifest = JSON.parse(build.manifestJson)
+      manifest.runtimePackageHash = packageHash
+      manifest.artifactReceipts = artifacts.map(row => ({ artifactKey: row.artifactKey,
+        version: row.version, contentHash: row.contentHash, producerReceiptHash: row.producerReceiptHash }))
+      build.manifestJson = canonicalProductProductionJsonV2(manifest)
+      build.manifestHash = await hashProductProductionValueV2(manifest)
+      build.packageHash = packageHash
+      const receiptInput = { ...build, artifacts }
+      build.rootTerminalReceiptHash = await (legacy ? createLegacyProductBuildRootTerminalReceiptV1
+        : createProductBuildRootTerminalReceiptV1)(receiptInput)
+      expect(await verifyProductBuildRootTerminalReceiptV1({ ...receiptInput,
+        expectedReceiptHash: build.rootTerminalReceiptHash })).toEqual({ valid: true, version: legacy ? 1 : 2 })
+      build.controlEpoch += 3
+      build.status = 'cancelled'
+      const input = { production, build, artifacts: artifacts.filter(row => row.artifactKey === artifactKey) }
+      const before = canonicalProductProductionJsonV2(input)
+      await expect(resolveProductBuildCompatibilityPackageV1(input)).resolves.toEqual({
+        buildNumber: build.buildNumber, packageHash, runtimePackage,
+      })
+      expect(canonicalProductProductionJsonV2(input)).toBe(before)
+      if (!legacy) {
+        // A generic row is never a fallback for a missing dedicated member
+        // already named by the frozen Manifest, even with identical payload.
+        await expect(resolveProductBuildCompatibilityPackageV1({ ...input,
+          artifacts: [{ ...original, artifactKey: 'runtime.package' }] })).rejects.toThrow('Artifact 缺失')
+      }
+      expect((await db.productBuilds.get(first.buildId))!.controlEpoch).toBe(manifest.controlEpoch)
+      expect(await db.productReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+    }, 30_000,
+  )
+
+  it('兼容性历史封存正式丢弃的最近包阻断后继封存，不回退到更老完整包', async () => {
+    const name = 'compatibility-no-fallback-after-discard'
+    const owned = await fixture(name)
+    const requirement = owned.brief.capabilityRequirements.find(row => row.mediaClass === 'text')!
+    const bindingHash = await hashProductProductionValueV2({ provider: 'configured' })
+    const executor = executorFor(owned, new Map(), { active: 0, peak: 0 })
+    const run = () => runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId, executor,
+      capabilityBindings: [{ requirementKey: requirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash }],
+    })
+    const next = async (revision: number) => {
+      const production = (await db.productProductions.get(owned.productionId))!
+      const saved = await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'save-brief-revision', commandId: `${name}.brief${revision}`,
+          expectedStateRevision: production.stateRevision, parentRevision: revision - 1, brief: owned.brief },
+      })
+      expect(saved.ok).toBe(true)
+      const ready = (await db.productProductions.get(owned.productionId))!
+      const started = await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'authorize-start', commandId: `${name}.start${revision}`,
+          expectedStateRevision: ready.stateRevision, briefRevision: revision,
+          briefHash: saved.result.briefHash as string, authorizationNonce: `${name}.click${revision}` },
+      })
+      expect(started.ok).toBe(true)
+      return started.result.buildId as number
+    }
+    const first = await run()
+    expect(first.terminal).toBe(true)
+    const oldest = (await db.productBuilds.get(first.buildId))!
+    const secondId = await next(2)
+    expect((await run()).terminal).toBe(true)
+    const second = (await db.productBuilds.get(secondId))!
+    const beforeStop = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'stop', commandId: `${name}.discard`,
+        expectedStateRevision: beforeStop.stateRevision, retention: 'discard-unreleased' },
+    })).ok).toBe(true)
+    const discarded = (await db.productBuilds.get(secondId))!
+    expect(discarded.packageHash).toBe(second.packageHash)
+    expect(discarded.manifestJson).toBe(second.manifestJson)
+    const thirdId = await next(3)
+    await expect(run()).rejects.toThrow('历史 package Artifact 缺失')
+    expect(await db.productBuilds.get(thirdId)).toMatchObject({
+      parentBuildNumber: second.buildNumber, packageHash: '', compatibilityJson: '{}', rootTerminalReceiptHash: null,
+    })
+    expect(await db.productBuilds.get(first.buildId)).toEqual(oldest)
+    expect(await db.productBuilds.get(secondId)).toEqual(discarded)
+    expect(await db.productReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+  }, 30_000)
 
   it('从授权 Brief 自主并行执行 DAG、冻结 child receipts、编译 Preview 并完成 root join', async () => {
     const owned = await fixture('scheduler-parallel')

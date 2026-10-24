@@ -35,6 +35,9 @@ import {
   type TextOpenWorldRewardDemandTableV1,
 } from './item-source-production'
 
+import { ITEM_DISPOSITION_CONTRACT_V1, buildTextOpenWorldOrdinaryDeliveryCandidatesV1,
+  type TextOpenWorldOrdinaryDeliveryCandidateV1 } from './ordinary-delivery-production'
+
 const SKILL_ID = 'text-open-world.production.item-reward-catalog.v1'
 const MAX_CONTEXT_CHARS = 320_000
 type ItemKindV1 = 'equipment' | 'consumable' | 'material' | 'quest' | 'misc'
@@ -89,6 +92,8 @@ export interface TextOpenWorldItemRewardCatalogInputContextV1 {
   rewardDemands: RewardDemandV1[] | TextOpenWorldRewardDemandTableV1
   itemSourceContract?: typeof ITEM_SOURCE_CONTRACT_V1
   itemSourceChoices?: TextOpenWorldItemSourceChoiceV1[] | TextOpenWorldItemSourceChoiceTableV1
+  itemDispositionContract?: typeof ITEM_DISPOSITION_CONTRACT_V1
+  ordinaryDeliveryCandidates?: TextOpenWorldOrdinaryDeliveryCandidateV1[]
   contextSelectionHash: string
 }
 
@@ -110,6 +115,7 @@ export type TextOpenWorldItemRewardCatalogModelRunnerV1 = (input: {
 }) => Promise<TextOpenWorldItemRewardCatalogModelExecutionV1>
 
 interface CatalogDraftV1 {
+  deliveryOnlyItemDemandNumbers?: number[]
   items: Array<{
     demandNumber: number
     title: string
@@ -285,6 +291,9 @@ async function validateUpstream(context: Omit<TextOpenWorldItemRewardCatalogInpu
   const explicitSources = context.itemSourceContract === ITEM_SOURCE_CONTRACT_V1
   if ((!explicitSources && (context.itemSourceContract !== undefined || context.itemSourceChoices !== undefined))
     || (explicitSources && context.itemSourceChoices === undefined)) fail('物品来源合同版本或候选缺失')
+  const disposition = context.itemDispositionContract === ITEM_DISPOSITION_CONTRACT_V1
+  if (disposition ? !explicitSources || context.ordinaryDeliveryCandidates === undefined
+    : context.itemDispositionContract !== undefined || context.ordinaryDeliveryCandidates !== undefined) fail('普通交付物合同或候选缺失')
   const { gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest, progressionCatalogs, enemyEncounterCatalog } = context
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   for (const [value, hashKey, label] of [
@@ -308,6 +317,8 @@ async function validateUpstream(context: Omit<TextOpenWorldItemRewardCatalogInpu
     const choices = buildTextOpenWorldItemSourceChoicesV1({ ...context, rewardDemands: rewards })
     const expected = Array.isArray(context.itemSourceChoices) ? choices : packTextOpenWorldItemSourceChoicesV1(choices)
     if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(context.itemSourceChoices)) fail('物品来源候选不是上游确定性投影')
+    if (disposition && canonicalProductProductionJsonV2(buildTextOpenWorldOrdinaryDeliveryCandidatesV1(context, choices))
+      !== canonicalProductProductionJsonV2(context.ordinaryDeliveryCandidates)) fail('普通交付物候选不是上游确定性投影')
   }
 }
 
@@ -341,6 +352,8 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     itemSourceContract: ITEM_SOURCE_CONTRACT_V1,
   }
   body.itemSourceChoices = packTextOpenWorldItemSourceChoicesV1(buildTextOpenWorldItemSourceChoicesV1({ ...body, rewardDemands }))
+  body.itemDispositionContract = ITEM_DISPOSITION_CONTRACT_V1
+  body.ordinaryDeliveryCandidates = buildTextOpenWorldOrdinaryDeliveryCandidatesV1(body, unpackTextOpenWorldItemSourceChoicesV1(body.itemSourceChoices))
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
   if (canonicalProductProductionJsonV2(context).length > MAX_CONTEXT_CHARS) fail('ItemReward Catalog Context超过硬上限')
@@ -369,12 +382,64 @@ async function parseContext(value: string): Promise<TextOpenWorldItemRewardCatal
   return context
 }
 
+/** Current author aid; it is not a historical model-input receipt. Candidate
+ * ordinals and expanded tables come from the same validated production Context. */
+export const ITEM_REWARD_REPAIR_SECTIONS_V1 = ['contract', 'items', 'sources', 'rewards', 'ordinaryDeliveries', 'requirements'] as const
+export type ItemRewardRepairSectionV1 = typeof ITEM_REWARD_REPAIR_SECTIONS_V1[number]
+export async function projectTextOpenWorldItemRewardRepairCandidatesV1(input: {
+  contextText: string
+  section: ItemRewardRepairSectionV1
+  page: number
+  expectedContextSelectionHash?: string
+}) {
+  if (!ITEM_REWARD_REPAIR_SECTIONS_V1.includes(input.section)
+    || !Number.isSafeInteger(input.page) || input.page < 0) fail('修订候选分类或页码无效')
+  const context = await parseContext(input.contextText)
+  if (input.expectedContextSelectionHash !== undefined
+    && input.expectedContextSelectionHash !== context.contextSelectionHash) fail('修订候选上下文已变化，请重新读取')
+  const choices = context.itemSourceContract ? unpackTextOpenWorldItemSourceChoicesV1(context.itemSourceChoices) : []
+  const rewards = unpackTextOpenWorldRewardDemandsV1(context.rewardDemands)
+  const sections: Record<ItemRewardRepairSectionV1, unknown[]> = {
+    contract: [{ productInstanceKey: context.productInstanceKey,
+      draftVersion: context.itemDispositionContract ? 3 : context.itemSourceContract ? 2 : 1,
+      itemSourceContract: context.itemSourceContract ?? null, itemDispositionContract: context.itemDispositionContract ?? null,
+      gameplayRulesetHash: context.gameplayRuleset.gameplayRulesetHash,
+      itemCount: context.itemDemands.length, sourceCount: choices.length, rewardCount: rewards.length,
+      ordinaryDeliveryCount: context.ordinaryDeliveryCandidates?.length ?? 0 }],
+    items: context.itemDemands,
+    sources: choices,
+    rewards,
+    ordinaryDeliveries: (context.ordinaryDeliveryCandidates ?? []).map(([itemDemandNumber, sourceChoiceNumber, deliveryObjectiveNumber]) => {
+      const source = choices[sourceChoiceNumber - 1]!
+      const delivery = context.questSkeletons.objectives[deliveryObjectiveNumber - 1]!
+      return { itemDemandNumber, sourceChoiceNumber, deliveryObjectiveNumber,
+        item: context.itemDemands[itemDemandNumber - 1], source,
+        pickupObjective: context.questSkeletons.objectives.find(row => row.key === source.sourceKey),
+        deliveryObjective: delivery, quest: context.questSkeletons.quests.find(row => row.key === delivery.questKey) }
+    }),
+    requirements: context.contentRequirementManifest.requirements,
+  }
+  const rows = sections[input.section], pageSize = 5
+  if (input.page >= Math.max(1, Math.ceil(rows.length / pageSize))) fail('修订候选页码超出范围')
+  return { contextSelectionHash: context.contextSelectionHash, section: input.section,
+    page: input.page, pageSize, total: rows.length, rows: rows.slice(input.page * pageSize, (input.page + 1) * pageSize) }
+}
+
 function parseDraft(value: unknown, context: TextOpenWorldItemRewardCatalogInputContextV1): CatalogDraftV1 {
   const explicitSources = context.itemSourceContract === ITEM_SOURCE_CONTRACT_V1
   const sourceChoices = explicitSources ? unpackTextOpenWorldItemSourceChoicesV1(context.itemSourceChoices) : []
   const rewardDemands = unpackTextOpenWorldRewardDemandsV1(context.rewardDemands)
-  const root = record(value, 'draft'); exactKeys(root, ['schema', 'version', 'items', 'rewards'], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-item-reward-catalog-draft' || root.version !== (explicitSources ? 2 : 1)) fail('draft schema/version无效')
+  const disposition = context.itemDispositionContract === ITEM_DISPOSITION_CONTRACT_V1
+  const root = record(value, 'draft')
+  if (root.schema !== 'storyforge.text-open-world-item-reward-catalog-draft' || root.version !== (disposition ? 3 : explicitSources ? 2 : 1)) fail('draft schema/version无效')
+  const authorBound = Object.prototype.hasOwnProperty.call(root, 'authorContextSelectionHash')
+  if (authorBound && root.authorContextSelectionHash !== context.contextSelectionHash) fail('作者修订上下文已变化，请重新读取候选')
+  exactKeys(root, ['schema', 'version', 'items', 'rewards', ...(disposition ? ['deliveryOnlyItemDemandNumbers'] : []),
+    ...(authorBound ? ['authorContextSelectionHash'] : [])], 'draft')
+  const deliveryOnlyItemDemandNumbers = disposition
+    ? integerArray(root.deliveryOnlyItemDemandNumbers, 'deliveryOnlyItemDemandNumbers', context.itemDemands.length, context.itemDemands.length) : undefined
+  if (deliveryOnlyItemDemandNumbers?.some((number, index) => (index > 0 && number <= deliveryOnlyItemDemandNumbers[index - 1]!)
+    || !context.ordinaryDeliveryCandidates!.some(candidate => candidate[0] === number))) fail('普通交付物选择必须按序且属于冻结候选')
   if (!Array.isArray(root.items) || root.items.length !== context.itemDemands.length) fail(`items必须与${context.itemDemands.length}项需求一一对应`)
   const items = root.items.map((item, index) => {
     const row = record(item, `items[${index}]`); exactKeys(row, ['demandNumber', 'title', 'description', 'tags', 'equipmentSlotKey',
@@ -420,7 +485,13 @@ function parseDraft(value: unknown, context: TextOpenWorldItemRewardCatalogInput
   })
   if (rewards.some((reward, index) => reward.demandNumber !== index + 1) || new Set(rewards.map(reward => reward.demandNumber)).size !== rewards.length) fail('rewards必须按需求顺序精确覆盖')
   if (new Set(rewards.map(reward => reward.title.toLocaleLowerCase('zh-CN'))).size !== rewards.length) fail('奖励标题不得重复')
-  return { items, rewards }
+  for (const number of deliveryOnlyItemDemandNumbers ?? []) {
+    const choice = context.ordinaryDeliveryCandidates!.find(candidate => candidate[0] === number)![1]
+    if (canonicalProductProductionJsonV2(items[number - 1]!.sourceChoiceNumbers) !== canonicalProductProductionJsonV2([choice])) {
+      fail('普通交付物只能选择其唯一领取来源，不能进入奖励、掉落、商店或配方')
+    }
+  }
+  return { items, rewards, ...(disposition ? { deliveryOnlyItemDemandNumbers } : {}) }
 }
 
 function itemKey(demand: ItemDemandV1, index: number): string {
@@ -451,14 +522,15 @@ async function createArtifact(input: { context: TextOpenWorldItemRewardCatalogIn
   const items = input.draft.items.map((draft, index) => {
     const demand = input.context.itemDemands[draft.demandNumber - 1]!
     const kind = demand.plannedKind; const critical = kind === 'quest' || demand.criticality === 'protected'
+    const deliveryOnly = input.draft.deliveryOnlyItemDemandNumbers?.includes(draft.demandNumber) ?? false
     return {
       key: itemKey(demand, index + 1), order: index + 1, sourceDemandKey: demand.sourceDemandKey,
       title: draft.title, description: draft.description, tags: draft.tags, kind,
       stackPolicy: kind === 'equipment' || kind === 'quest' ? 'instanced' as const : 'stacked' as const,
       maximumStack: kind === 'equipment' || kind === 'quest' ? null : 99,
       unique: kind === 'quest', consumable: kind === 'consumable', critical,
-      droppable: !critical, sellable: !critical,
-      baseValue: critical ? 0 : kind === 'equipment' ? 50 + index * 10 : kind === 'consumable' ? 25 : kind === 'material' ? 10 : 15,
+      droppable: !critical, sellable: !critical && !deliveryOnly,
+      baseValue: critical || deliveryOnly ? 0 : kind === 'equipment' ? 50 + index * 10 : kind === 'consumable' ? 25 : kind === 'material' ? 10 : 15,
       equipmentSlotKey: draft.equipmentSlotKey,
       statModifiers: itemStats(kind, draft.equipmentSlotKey, index + 1),
       fulfilledRequirementKeys: demand.requirementKey ? [demand.requirementKey] : [], sourceRefs: [demand.sourceDemandKey],
@@ -546,6 +618,12 @@ async function createArtifact(input: { context: TextOpenWorldItemRewardCatalogIn
     equipmentSlots: input.context.gameplayRuleset.inventory.equipmentSlots,
     items, rewardContracts, dropTables,
     ...(itemSourcePlans ? { itemSourceContract: ITEM_SOURCE_CONTRACT_V1, itemSourcePlans } : {}),
+    ...(input.context.itemDispositionContract ? { itemDispositionContract: ITEM_DISPOSITION_CONTRACT_V1,
+      ordinaryDeliveryPlans: input.draft.deliveryOnlyItemDemandNumbers!.map(number => {
+        const candidate = input.context.ordinaryDeliveryCandidates!.find(candidate => candidate[0] === number)!
+        return { itemKey: items[number - 1]!.key, pickupObjectiveKey: itemSourcePlans!.find(plan => plan.itemKey === items[number - 1]!.key)!.sources[0]!.sourceKey,
+          deliveryObjectiveKey: input.context.questSkeletons.objectives[candidate[2] - 1]!.key }
+      }) } : {}),
     coverage: {
       requiredPlayerItemKeys: input.context.playerBuild.catalogRequirements.items.map(item => item.key),
       coveredPlayerItemKeys: input.context.playerBuild.catalogRequirements.items.map(item => item.key).filter(key => items.some(item => item.key === key)),
@@ -602,7 +680,9 @@ function draftFromArtifact(artifact: TextOpenWorldItemRewardCatalogV1, context: 
   const explicitSources = context.itemSourceContract === ITEM_SOURCE_CONTRACT_V1
   const sourceChoices = explicitSources ? unpackTextOpenWorldItemSourceChoicesV1(context.itemSourceChoices) : []
   return {
-    schema: 'storyforge.text-open-world-item-reward-catalog-draft', version: explicitSources ? 2 : 1,
+    schema: 'storyforge.text-open-world-item-reward-catalog-draft', version: context.itemDispositionContract ? 3 : explicitSources ? 2 : 1,
+    ...(context.itemDispositionContract ? { deliveryOnlyItemDemandNumbers: (artifact.ordinaryDeliveryPlans ?? []).map(plan =>
+      artifact.items.find(item => item.key === plan.itemKey)?.order ?? fail('普通交付物计划引用未知物品')) } : {}),
     items: artifact.items.map(item => ({
       demandNumber: item.order, title: item.title, description: item.description, tags: item.tags, equipmentSlotKey: item.equipmentSlotKey,
       ...(explicitSources ? { sourceChoiceNumbers: (artifact.itemSourcePlans?.find(plan => plan.itemKey === item.key)?.sources ?? [])
@@ -685,8 +765,9 @@ function systemPrompt(context: TextOpenWorldItemRewardCatalogInputContextV1): st
     'items.sourceChoiceNumbers只能选itemSourceChoices中eligibleItemDemandNumbers包含本物品的choiceNumber，最多16项。requiredItemDemandNumbers包含本物品的固定来源由代码自动加入，不要重复选择。除固定来源外每件物品至少一个来源。',
     '依据上游description和requestedTraits安排：需制作安装的组件选craft；商店商品选vendor；普通送件和物证选对应acquisition；明确的前置任务奖励才选reward。不要为了过门给制作产物、送件或唯一物证添不相干的奖励/库存。每个craft候选恰好分配一个产物；每个vendor候选分配1到12个商品；一个reward最多4种物品，acquisition最多8种。配方原料须有非craft且非acquisition的实际来源，不能循环自供。',
     'rewards只写标题与描述，物品由上述显式来源选择编译，不再输出optionalItemDemandNumbers。来源计划暂不等于来源已实现；后续配方、库存与领取必须精确履约。',
+    ...(context.itemDispositionContract ? ['ordinaryDeliveryCandidates每行是[物品demandNumber,唯一领取sourceChoiceNumber,后续交付objectiveNumber]。普通包件/借用夹具可在deliveryOnlyItemDemandNumbers按升序选择；所选物品必须仅选择该领取来源，由代码设为可丢弃、不可售、零价格，P8F必须单件领取和后续原子交付。未选择的物品保留原规则；无此用途输出空数组。'] : []),
     '不要输出价格、经验、数量、Action、Effect、Condition或媒资引用。items与rewards标题各自不得重复。只输出字段精确JSON：',
-    '{"schema":"storyforge.text-open-world-item-reward-catalog-draft","version":2,"items":[{"demandNumber":1,"title":"...","description":"...","tags":["..."],"equipmentSlotKey":"weapon","sourceChoiceNumbers":[]}],"rewards":[{"demandNumber":1,"title":"...","description":"..."}]}',
+    `{"schema":"storyforge.text-open-world-item-reward-catalog-draft","version":${context.itemDispositionContract ? '3,"deliveryOnlyItemDemandNumbers":[]' : '2'},"items":[{"demandNumber":1,"title":"...","description":"...","tags":["..."],"equipmentSlotKey":"weapon","sourceChoiceNumbers":[]}],"rewards":[{"demandNumber":1,"title":"...","description":"..."}]}`,
   ].join('\n')
   return [
     '你是StoryForge文字开放世界Item与Reward Catalog Designer。你设计物品和奖励的世界化语义；代码负责物品种类/保护、稳定键、装备数值、经验货币预算、强制任务物品/技能奖励、掉落来源和全部运行绑定。',

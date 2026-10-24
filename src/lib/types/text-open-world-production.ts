@@ -2633,6 +2633,9 @@ export interface TextOpenWorldItemRewardCatalogV1 {
   /** Omission preserves the original frozen v1 compiler, including its hashes. */
   itemSourceContract?: 'explicit-producers-v1'
   itemSourcePlans?: TextOpenWorldItemSourcePlanV1[]
+  /** Absent on frozen v1/v2 catalogs; only explicit ordinary delivery choices opt in. */
+  itemDispositionContract?: 'ordinary-delivery-v1'
+  ordinaryDeliveryPlans?: Array<{ itemKey: string; pickupObjectiveKey: string; deliveryObjectiveKey: string }>
   equipmentSlots: TextOpenWorldGameplayRulesetSkeletonV1['inventory']['equipmentSlots']
   items: Array<{
     key: string
@@ -3160,6 +3163,11 @@ export interface TextOpenWorldItemAcquisitionSelectionV1 {
  * references plus deterministic Action/Condition/Effect definitions. P9 may
  * add scene-facing actions, but must not replace these gameplay results.
  */
+export interface TextOpenWorldMainlineRecognitionSelectionV1 {
+  objectiveNumber: number
+  factionNumbers: number[]
+}
+
 export interface TextOpenWorldQuestDesignDocumentsV1 {
   schema: 'storyforge.text-open-world-quest-design-documents'
   version: 1
@@ -3304,6 +3312,8 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     }
   }>
   /** Pinned ordinal selections are recompiled against the exact upstream hashes. */
+  mainlineRecognitionContract?: 'mainline-faction-recognition-v1'
+  mainlineRecognitionSelections?: TextOpenWorldMainlineRecognitionSelectionV1[]
   fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
   itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
   /** Explicit P8F draft v5 policy; omitted from frozen draft v1-v4 artifacts. */

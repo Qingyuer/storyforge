@@ -36,6 +36,11 @@ import {
 
 const SKILL_ID = 'text-open-world.production.gameplay-ruleset.v1'
 
+/** Exact v1 effects object emitted before f6cc880b introduced compiler-owned
+ * purchase evidence. This canonical-v2 digest freezes all lists, ordering and
+ * policies; it does not accept arbitrary subsets of the current vocabulary. */
+const PRE_PURCHASE_EFFECTS_HASH_V1 = '26e628b3d3baacc3f11d1268e0f37cf8d9ed8284ff7bc6185a5be79493593216'
+
 export const TEXT_OPEN_WORLD_LEGACY_EFFECT_OPERATIONS_V1 = [
   'start-combat', 'resolve-combat',
 ] as const satisfies readonly TextOpenWorldEffectOperationV1[]
@@ -490,6 +495,7 @@ async function createRuleset(input: {
   context: TextOpenWorldGameplayRulesetInputContextV1
   draft: RulesetSemanticDraftV1
   createdAt: number
+  frozenEffects?: TextOpenWorldGameplayRulesetSkeletonV1['effects']
 }): Promise<TextOpenWorldGameplayRulesetSkeletonV1> {
   const claimByKey = new Map(input.context.sourceLedger.claims.map(claim => [claim.claimKey, claim]))
   const sourceClaimKeys = [...input.draft.sourceClaimKeys].sort()
@@ -516,6 +522,7 @@ async function createRuleset(input: {
       sourceClaimKeys,
     },
     ...fixedRules(input.draft),
+    ...(input.frozenEffects ? { effects: structuredClone(input.frozenEffects) } : {}),
     basisHash,
     createdAt: input.createdAt,
   }
@@ -593,7 +600,10 @@ export async function validateTextOpenWorldGameplayRulesetSkeletonV1(input: {
     sourceClaimKeys: stringArray(artifact.ruleset.sourceClaimKeys, 'ruleset.sourceClaimKeys', 50),
   }
   const fixed = fixedRules(semantic)
+  const historicalEffects = canonicalProductProductionJsonV2(artifact.effects) !== canonicalProductProductionJsonV2(fixed.effects)
+    && await hashProductProductionValueV2(artifact.effects) === PRE_PURCHASE_EFFECTS_HASH_V1
   for (const key of Object.keys(fixed) as Array<keyof typeof fixed>) {
+    if (key === 'effects' && historicalEffects) continue
     if (canonicalProductProductionJsonV2(artifact[key]) !== canonicalProductProductionJsonV2(fixed[key])) {
       fail(`GameplayRuleset固定边界或G2映射被篡改:${key}`)
     }
@@ -601,10 +611,11 @@ export async function validateTextOpenWorldGameplayRulesetSkeletonV1(input: {
   exactArray(artifact.progression.skillAcquisition, ['initial', 'level', 'quest'], '技能获得来源')
   exactArray(artifact.progression.deferredSkillAcquisition, ['exploration', 'item'], '后置技能获得来源')
   exactArray(artifact.combat.playerActions, ['basic-attack', 'skill', 'item', 'escape'], '战斗操作')
-  exactArray(artifact.effects.runtimeSupportedOperations, TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1, '运行时Effect白名单')
+  const runtimeOperations = historicalEffects ? artifact.effects.runtimeSupportedOperations : TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1
+  exactArray(artifact.effects.runtimeSupportedOperations, runtimeOperations, '运行时Effect白名单')
   sortedSetEqual(
     [...artifact.effects.newBuildAllowedOperations, ...artifact.effects.legacyReadOnlyOperations],
-    TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1,
+    runtimeOperations,
     'Effect新建与旧版分区',
   )
   sortedSetEqual(
@@ -664,6 +675,8 @@ export async function rebuildTextOpenWorldGameplayRulesetFromAuthorEditableDraft
     context,
     draft: parseDraft(input.draft, context),
     createdAt: baseArtifact.createdAt,
+    // A semantic edit does not silently upgrade a validated frozen vocabulary.
+    frozenEffects: baseArtifact.effects,
   })
   return validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact, context })
 }

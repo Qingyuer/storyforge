@@ -3398,6 +3398,7 @@ interface GovernanceArtifactClosureV1 {
   builds: Array<ProductBuildRecordV1 & { id: number }>
   currentArtifacts: ProductBuildArtifactRecordV1[]
   lineageArtifacts: ProductBuildArtifactRecordV1[]
+  runProofArtifacts: ProductBuildArtifactRecordV1[]
 }
 
 function artifactGovernanceJsonBytes(row: ProductBuildArtifactRecordV1): number {
@@ -3421,6 +3422,9 @@ async function readGovernanceArtifactClosureV1(input: {
   const lineageArtifacts: ProductBuildArtifactRecordV1[] = []
   const artifactsByLocator = new Map<string, ProductBuildArtifactRecordV1>()
   const retainedRows = new Set<string>()
+  // History remains visible and part of the full-row CAS, but only active
+  // artifacts and exact carried ancestry can supply production authority.
+  const runProofArtifacts = new Set<ProductBuildArtifactRecordV1>()
   let currentActiveCount = 0
   let currentJsonBytes = 0
   let lineageJsonBytes = 0
@@ -3469,6 +3473,8 @@ async function readGovernanceArtifactClosureV1(input: {
   for (const row of currentRows) {
     currentArtifacts.push(row)
     retain(row, true)
+    if (row.controlEpoch === input.build.controlEpoch
+      && ACTIVE_ARTIFACT_STATUSES.has(row.status)) runProofArtifacts.add(row)
   }
 
   const buildsByNumber = new Map<number, ProductBuildRecordV1 & { id: number }>([
@@ -3488,7 +3494,10 @@ async function readGovernanceArtifactClosureV1(input: {
     }
     for (const row of rows) {
       if (row.controlEpoch === parentBuild.controlEpoch
-        && ACTIVE_ARTIFACT_STATUSES.has(row.status)) retain(row, false)
+        && ACTIVE_ARTIFACT_STATUSES.has(row.status)) {
+        retain(row, false)
+        runProofArtifacts.add(row)
+      }
     }
   }
   const pending = currentArtifacts
@@ -3533,6 +3542,9 @@ async function readGovernanceArtifactClosureV1(input: {
       }
       retain(parent, false)
     }
+    // Same-Build historical parents may already be in the locator map.
+    // They still need producer proof when a current artifact references them.
+    runProofArtifacts.add(parent)
     if (isSafeCarriedArtifactRefV1(parent.carriedFrom)) {
       pending.push({ ref: parent.carriedFrom, depth: depth + 1 })
     }
@@ -3541,12 +3553,13 @@ async function readGovernanceArtifactClosureV1(input: {
     builds: [...buildsByNumber.values()].sort((left, right) => left.buildNumber - right.buildNumber),
     currentArtifacts,
     lineageArtifacts,
+    runProofArtifacts: [...runProofArtifacts],
   }
 }
 
 async function loadGovernanceRunEvidenceV1(input: {
   scope: WorkspaceScope
-  currentBuildId: number
+  currentBuild: ProductBuildRecordV1 & { id: number }
   artifacts: ProductBuildArtifactRecordV1[]
   buildEvidence: TextOpenWorldArtifactBuildEvidenceV1[]
 }): Promise<Map<number, TextOpenWorldArtifactRunEvidenceV1>> {
@@ -3561,9 +3574,11 @@ async function loadGovernanceRunEvidenceV1(input: {
     }
   }
   const currentRuns = new Set(input.artifacts
-    .filter(row => row.buildId === input.currentBuildId && row.producerRunId != null)
+    .filter(row => row.buildId === input.currentBuild.id
+      && row.controlEpoch === input.currentBuild.controlEpoch
+      && ACTIVE_ARTIFACT_STATUSES.has(row.status) && row.producerRunId != null)
     .map(row => row.producerRunId!))
-  const currentRootRunId = input.buildEvidence.find(row => row.build.id === input.currentBuildId)?.rootRunId
+  const currentRootRunId = input.buildEvidence.find(row => row.build.id === input.currentBuild.id)?.rootRunId
   if (currentRootRunId != null) currentRuns.add(currentRootRunId)
   if (currentRuns.size > MAX_CURRENT_GOVERNANCE_RUNS) {
     throw new Error('[text-open-world-artifact-governance] 当前 Build Run 数超过安全上限')
@@ -3691,8 +3706,8 @@ export async function readTextOpenWorldArtifactGovernanceV1(input: {
   const buildEvidenceById = new Map(buildEvidenceRows.map(row => [row.build.id, row]))
   const runEvidenceById = await loadGovernanceRunEvidenceV1({
     scope,
-    currentBuildId: build.id,
-    artifacts: lineageArtifactRows,
+    currentBuild: build as ProductBuildRecordV1 & { id: number },
+    artifacts: closure.runProofArtifacts,
     buildEvidence: buildEvidenceRows,
   })
   const blobIds = [...new Set(lineageArtifactRows

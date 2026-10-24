@@ -226,6 +226,31 @@ describe('fixed objective item acquisition', () => {
     expect(parcel.sellable).toBe(false)
   })
 
+  it('realizes the explicit ordinary delivery catalog at both ends and rejects omitted or redirected sinks', () => {
+    const base = ordinaryReplacement()
+    const catalog = base.context.itemRewardCatalog
+    Object.assign(catalog.items[0]!, { kind: 'misc', order: 1, baseValue: 0, fulfilledRequirementKeys: ['requirement.parcel'] })
+    base.context.questSkeletons.objectives[0]!.requirementKeys.push('requirement.parcel')
+    base.context.questSkeletons.objectives[1]!.requirementKeys = ['requirement.parcel']
+    catalog.itemDispositionContract = 'ordinary-delivery-v1'
+    catalog.ordinaryDeliveryPlans = [{ itemKey: catalog.items[0]!.key, pickupObjectiveKey: 'objective.main.1', deliveryObjectiveKey: 'objective.delivery' }]
+    expect(parseTextOpenWorldItemAcquisitionsV1(base.choices, base.context, base.fulfillment)).toEqual(base.choices)
+    const reject = (change: (copy: typeof base) => void) => {
+      const copy = structuredClone(base); change(copy)
+      expect(() => parseTextOpenWorldItemAcquisitionsV1(copy.choices, copy.context, copy.fulfillment)).toThrow()
+    }
+    reject(copy => { copy.choices = [] })
+    reject(copy => { copy.fulfillment.objectives[1]!.items = [] })
+    reject(copy => { copy.fulfillment.objectives[1]!.items[0]!.quantity = 2 })
+    reject(copy => { copy.context.itemRewardCatalog.items[0]!.sellable = true })
+    reject(copy => { copy.context.itemRewardCatalog.items[0]!.baseValue = 1 })
+    reject(copy => { copy.context.itemRewardCatalog.items[0]!.critical = true })
+    reject(copy => { delete copy.context.itemRewardCatalog.itemDispositionContract })
+    reject(copy => { copy.context.itemRewardCatalog.ordinaryDeliveryPlans![0]!.deliveryObjectiveKey = 'objective.main.1' })
+    reject(copy => { copy.context.questSkeletons.objectives[1]!.requirementKeys = [] })
+    reject(copy => { copy.fulfillment.objectives[1]!.groupItems = [[{ itemNumber: 1, quantity: 1 }]] })
+  })
+
   it('rejects replacement for protected/sellable items and missing, preceding, duplicate or foreign deliveries', () => {
     const base = ordinaryReplacement()
     const reject = (change: (value: ReturnType<typeof ordinaryReplacement>) => void) => {

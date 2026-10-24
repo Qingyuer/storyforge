@@ -56,6 +56,7 @@ import { hashProductProductionCarriedReceiptV1 } from './task-evidence'
 import { isRepairRetryableFailedProductBuildV1, isTextOpenWorldEpochReusableDeterministicTaskV1, resolveProductProductionTaskRecoveryPolicyV1 } from './recovery-policy'
 import { parseProductBuildQualityReportV1 } from './adoption'
 import { createProductBuildCompatibilityReportV1 } from './compatibility'
+import { resolveProductBuildCompatibilityPackageV1 } from './compatibility-baseline'
 import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import {
@@ -160,8 +161,8 @@ type ProductBuildCompatibilityBaselineCandidateV1 = Pick<
 
 /**
  * A Build's direct parent is lineage evidence, not necessarily a playable
- * compatibility baseline. Recovery-required/cancelled parents never freeze a
- * packageHash. Compare saves with the nearest earlier terminal package; if no
+ * compatibility baseline. An unfinished parent may not have a frozen package; a stopped or
+ * archived Build may retain its original package and Manifest. Compare saves with the nearest earlier terminal package; if no
  * such package exists, the current Build is the first playable session.
  */
 export function selectProductBuildCompatibilityBaselineV1(input: {
@@ -5825,52 +5826,45 @@ async function compileTerminalBuild(input: {
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageArtifact.contentHash !== packageHash) throw new Error('[product-production-scheduler] package Artifact hash 不一致')
   let previousPackage: Parameters<typeof createProductBuildCompatibilityReportV1>[0]['previous'] = null
+  let compatibilityReadSet: {
+    priorBuilds: ProductBuildRecordV1[]
+    baselineBuildId: number | null
+    artifactKeys: string[]
+    artifacts: ProductBuildArtifactRecordV1[]
+  } | null = null
   if (build.parentBuildNumber != null) {
-    const lineageParent = await db.productBuilds
-      .where('[productionId+buildNumber]').equals([build.productionId, build.parentBuildNumber]).first()
-    if (!lineageParent?.id
-      || !await assertRecordInScope(input.scope, 'productBuilds', lineageParent, { owner: 'work' })) {
-      throw new Error('[product-production-scheduler] compatibility lineage parent Build 缺失')
-    }
-    const scopedPriorBuilds: ProductBuildRecordV1[] = []
-    for (const priorBuild of await db.productBuilds.where('productionId').equals(build.productionId).toArray()) {
-      if (priorBuild.buildNumber < build.buildNumber
-        && await assertRecordInScope(input.scope, 'productBuilds', priorBuild, { owner: 'work' })) {
-        scopedPriorBuilds.push(priorBuild)
+    const priorBuilds = (await db.productBuilds.where('productionId').equals(build.productionId).toArray())
+      .filter(row => row.buildNumber < build.buildNumber)
+      .sort((left, right) => left.id! - right.id!)
+    for (const priorBuild of priorBuilds) {
+      if (!await assertRecordInScope(input.scope, 'productBuilds', priorBuild, { owner: 'work' })) {
+        throw new Error('[product-production-scheduler] compatibility lineage Build owner 不一致')
       }
     }
-    const parentBuild = selectProductBuildCompatibilityBaselineV1({
+    const selected = selectProductBuildCompatibilityBaselineV1({
       currentBuildNumber: build.buildNumber,
       parentBuildNumber: build.parentBuildNumber,
-      priorBuilds: scopedPriorBuilds,
+      priorBuilds,
     })
-    if (parentBuild?.id != null) {
-      let parentArtifacts = (await db.productBuildArtifacts
-        .where('[buildId+artifactKey]')
-        .equals([parentBuild.id, terminalArtifactKeys.runtimePackage]).toArray())
-        .filter(row => row.controlEpoch === parentBuild.controlEpoch
-          && (row.status === 'accepted' || row.status === 'carried-forward'))
-      // Builds created before the dedicated text-open-world DAG used the
-      // generic package key. It is valid as compatibility input only; every
-      // new Build still emits the dedicated terminal key above.
-      if (parentArtifacts.length === 0 && input.plan.productType === 'text-open-world') {
-        parentArtifacts = (await db.productBuildArtifacts
-          .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).toArray())
-          .filter(row => row.controlEpoch === parentBuild.controlEpoch
-            && (row.status === 'accepted' || row.status === 'carried-forward'))
+    compatibilityReadSet = { priorBuilds, baselineBuildId: null, artifactKeys: [], artifacts: [] }
+    if (selected?.id != null) {
+      const baseline = priorBuilds.find(row => row.id === selected.id)!
+      const artifactKeys = [...new Set([terminalArtifactKeys.runtimePackage,
+        ...(input.plan.productType === 'text-open-world' ? ['runtime.package'] : [])])]
+      const parentArtifacts: ProductBuildArtifactRecordV1[] = []
+      for (const artifactKey of artifactKeys) parentArtifacts.push(...await db.productBuildArtifacts
+        .where('[buildId+artifactKey]').equals([baseline.id!, artifactKey]).toArray())
+      parentArtifacts.sort((left, right) => left.id! - right.id!)
+      for (const artifact of parentArtifacts) {
+        if (!await assertRecordInScope(input.scope, 'productBuildArtifacts', artifact, { owner: 'work' })) {
+          throw new Error('[product-production-scheduler] compatibility package Artifact owner 不一致')
+        }
       }
-      if (parentArtifacts.length !== 1) {
-        throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
-      }
-      const parentArtifact = parentArtifacts[0]
-      const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson)
-      if (await hashProductProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
-        throw new Error('[product-production-scheduler] compatibility parent package hash 不一致')
-      }
-      previousPackage = {
-        buildNumber: parentBuild.buildNumber, packageHash: parentBuild.packageHash,
-        runtimePackage: parentRuntimePackage,
-      }
+      previousPackage = await resolveProductBuildCompatibilityPackageV1({
+        production, build: baseline, artifacts: parentArtifacts,
+      })
+      compatibilityReadSet = { priorBuilds, baselineBuildId: baseline.id!, artifactKeys,
+        artifacts: parentArtifacts }
     }
   }
   const compatibility = await createProductBuildCompatibilityReportV1({
@@ -5970,6 +5964,28 @@ async function compileTerminalBuild(input: {
     const currentProduction = await db.productProductions.get(production.id!)
     if (!current || !currentProduction || current.controlEpoch !== build.controlEpoch || current.planHash !== build.planHash) {
       throw new Error('[product-production-scheduler] terminal commit CAS 已过期')
+    }
+    // The comparison was read outside this transaction. A stopped/changed
+    // baseline or a concurrently replaced package must not freeze an obsolete
+    // compatibility report; retain the exact selection and payload read set.
+    if (compatibilityReadSet) {
+      const currentPriorBuilds = (await db.productBuilds.where('productionId').equals(build.productionId).toArray())
+        .filter(row => row.buildNumber < build.buildNumber)
+        .sort((left, right) => left.id! - right.id!)
+      const currentBaselineArtifacts: ProductBuildArtifactRecordV1[] = []
+      if (compatibilityReadSet.baselineBuildId != null) {
+        for (const artifactKey of compatibilityReadSet.artifactKeys) {
+          currentBaselineArtifacts.push(...await db.productBuildArtifacts.where('[buildId+artifactKey]')
+            .equals([compatibilityReadSet.baselineBuildId, artifactKey]).toArray())
+        }
+        currentBaselineArtifacts.sort((left, right) => left.id! - right.id!)
+      }
+      if (canonicalProductProductionJsonV2(currentPriorBuilds)
+          !== canonicalProductProductionJsonV2(compatibilityReadSet.priorBuilds)
+        || canonicalProductProductionJsonV2(currentBaselineArtifacts)
+          !== canonicalProductProductionJsonV2(compatibilityReadSet.artifacts)) {
+        throw new Error('[product-production-scheduler] compatibility baseline CAS 已过期')
+      }
     }
     const currentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
       .filter(row => row.controlEpoch === build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward'))

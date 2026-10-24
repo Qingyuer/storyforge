@@ -55,6 +55,7 @@ import { isTextAdventureReadableGlyphViolationV1 } from './text-adventure-qualit
 import { inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
 import { validateProductProductionRecoveryDirectiveV1 } from './context'
 import { readAgentRunV1 } from '../agent/run/event-store'
+import { preparePausedProductTaskFailureV1, reconcilePausedProductTaskFailureV1, type PreparedPausedProductTaskFailureV1 } from './failed-run-reconciliation'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import {
   inspectTextOpenWorldCreatorSourceLocatorV1,
@@ -1016,6 +1017,7 @@ async function createRevisionBuildWithCarriesV1(input: {
 async function applyCommand(input: {
   preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
+  preparedFailureRun?: PreparedPausedProductTaskFailureV1
   preparedOpenWorldRevision?: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null
   scope: WorkspaceScope
   production: ProductProductionRecordV1 & { id: number }
@@ -1944,6 +1946,12 @@ async function applyCommand(input: {
     const stateRevision = production.stateRevision + 1
     const pausedFailure = readResult(build.failureJson)
     const previousFailure = compactRecoveryFailure(pausedFailure)
+    // A durable task failure can precede an interrupted final Run append.
+    // Only formal Resume may finish that exact failure after ledger sealing;
+    // read-only author recovery continues to require a terminal failed Run.
+    const reconciledFailureRun = production.productType === 'text-open-world' && restored === 'recovery-required'
+      ? await reconcilePausedProductTaskFailureV1({ scope, build, prepared: input.preparedFailureRun ?? null, budgetLedgerJson, now })
+      : null
     await db.productBuilds.update(build.id, {
       status: restored,
       resumeState: null,
@@ -2003,6 +2011,7 @@ async function applyCommand(input: {
       controlEpoch,
       restored,
       pausedReservationAccountings,
+      ...(reconciledFailureRun ? { reconciledFailureRun } : {}),
       ...(contentRevision || openWorldContentRevision ? { revisionAuthorization: command } : {}),
     } }
   }
@@ -2926,6 +2935,7 @@ async function applyCommand(input: {
 async function executeTransaction(input: {
   preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
+  preparedFailureRun?: PreparedPausedProductTaskFailureV1
   preparedOpenWorldRevision?: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null
   scope: WorkspaceScope
   productionId?: number
@@ -3113,6 +3123,7 @@ async function executeTransaction(input: {
         preparedCreatorEvidence: input.preparedCreatorEvidence,
         preparedCreatorStart: transactionCreatorStart,
         preparedPausedBuild: input.preparedPausedBuild,
+        preparedFailureRun: input.preparedFailureRun,
         preparedOpenWorldRevision: input.preparedOpenWorldRevision,
         preparedCreatorRepair: input.preparedCreatorRepair,
         preparedCreatorBudgetRecovery: input.preparedCreatorBudgetRecovery,
@@ -3505,6 +3516,7 @@ export async function executeProductProductionCommand(input: {
     })
   }
   let preparedPausedBuild: PreparedPausedBuildV1 | null = null
+  let preparedFailureRun: PreparedPausedProductTaskFailureV1 = null
   let preparedOpenWorldRevision: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null = null
   if (command.type === 'resume') {
     const production = await productionInScope(scope, input.productionId!)
@@ -3514,6 +3526,11 @@ export async function executeProductProductionCommand(input: {
       runs.push({ id: run.id, lastSequence: run.lastSequence, contractHash: run.contractHash, projectionHash: run.projectionHash })
     })
     preparedPausedBuild = { before, after, runs }
+    if (production.productType === 'text-open-world' && after.resumeState === 'recovery-required'
+      && !command.contentRevision && !command.openWorldContentRevision) {
+      preparedFailureRun = await preparePausedProductTaskFailureV1({ scope, production, build: after,
+        failure: compactRecoveryFailure(readResult(after.failureJson)) })
+    }
     if (command.openWorldContentRevision) {
       try {
         preparedOpenWorldRevision = { prepared: await prepareTextOpenWorldPausedRevisionV1({
@@ -3538,6 +3555,7 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorEvidence,
     preparedCreatorStart,
     preparedPausedBuild,
+    preparedFailureRun,
     preparedOpenWorldRevision,
     preparedCreatorRepair,
     preparedCreatorBudgetRecovery,

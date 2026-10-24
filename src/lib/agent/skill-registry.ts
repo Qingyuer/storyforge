@@ -4068,7 +4068,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界物品与奖励目录',
     owner: 'text-open-world-production',
-    promptVersion: 'text-open-world-item-reward-catalog-v2',
+    promptVersion: 'text-open-world-item-reward-catalog-v3',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -4089,7 +4089,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-item-reward-catalog'],
   },
   {
@@ -4192,7 +4192,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界任务最终化与地区导演牌组',
     owner: 'text-open-world-production',
-    promptVersion: 'text-open-world-quest-finalize-v3',
+    promptVersion: 'text-open-world-quest-finalize-v3-recognition-v7',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -4213,7 +4213,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-23',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-quest-finalize'],
   },
   {
@@ -4244,7 +4244,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-23',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-scene-scripts'],
   },
   {
@@ -4275,7 +4275,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-system-finalize'],
   },
   {
@@ -4306,7 +4306,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-system-finalize'],
   },
   {

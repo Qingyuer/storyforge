@@ -443,10 +443,12 @@ function compileModulePayloads(
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
   if (actionModuleVersion !== 15 && actionModuleVersion !== 16
-    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19 && actionModuleVersion !== 20) {
+    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19 && actionModuleVersion !== 20 && actionModuleVersion !== 21) {
     fail('SystemConfigs任务Action版本无效')
   }
-  const expectedActionModuleVersion = qdd.governance.actionPathEvidenceReady === true
+  const expectedActionModuleVersion = qdd.mainlineRecognitionContract === 'mainline-faction-recognition-v1'
+    ? 21
+    : qdd.governance.actionPathEvidenceReady === true
     ? 20
     : qdd.governance.fixedObjectiveFulfillmentReady === true
     ? 19

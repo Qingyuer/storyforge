@@ -327,6 +327,40 @@ async function parseContext(value: string): Promise<TextOpenWorldNpcRuntimeInput
   return context
 }
 
+/** Current author candidates preserve fixed identities, full provenance,
+ * home/region and all service roles; the compiler remains the identity gate. */
+export const NPC_RUNTIME_REPAIR_SECTIONS_V1 = ['contract', 'factions', 'actors', 'vendors', 'locations', 'requirements'] as const
+export type NpcRuntimeRepairSectionV1 = typeof NPC_RUNTIME_REPAIR_SECTIONS_V1[number]
+export async function projectTextOpenWorldNpcRuntimeRepairCandidatesV1(input: {
+  contextText: string
+  section: NpcRuntimeRepairSectionV1
+  page: number
+  expectedContextSelectionHash?: string
+}) {
+  if (!NPC_RUNTIME_REPAIR_SECTIONS_V1.includes(input.section)
+    || !Number.isSafeInteger(input.page) || input.page < 0) fail('修订候选分类或页码无效')
+  const context = await parseContext(input.contextText)
+  if (input.expectedContextSelectionHash !== undefined
+    && input.expectedContextSelectionHash !== context.contextSelectionHash) fail('修订候选上下文已变化，请重新读取')
+  const sections: Record<NpcRuntimeRepairSectionV1, unknown[]> = {
+    contract: [{ productInstanceKey: context.productInstanceKey,
+      draftVersion: context.vendorIdentityContract ? 3 : 2, vendorIdentityContract: context.vendorIdentityContract ?? null,
+      gameplayRulesetHash: context.gameplayRuleset.gameplayRulesetHash, periodKeys: PERIOD_KEYS,
+      actorCount: context.actorDemands.length, factionCount: context.factionDemands.length,
+      vendorCount: context.craftingEconomyCatalog.vendors.length,
+      numbering: '角色与势力按需求编号覆盖；factionNumber引用势力需求。固定内容身份不可合并；新合同商店岗位仅能绑定此前同地区同家园固定内容人物，不能减少同一需求最小人数。' }],
+    factions: context.factionDemands,
+    actors: context.actorDemands,
+    vendors: context.craftingEconomyCatalog.vendors,
+    locations: context.regionNarrativePacks.packs.flatMap(pack => pack.locationPlans.map(location => ({ regionKey: pack.regionKey, ...location }))),
+    requirements: context.contentRequirementManifest.requirements,
+  }
+  const rows = sections[input.section], pageSize = 5
+  if (input.page >= Math.max(1, Math.ceil(rows.length / pageSize))) fail('修订候选页码超出范围')
+  return { contextSelectionHash: context.contextSelectionHash, section: input.section,
+    page: input.page, pageSize, total: rows.length, rows: rows.slice(input.page * pageSize, (input.page + 1) * pageSize) }
+}
+
 function identityReuses(
   rows: unknown[],
   demands: Array<{ demandNumber: number; requirementKey: string | null }>,
@@ -364,7 +398,10 @@ function identityReuses(
 }
 
 function parseDraft(value: unknown, context: TextOpenWorldNpcRuntimeInputContextV1): CatalogDraftV1 {
-  const root = record(value, 'draft'); exactKeys(root, ['schema', 'version', 'factions', 'actors', 'attitudeBands'], 'draft')
+  const root = record(value, 'draft')
+  const authorBound = Object.prototype.hasOwnProperty.call(root, 'authorContextSelectionHash')
+  if (authorBound && root.authorContextSelectionHash !== context.contextSelectionHash) fail('作者修订上下文已变化，请重新读取候选')
+  exactKeys(root, ['schema', 'version', 'factions', 'actors', 'attitudeBands', ...(authorBound ? ['authorContextSelectionHash'] : [])], 'draft')
   if (root.schema !== 'storyforge.text-open-world-npc-runtime-draft'
     || ![1, 2, 3].includes(Number(root.version)) || typeof root.version !== 'number') fail('draft schema/version无效')
   if (root.version === 3 && context.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('draft version 3需要新商店身份合同')

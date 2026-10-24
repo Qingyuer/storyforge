@@ -14,6 +14,7 @@ import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { getAgentSkillV1, TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../../src/lib/agent/skill-registry'
 import { prepareProductProductionAdoption } from '../../src/lib/product-production/adoption'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { resolveProductBuildCompatibilityPackageV1 } from '../../src/lib/product-production/compatibility-baseline'
 import { validateProductProductionRecoveryDirectiveV1, readTextAdventureRepairFeedbackV1, readTextAdventureVisualDirectionInputsV1, readTextAdventureVisualQualityInputsV1 } from '../../src/lib/product-production/context'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
@@ -7914,11 +7915,22 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(equipActions.every(action => action.locationKey === runtimePackage.adventure!.initialLocationKey)).toBe(true)
     expect(equipActions.every(action => entrySceneActionKeys.has(action.key))).toBe(true)
 
+    // Replacing a sealed member without updating its immutable Manifest is
+    // not a legitimate runtime evolution. Preserve this old fixture mutation
+    // as a rejection case, then restore its exact bytes before the real path.
     await db.productBuildArtifacts.update(runtimeArtifact!.id!, { status: 'invalid' })
-    await db.productBuildArtifacts.add({
+    const replacementId = await db.productBuildArtifacts.add({
       ...runtimeArtifact!, id: undefined, version: runtimeArtifact!.version + 1,
       status: 'accepted', createdAt: Date.now(), updatedAt: Date.now(),
     })
+    await expect(resolveProductBuildCompatibilityPackageV1({
+      production: (await db.productProductions.get(owned.productionId))!, build,
+      artifacts: await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray(),
+    })).rejects.toThrow('历史 package Artifact 与冻结成员或 owner 不一致')
+    await db.productBuildArtifacts.delete(replacementId)
+    await db.productBuildArtifacts.update(runtimeArtifact!.id!, { status: runtimeArtifact!.status })
+    expect(await db.productBuildArtifacts.get(runtimeArtifact!.id!)).toEqual(runtimeArtifact)
+    expect(await db.productBuilds.get(build.id!)).toEqual(build)
     const modelCallCountBeforeReassembly = modelCallCount
     const reassembly = await beginProductProductionEvolutionV1({
       scope: owned.scope, productionId: owned.productionId,

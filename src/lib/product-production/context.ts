@@ -100,16 +100,19 @@ async function productionAndBuild(input: AssembleContextInput) {
 /** A failure can cross only complete, durable pause/resume pairs which restore
  * the same blocked Build. No retry, content revision, foreign Build or missing
  * receipt may make an older failed Run current again. */
-async function assertRecoveryPauseResumeEpochs(input: {
+export async function assertProductProductionRecoveryControlChainV1(input: {
   scope: WorkspaceScope
   build: ProductBuildRecordV1
   failedControlEpoch: number
   targetControlEpoch: number
+  /** Only the formal Resume command may validate its final, still-paused epoch. */
+  allowTrailingPause?: boolean
 }): Promise<void> {
   const { scope, build, failedControlEpoch, targetControlEpoch } = input
   if (failedControlEpoch === targetControlEpoch) return
   const invalid = () => new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源暂停/恢复命令链不闭合')
-  if (targetControlEpoch < failedControlEpoch || (targetControlEpoch - failedControlEpoch) % 2 !== 0) throw invalid()
+  if (targetControlEpoch < failedControlEpoch
+    || (targetControlEpoch - failedControlEpoch) % 2 !== (input.allowTrailingPause ? 1 : 0)) throw invalid()
   const receipts = await db.productProductionCommands.where('productionId').equals(build.productionId).toArray()
   const byEpoch = new Map<number, typeof receipts>()
   for (const receipt of receipts) {
@@ -281,13 +284,16 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     || typeof failedAttempt !== 'number' || !Number.isInteger(failedAttempt) || failedAttempt < 1) {
     throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源谱系无效')
   }
-  await assertRecoveryPauseResumeEpochs({ scope, build, failedControlEpoch,
+  await assertProductProductionRecoveryControlChainV1({ scope, build, failedControlEpoch,
     targetControlEpoch: build.controlEpoch - (resolvedDirective ? 1 : 0) })
   const run = await db.agentRuns.get(runId)
   if (!run || run.productBuildId !== build.id || run.status !== 'failed'
     || run.parentRunId !== rootRunId
     || run.parentRelation !== `task:${input.productProductionTaskKey}`) {
-    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源 Run 不存在或越过 Build/task')
+    const reason = !run ? 'Run缺失' : run.productBuildId !== build.id ? 'Build不匹配'
+      : run.status !== 'failed' ? `Run状态为${run.status}` : run.parentRunId !== rootRunId
+        ? '根Run不匹配' : '任务关系不匹配'
+    throw new ProductProductionRecoveryDirectiveErrorV1(`[product-production-context] 修复来源 Run 不存在或越过 Build/task：${reason}`)
   }
   const snapshot = await readAgentRunV1(scope, runId)
   const boundary = snapshot.contract.scope.productProduction

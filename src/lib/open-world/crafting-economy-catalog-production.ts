@@ -334,8 +334,51 @@ async function parseContext(value: string): Promise<TextOpenWorldCraftingEconomy
   return context
 }
 
+/** Current, read-only author projection of the registered Context. Local recipe
+ * choices and global shop item numbers retain their distinct numbering. */
+export const CRAFTING_ECONOMY_REPAIR_SECTIONS_V1 = ['contract', 'recipes', 'vendors', 'items', 'locations', 'requirements'] as const
+export type CraftingEconomyRepairSectionV1 = typeof CRAFTING_ECONOMY_REPAIR_SECTIONS_V1[number]
+export async function projectTextOpenWorldCraftingEconomyRepairCandidatesV1(input: {
+  contextText: string
+  section: CraftingEconomyRepairSectionV1
+  page: number
+  expectedContextSelectionHash?: string
+}) {
+  if (!CRAFTING_ECONOMY_REPAIR_SECTIONS_V1.includes(input.section)
+    || !Number.isSafeInteger(input.page) || input.page < 0) fail('修订候选分类或页码无效')
+  const context = await parseContext(input.contextText)
+  if (input.expectedContextSelectionHash !== undefined
+    && input.expectedContextSelectionHash !== context.contextSelectionHash) fail('修订候选上下文已变化，请重新读取')
+  const sections: Record<CraftingEconomyRepairSectionV1, unknown[]> = {
+    contract: [{ productInstanceKey: context.productInstanceKey, draftVersion: 1,
+      gameplayRulesetHash: context.gameplayRuleset.gameplayRulesetHash, recipeCategories: RECIPE_CATEGORIES,
+      recipeCount: context.recipeDemands.length, vendorCount: context.vendorDemands.length,
+      itemCount: context.itemRewardCatalog.items.length,
+      numbering: '配方地点、原料和产物编号属于各需求候选；商店库存编号属于全局物品目录。misc产物的配方类别为tool。' }],
+    recipes: context.recipeDemands.map(({ candidateLocationKeys, candidateIngredientItemKeys, candidateOutputItemKeys, ...demand }) => ({
+      ...demand,
+      locations: candidateLocationKeys.map((locationKey, index) => ({ stationLocationNumber: index + 1, locationKey })),
+      ingredients: candidateIngredientItemKeys.map((itemKey, index) => ({ ingredientItemNumber: index + 1, itemKey })),
+      outputs: candidateOutputItemKeys.map((itemKey, index) => ({ outputItemNumber: index + 1, itemKey })),
+    })),
+    vendors: context.vendorDemands.map(({ candidateLocationKeys, ...demand }) => ({ ...demand,
+      locations: candidateLocationKeys.map((locationKey, index) => ({ locationNumber: index + 1, locationKey })) })),
+    items: context.itemRewardCatalog.items.map((item, index) => ({ inventoryItemNumber: index + 1, ...item,
+      sourcePlan: context.itemRewardCatalog.itemSourcePlans?.find(plan => plan.itemKey === item.key) ?? null })),
+    locations: context.regionNarrativePacks.packs.flatMap(pack => pack.locationPlans.map(location => ({ regionKey: pack.regionKey, ...location }))),
+    requirements: context.contentRequirementManifest.requirements,
+  }
+  const rows = sections[input.section], pageSize = 5
+  if (input.page >= Math.max(1, Math.ceil(rows.length / pageSize))) fail('修订候选页码超出范围')
+  return { contextSelectionHash: context.contextSelectionHash, section: input.section,
+    page: input.page, pageSize, total: rows.length, rows: rows.slice(input.page * pageSize, (input.page + 1) * pageSize) }
+}
+
 function parseDraft(value: unknown, context: TextOpenWorldCraftingEconomyInputContextV1): CatalogDraftV1 {
-  const root = record(value, 'draft'); exactKeys(root, ['schema', 'version', 'recipes', 'vendors'], 'draft')
+  const root = record(value, 'draft')
+  const authorBound = Object.prototype.hasOwnProperty.call(root, 'authorContextSelectionHash')
+  if (authorBound && root.authorContextSelectionHash !== context.contextSelectionHash) fail('作者修订上下文已变化，请重新读取候选')
+  exactKeys(root, ['schema', 'version', 'recipes', 'vendors', ...(authorBound ? ['authorContextSelectionHash'] : [])], 'draft')
   if (root.schema !== 'storyforge.text-open-world-crafting-economy-draft' || root.version !== 1) fail('draft schema/version无效')
   if (!Array.isArray(root.recipes) || root.recipes.length !== context.recipeDemands.length) fail(`recipes必须与${context.recipeDemands.length}项需求一一对应`)
   const recipes = root.recipes.map((value, index) => {

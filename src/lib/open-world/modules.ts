@@ -1,3 +1,4 @@
+import { assertTextOpenWorldMainlineRecognitionRuntimeContractV1 } from './mainline-recognition-runtime-contract'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import type {
   TextOpenWorldActionCategoryV1,
@@ -521,7 +522,7 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -955,6 +956,10 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
   if (orderedMainQuestKeys.length && (initiallyRevealedMainQuestKeys.length !== 1 || initiallyRevealedMainQuestKeys[0] !== orderedMainQuestKeys[0])) {
     fail('严格顺序主线必须只揭示第一个任务定义')
   }
+  const recognitionOwners = assertTextOpenWorldMainlineRecognitionRuntimeContractV1({
+    version: Number(actions.version), actions: actionRows, effects, conditions, quests: questRows, stages: questStages, objectives, factionKeys,
+    otherModules: Object.entries(packageValue.modules).filter(([key]) => key !== 'actions').map(([, module]) => module.payload),
+  })
   if (!legacyQuestModule) {
     objectives.forEach(objective => {
       const completers = strings(objective.actionKeys, `objective ${String(objective.key)} actionKeys`).map(actionKey => actionRows.find(action => action.key === actionKey)!)
@@ -966,7 +971,7 @@ function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV
         if (action.actorScope !== 'player' || action.targetScope !== 'quest'
           || (Number(actions.version) < 19 && strings(action.costEffectKeys, `objective action ${String(action.key)} costEffectKeys`).length)
           || strings(action.failureEffectKeys, `objective action ${String(action.key)} failureEffectKeys`).length
-          || successEffects.length !== 1 || completionEffects.length !== 1
+          || (successEffects.length !== 1 && !recognitionOwners.has(String(action.key))) || completionEffects.length !== 1
           || row(completionEffects[0].payload, `objective action ${String(action.key)} payload`).objectiveKey !== objective.key
           || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`Objective完成Action合同无效:${String(action.key)}`)
       })

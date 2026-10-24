@@ -1563,8 +1563,93 @@ export async function verifyTextOpenWorldSceneScriptsModelRequestBoundaryV1(inpu
   return slice
 }
 
+export const SCENE_SCRIPTS_REPAIR_SECTIONS_V1 = ['contract', 'scenes', 'actions', 'templates', 'events', 'knowledge', 'achievements'] as const
+export type SceneScriptsRepairSectionV1 = typeof SCENE_SCRIPTS_REPAIR_SECTIONS_V1[number]
+
+/** Author pages bind the complete registered Context, while exposing bounded
+ * public writing material. They are neither a new model request nor a copy of
+ * the durable source envelope. Model projection and frozen hashes stay intact. */
+export async function projectTextOpenWorldSceneScriptsRepairCandidatesV1(input: {
+  contextText: string
+  section: SceneScriptsRepairSectionV1
+  page: number
+  expectedContextSelectionHash?: string
+}) {
+  if (!SCENE_SCRIPTS_REPAIR_SECTIONS_V1.includes(input.section)
+    || !Number.isSafeInteger(input.page) || input.page < 0) fail('修订候选分类或页码无效')
+  const context = await parseContext(input.contextText)
+  if (input.expectedContextSelectionHash !== undefined
+    && input.expectedContextSelectionHash !== context.contextSelectionHash) fail('修订候选上下文已变化，请重新读取')
+  const counts = { contract: 1, scenes: context.sceneDemands.length,
+    actions: context.actionLanguageDemands.length, templates: context.templateVariantDemands.length,
+    events: context.randomEventPresentationDemands.length, knowledge: context.knowledgePresentationDemands?.length ?? 0,
+    achievements: context.achievementPresentationDemands?.length ?? 0 }
+  const pageSize = input.section === 'scenes' ? 1 : 5
+  const total = counts[input.section]
+  if (input.page >= Math.max(1, Math.ceil(total / pageSize))) fail('修订候选页码超出范围')
+  const start = input.page * pageSize, end = start + pageSize
+  let rows: unknown[]
+  if (input.section === 'contract') {
+    rows = [{ productInstanceKey: context.productInstanceKey, draftVersion: 1,
+      modelDisclosureContract: context.modelDisclosureContract ?? null, counts,
+      toneGuide: [...context.experienceContract.toneGuide],
+      numbering: '完整作者稿使用全局 sceneNumber；单场景模型切片的 sceneNumber 恒为 1，不可照抄为全局序号。',
+      choices: 'choiceLabels 必须按 actionKeys 顺序逐项覆盖 choiceCount，场景内不得重复。',
+      attitudeOpenings: '仅 actor-dialogue 必须提供 bad/neutral/good；其它场景必须为 null。',
+    }]
+  } else if (input.section === 'scenes') {
+    rows = await Promise.all(context.sceneDemands.slice(start, end).map(async demand => ({
+      sceneNumber: demand.sceneNumber,
+      writingMaterial: governedKnowledge(context)
+        ? await createTextOpenWorldSceneScriptsModelContextV1(context, { kind: 'scene', sceneIndex: start })
+        : { scene: { ...demand }, toneGuide: [...context.experienceContract.toneGuide],
+            actions: demand.actionKeys.map(key => { const action = actionByKey(context, key)
+              return { actionKey: key, label: action.label, description: action.description } }) },
+    })))
+  } else if (input.section === 'actions') {
+    const utterances = deterministicActionUtterances(context)
+    rows = context.actionLanguageDemands.slice(start, end).map(demand => ({
+      ...demand, examples: utterances[demand.actionNumber - 1]!.examples,
+    }))
+  } else if (input.section === 'templates') {
+    rows = context.templateVariantDemands.slice(start, end).map(demand => {
+      const quest = context.questSkeletons.quests.find(row => row.key === demand.questKey)
+      const sourceKey = quest?.source.kind === 'template-seed' ? quest.source.sourceKey : null
+      const seed = context.regionNarrativePacks.packs.flatMap(pack => pack.taskTemplateSeeds).find(row => row.key === sourceKey)
+        ?? fail(`模板文字需求缺少P7模板引用:${demand.questKey}`)
+      return { ...demand, sourceTemplateSeedKey: seed.key, writingMaterial: {
+        title: seed.title, storyFrame: seed.storyFrame, variationAxes: [...seed.variationAxes],
+        eligibilitySummary: seed.eligibilitySummary, cooldownIntent: seed.cooldownIntent,
+      } }
+    })
+  } else if (input.section === 'events') {
+    rows = context.randomEventPresentationDemands.slice(start, end).map(demand => {
+      const event = context.directorDecks.randomEvents.find(row => row.key === demand.randomEventKey)
+        ?? fail(`事件文字需求缺少Director事件:${demand.randomEventKey}`)
+      return { eventNumber: demand.eventNumber, randomEventKey: demand.randomEventKey, title: event.title,
+        kind: demand.kind, regionKey: demand.regionKey, locationKeys: [...demand.locationKeys],
+        rumorRequirementKey: demand.rumorRequirementKey,
+        description: event.rumorKey ? null : event.description }
+    })
+  } else if (input.section === 'knowledge') {
+    rows = (context.knowledgePresentationDemands ?? []).slice(start, end)
+  } else {
+    rows = (context.achievementPresentationDemands ?? []).slice(start, end)
+  }
+  const result = { contextSelectionHash: context.contextSelectionHash, section: input.section,
+    page: input.page, pageSize, total, rows }
+  if (canonicalProductProductionJsonV2(result).length > 64_000) fail('单页场景修订候选超过公开读取上限')
+  return result
+}
+
 function parseDraft(value: unknown, context: TextOpenWorldSceneScriptsInputContextV1): SceneScriptsDraftV1 {
-  const root = record(value, 'draft')
+  const valueRoot = record(value, 'draft')
+  if (Object.prototype.hasOwnProperty.call(valueRoot, 'authorContextSelectionHash')
+    && valueRoot.authorContextSelectionHash !== context.contextSelectionHash) fail('作者修订上下文已变化，请重新读取')
+  // Submission metadata is checked here, never included in the compiled
+  // candidate or in historical Context/Artifact hashes.
+  const root = { ...valueRoot }
+  delete root.authorContextSelectionHash
   const legacyKeys = ['schema', 'version', 'scenes', 'actionUtterances', 'templateVariants', 'randomEvents'] as const
   if (!governedKnowledge(context)) {
     exactKeys(root, legacyKeys, 'draft')
