@@ -1,16 +1,63 @@
 # 更新日志
 
-本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本为 4.0.2，正式 Release 保持其发布时内容，后续 main 变化不会自动进入已下载的压缩包。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
+本页按用户可感知的变化整理功能更新、修复和操作改进。版本信息见[版本与兼容说明](/updates/compatibility)。
 
-## v4.0.2 · 桌面与 Android 客户端
+## 2026-10-23 · 大型运行合同的保存与恢复
 
-本次发行准备 Windows、Mac Apple Silicon/Intel 安装包与 Android APK，加入统一的首次启动用户协议，以及私有的应用内问题与建议。iOS 暂缓。可下载状态以[发行页](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2)公开附件为准，已有下载包保持原样。见[安装说明](/getting-started/install)与[隐私说明](/guides/privacy)。实现依据：[PR #153](https://github.com/yuanbw2025/storyforge/pull/153)。
+运行资料较多时，合法的运行合同可完整保存、修订，并在刷新或完整备份恢复后继续读取，不再被较小的事件记录限制误拒绝。超出记录容量仍会明确拒绝；不会截断上下文快照，也不改变模型调用预算、候选采纳、权限或过期检查。遇到容量错误时保留原作品与备份，不手工删除合同字段。依据：[PR #185](https://github.com/yuanbw2025/storyforge/pull/185)；操作见[备份与恢复](/guides/backup-restore)。
+
+## 2026-10-22 · 章纲恢复与文风统计操作指引
+
+补齐[精细章纲中断后的检查和重试步骤](/features/longform/writing#精细章纲中断后怎样继续)，以及文风画像[样本统计“未记录”的含义与保存方式](/features/longform/style-learning#sample-statistics-not-recorded)。[开发记录](/updates/development-status)同步本轮全部分支和工作区的核对结果，列出已合并、草稿 PR、本地未推送及未提交开发。
+
+## 2026-10-21 · 精细章纲、文风画像与细纲编辑
+
+- 精细章纲分块生成保留前序候选的完整原文快照，修复候选截断后缺少 exact snapshot 导致中断的问题。处理错误后，可从原入口明确重试。
+- 文风画像缺少样本字数时显示“未记录”，页面继续支持阅读和手工修改；已有零值与正常统计保持真实显示。
+- 场景细纲即时保留手工输入，改善中文组合输入中断、中途删字后光标跳到末尾及保存回读问题。
+- 官网与应用内反馈统一关联仓库 Issue，公开排查、修复与发行进展；私人反馈只提炼必要的脱敏技术摘要。
+
+操作见[大纲、细纲与正文](/features/longform/writing)。依据：[PR #141](https://github.com/yuanbw2025/storyforge/pull/141)、[PR #171](https://github.com/yuanbw2025/storyforge/pull/171)；问题跟进见 [Issue #183](https://github.com/yuanbw2025/storyforge/issues/183)。
+
+## 2026-10-20 · 系统文规划、全章评审与范围修订
+
+[PR #141](https://github.com/yuanbw2025/storyforge/pull/141) 已合入主干 `1b96e80a`。
+
+- 在原作品资料中填写可选系统文元素；独立“场景细纲”记录目标、选择、后果与承接，可在本章章纲、细纲和正文间跳转。见[规划指南](/features/longform/planning)。
+- 全章评审支持本轮补充要求和原文定位。作者选择问题、可改段落与保护原句后，运行一次修订及一次复核，再确认采纳；未通过复核保留预演和原稿。分步骤与节点读取同一作品，见[正文与审修](/features/longform/writing)。
+- 修复快速切章草稿保存、章后授权准备中断恢复、结构化章节记忆请求和同名物品多次流水的资料读取。来源过期或模型结果未知时不隐藏重发。
+- 工程版本 `fb682a28` 的完整 CLI 为 4594 项通过，完整浏览器为 309 通过 / 4 项按环境跳过；最新主干合并树的常规 CI 也通过。两组十章流程、双模型新设定抽测与生命周期证据均保留失败，不能据此认定文学优势。
+
+独立读者盲评与独立作者修稿计时已移为后续自愿研究，本轮发布无需招募或填写问卷。已有内部反馈继续保留；故事吸引力、独立修稿省时和平台签约质量仍未验证。
+
+## 2026-10-19 · 续写准备报错与细纲拒绝恢复
+
+- 正文续写在保存当前编辑、准备资料或生成依据时出错，会在正文区域显示原因，便于处理后明确重试。
+- 拒绝场景细纲或批量细纲候选失败时，保留候选并提示错误，不再把拒绝失败当作成功清空。
+
+操作见[正文与审修](/features/longform/writing)。依据：[PR #166](https://github.com/yuanbw2025/storyforge/pull/166) · [主干提交 b344cc0b](https://github.com/yuanbw2025/storyforge/commit/b344cc0b)。
+
+## 2026-10-19 · 长篇入口整合与保存保护
+
+实现见[提交 d32b2471](https://github.com/yuanbw2025/storyforge/commit/d32b2471d0d89e9ef09057e89e8f6fd15b27db91)和 [PR #165](https://github.com/yuanbw2025/storyforge/pull/165)。
+
+- 查找与替换复用同一实现，跨设定替换先预览、保存快照，再整批提交；修复同一词条多字段互相覆盖、正文标签被误替换的问题。过期预览和撤销不会覆盖后续手稿。
+- 细纲与情绪节拍协调等待真实保存，不再用计时器报告成功；失败保留原内容并可重试。
+- 炉娘增加明确的自由讨论与试写方式，可留白构思，有用回复通过现有设定候选链确认写入。旧设定查询保留检索，未标记归属的旧问答由作者查看、导出和明确认领。
+- 正式节点统一在长篇工作台。旧提示词工作流保留为实验资产，运行默认关闭，兼容图可预览后复制；不删除原流程，也不静默忽略不兼容配置。
+- 地点、地理、地图和城池词条进入同一工作区，旧链接保持可达，原始资料与身份保留。生成预览及运行详情补充实际提示词、文风来源与覆盖关系。
+
+操作见[长篇与炉娘](/features/longform/)、[替换与保存](/features/longform/writing)、[节点创作](/features/nodes)和[地点与地图](/features/longform/worlds-maps)。本次不自动合并同名地点，不迁移作者浏览器中的真实作品；工程回归不等价于模型文学质量验收。
+
+## 2026-10-16 · v4.0.2 桌面与 Android 客户端
+
+本次发行提供 Windows、Mac Apple Silicon/Intel 安装包与 Android APK，加入统一的首次启动用户协议，以及私有的应用内问题与建议。iOS 暂缓。通用设置中的“问题与建议”提供应用内私有反馈，操作见[故障排查](/guides/troubleshooting#下载版的问题与故障反馈)。可下载状态以[发行页](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2)公开附件为准。见[安装说明](/getting-started/install)与[隐私说明](/guides/privacy)。实现依据：[PR #153](https://github.com/yuanbw2025/storyforge/pull/153)。
 
 ## 2026-10-16 · 大纲 Agent 候选采纳修复
 
 修复自动编排卷章大纲时，有效候选因生成与采纳的策略身份不一致而被误判为过期、无法采纳的问题。保留来源、权限与内容变化的真实过期检查，不自动采纳。操作见[大纲、细纲与正文](/features/longform/writing)。
 
-依据：[修复 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158)，已合入 main `ce49309b`（北京时间 10 月 16 日），晚于 v4.0.1 固定发布包；知识库发布不代表旧包或官网体验已更新。
+依据：[修复 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158)，已合入 main `ce49309b`（北京时间 10 月 16 日）。
 
 ## 2026-10-15 · v4.0.1 故障反馈构建
 
@@ -21,6 +68,10 @@
 ## 2026-10-15 · 客户端候选实现（未发布）
 
 新增 Windows 独立窗口和 Android APK 的开发构建，以及应用内检查、下载和确认安装更新的链路。Android 完整 JSON 备份接系统保存窗口，取消或保存失败时不继续依赖该备份的操作。该增量仍在开发分支，尚未正式发行或完成两平台真机覆盖升级验收；现有 v4.0.0 下载包不含这些能力。见[安装与启动](/getting-started/install#开发中的-windows-android-客户端)。
+
+## 2026-10-15 · 长篇质量开发分支使用说明（未发布）
+
+[草稿 PR #141](https://github.com/yuanbw2025/storyforge/pull/141) 的系统文元素、可选场景任务、全章评审与范围修订已有[试用操作说明](/updates/development-status)，并说明返回含答案 HTML 的方式。产品源码 `c2836ba8` 尚未合并或部署，完整工程与独立真人验收仍待完成；本条是开发文档更新，不改变 v4.0.0 下载包或官网体验。
 
 ## 2026-10-14 · 知识库滚动阅读
 

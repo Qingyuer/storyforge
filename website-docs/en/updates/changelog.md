@@ -1,16 +1,63 @@
 # Changelog
 
-Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.2; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
+## October 23, 2026 · Saving and restoring large run contracts
 
-## Version 4.0.2 · Desktop and Android clients
+With larger run inputs, valid run contracts can be saved and revised in full, then read after a reload or complete-backup restoration, without being rejected by a smaller event-record limit. Oversized records still fail explicitly. Context snapshots are never truncated; model-call budgets, candidate adoption, permissions and freshness checks remain unchanged. Preserve the original work and backup after a capacity error rather than deleting contract fields. Evidence: [PR #185](https://github.com/yuanbw2025/storyforge/pull/185). See [backup and recovery](/en/guides/backup-restore).
 
-This release prepares Windows, Apple Silicon/Intel macOS installers and an Android APK, plus a unified first-launch User Agreement and private in-app problems and suggestions. iOS is deferred. Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability; existing downloads remain unchanged. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
+## October 22, 2026 · Outline recovery and style statistics instructions
+
+Added [checks and retry steps after detailed-outline interruption](/en/features/longform/writing#continuing-after-detailed-outline-generation-stops) and [the meaning of missing style statistics and how edits save](/en/features/longform/style-learning#when-sample-statistics-show-not-recorded). The [development record](/en/updates/development-status) now covers the complete branch/worktree review, separating merged changes, draft PRs, local unpushed commits, and uncommitted development.
+
+## October 21, 2026 · Detailed outlines, style profiles and scene editing
+
+- Chunked chapter-outline generation retains the complete predecessor candidate snapshot, fixing interruption when truncated evidence lacked an exact snapshot. After handling an error, explicitly retry from the original entry.
+- Style profiles with missing sample word counts display “Not recorded” and remain readable and editable; zero and valid counts retain their actual values.
+- Scene-detail drafts retain edits immediately, improving Chinese composition, caret position after a middle deletion, and saved reload behavior.
+- Website and in-app reports are linked to repository Issues for investigation, fixes and release progress. Private reports are reduced to necessary sanitized technical summaries.
+
+See [outlines and writing](/en/features/longform/writing), [PR #141](https://github.com/yuanbw2025/storyforge/pull/141), [PR #171](https://github.com/yuanbw2025/storyforge/pull/171), and [Issue #183](https://github.com/yuanbw2025/storyforge/issues/183).
+
+Feature updates, fixes, and workflow improvements are organized by user impact. See [compatibility](/en/updates/compatibility) for version information.
+
+## October 20, 2026 · System-fiction planning, whole-chapter review, and scoped revision
+
+[PR #141](https://github.com/yuanbw2025/storyforge/pull/141) merged into main as `1b96e80a`.
+
+- Enter optional system-fiction elements in the original work’s material. The separate Scene beats page records goals, choices, consequences, and continuity, with links between the same chapter’s plan, scene outline, and prose. See [planning](/en/features/longform/planning).
+- Whole-chapter review accepts round-specific instructions and locates issues in the source. Authors select issues, editable paragraphs, and protected quotations before one revision and one recheck, then confirm adoption. Failed rechecks retain the preview and original. Step and node modes read the same work. See [prose and revision](/en/features/longform/writing).
+- Fixes protect drafts during rapid chapter changes, recover interrupted post-adoption authorization preparation, request structured chapter memory, and distinguish multiple same-named item events during retrieval. Stale sources and unknown model outcomes do not trigger hidden resends.
+- Engineering head `fb682a28` passed 4594 CLI tests and 309 browser tests, with 4 environment-dependent skips. Regular CI also passed the latest main merge tree. Paired ten-chapter workflows, new-setting checks with two service models, and lifecycle evidence retain failures; they do not certify literary benefit.
+
+Independent reader reviews and independent author repair timing are optional follow-up research. This delivery does not require recruitment or questionnaire completion. Existing internal feedback is retained; engagement, independently measured time savings, and platform acceptance remain unverified.
+
+## October 19, 2026 · Continuation preparation errors and outline dismissal recovery
+
+- If saving current edits, preparing material, or assembling context fails before prose continuation, the prose area displays the reason so you can address it and explicitly retry.
+- Failed dismissal of scene-outline or batch-outline candidates retains the candidate and shows an error instead of clearing it as though rejection succeeded.
+
+See [prose and revision](/en/features/longform/writing). Evidence: [PR #166](https://github.com/yuanbw2025/storyforge/pull/166) · [main commit b344cc0b](https://github.com/yuanbw2025/storyforge/commit/b344cc0b).
+
+## 2026-10-19 · Longform entry consolidation and save protection
+
+Implementation: [commit d32b2471](https://github.com/yuanbw2025/storyforge/commit/d32b2471d0d89e9ef09057e89e8f6fd15b27db91) and [PR #165](https://github.com/yuanbw2025/storyforge/pull/165).
+
+- Search and replacement share one implementation. Cross-setting edits require a preview and snapshot before an atomic commit, fixing overwritten fields within one entry and accidental HTML-tag replacement. Stale previews and undo cannot overwrite later manuscript edits.
+- Scene-outline and emotion-beat coordination waits for the actual save instead of a success timer. Failures preserve the original and allow retry.
+- Luniang offers explicit free discussion and draft writing without completing every form. Useful replies enter the existing setting-candidate adoption flow. Setting lookup retains search; authors can inspect, export, and explicitly claim old history whose work ownership was never recorded.
+- Formal nodes use the longform workbench. Old prompt workflows remain experimental assets with execution disabled by default. Compatible graphs can be previewed and copied; originals remain intact and incompatible configuration is not silently dropped.
+- Locations, geography, maps, and city entries share a workspace. Old links remain usable and original data identities are retained. Generation previews and run details show actual prompt/style sources and overrides.
+
+See [Longform and Luniang](/en/features/longform/), [replacement and saving](/en/features/longform/writing), [node authoring](/en/features/nodes), and [locations and maps](/en/features/longform/worlds-maps). This change does not automatically merge equal-name locations or migrate real works in the author's browser. Engineering regressions do not establish literary quality.
+
+## October 16, 2026 · v4.0.2 desktop and Android clients
+
+This release provides Windows, Apple Silicon/Intel macOS installers and an Android APK, plus a unified first-launch User Agreement and private in-app problems and suggestions. iOS is deferred. General settings → Problems and suggestions provides private in-app feedback; see [troubleshooting](/en/guides/troubleshooting#problems-and-failure-reports-in-downloaded-builds). Published attachments on the [release page](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.2) determine availability. See [installation](/en/getting-started/install) and [privacy](/en/guides/privacy). Implementation: [PR #153](https://github.com/yuanbw2025/storyforge/pull/153).
 
 ## October 16, 2026 · Outline Agent candidate adoption fix
 
 Automatic volume/chapter outline composition no longer incorrectly rejects valid candidates as stale because generation and adoption used different policy identities. Real source, permission, and content freshness checks remain in place; candidates are not adopted automatically. See [outlines, scene beats, and prose](/en/features/longform/writing).
 
-Evidence: [fix 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158), merged into main as `ce49309b` on October 16 in China, after the fixed v4.0.1 release. Publishing the knowledge base does not update old packages or the hosted application experience.
+Evidence: [fix 5f59e4a4](https://github.com/yuanbw2025/storyforge/commit/5f59e4a4) · [PR #158](https://github.com/yuanbw2025/storyforge/pull/158), merged into main as `ce49309b` on October 16 in China.
 
 ## October 15, 2026 · v4.0.1 failure-feedback builds
 
@@ -21,6 +68,10 @@ Source: [failure-feedback implementation 80e48bc9](https://github.com/yuanbw2025
 ## 2026-10-15 · Client candidate implementation (unreleased)
 
 Development builds now cover a standalone Windows window and an Android APK, with in-app update checks, downloads and confirmed installation. Complete JSON backups on Android use the system file-saving dialog; cancellation or a failed save blocks operations that depend on that backup. This increment remains on a development branch, with no official release or real-device upgrade acceptance on either platform yet. Existing v4.0.0 downloads do not include these capabilities. See [Installation and startup](/en/getting-started/install#windows-android-clients-in-development).
+
+## October 15, 2026 · Longform quality development instructions (unreleased)
+
+[Draft PR #141](https://github.com/yuanbw2025/storyforge/pull/141) now has [trial instructions](/en/updates/development-status) for system-fiction elements, optional scene tasks, whole-chapter review, scoped revision, and returning HTML with embedded answers. Product source `c2836ba8` is unmerged and undeployed; complete engineering and independent human acceptance remain pending. This is a development-documentation update, not a change to v4.0.0 downloads or the hosted experience.
 
 ## October 14, 2026 · Knowledge-base scrolling
 
