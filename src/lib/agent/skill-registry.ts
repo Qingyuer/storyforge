@@ -67,6 +67,7 @@ export type AgentSkillExecutionModeV1 =
   | 'worldview-expand'
   | 'world-link-context'
   | 'constitution-extract'
+  | 'narrative-annotation-extract'
   | 'codex-extract'
   | 'codex-enrich'
   | 'story-core'
@@ -1308,6 +1309,28 @@ function productProductionInputPolicy(sourceKeys: readonly string[]): AgentSkill
 }
 
 export const AGENT_SKILLS = [
+  {
+    version: 1,
+    id: 'world-origin.narrative-annotation-extract',
+    agentId: 'world-origin', defaultForAgent: false,
+    label: '叙事注释候选抽取', owner: 'world-foundation-agent',
+    promptVersion: 'narrative-annotation-extract-v4', executionMode: 'narrative-annotation-extract',
+    contextTaskKind: 'agent-world-origin', readToolNames: [],
+    contextSourceKeys: ['ragSelection'], optionalContextSourceKeys: [],
+    inputPolicy: { sourceKeys: ['ragSelection'], states: {
+      empty: { handling: 'require-upstream', instruction: '作者必须明确选择来源字段；原文缺失时不生成。' },
+      partial: { handling: 'grounded-transform', instruction: '只提出所选原文支持的注释，未知时间和角色误信保留原类型。' },
+      complete: { handling: 'grounded-transform', instruction: '完整原文闭集仅用于候选；必须作者确认且来源 CAS 成功后才能写入。' },
+    } },
+    contextCompression: compressionPolicy(['ragSelection']), maxOutputTokens: 6_000,
+    writeTargets: [...REGISTRY_BY_NAME.values()].filter(spec => spec.worldSemantic?.projector).map(spec => ({
+      table: spec.name,
+      fields: (FIELD_BY_TARGET.get(spec.name) ?? []).filter(field => field.adoptionPolicy === 'narrative-annotation-v1').map(field => field.field),
+      adoptionExtension: ADOPTION_EXTENSIONS.find(extension => extension.target === spec.name
+        && extension.entrypoints.includes('src/lib/world-engine/narrative-domain-authoring.ts'))!.id,
+    })),
+    lastVerifiedAt: '2026-10-14', regressionTests: ['R-NW-1C-adoption', 'R-NW-1C-candidate-protocol'],
+  },
   {
     version: 1, id: 'extensions.generate', agentId: 'prose', defaultForAgent: false,
     label: '插件自有内容候选', owner: 'extension-host', promptVersion: 'extension-generate-v1', executionMode: 'extension-generate', contextTaskKind: 'agent-prose', readToolNames: [],
@@ -3779,7 +3802,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-gameplay-ruleset'],
   },
   {
@@ -3810,7 +3833,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-player-build'],
   },
   {
@@ -3841,7 +3864,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-story-architecture'],
   },
   {
@@ -3872,7 +3895,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-region-skeleton'],
   },
   {
@@ -3903,7 +3926,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-mainline'],
   },
   {
@@ -3934,7 +3957,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-significant-threads'],
   },
   {
@@ -3965,7 +3988,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-region-narrative-packs'],
   },
   {
@@ -3996,7 +4019,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-quest-skeletons'],
   },
   {
@@ -4027,7 +4050,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-progression-catalogs'],
   },
   {
@@ -4058,7 +4081,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-encounter-catalog'],
   },
   {
@@ -4120,7 +4143,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-crafting-economy'],
   },
   {
@@ -4151,7 +4174,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-23',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-npc-runtime'],
   },
   {
@@ -4182,7 +4205,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-map-interaction'],
   },
   {
@@ -4337,7 +4360,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson', 'qualityJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-quality-review'],
   },
   {
@@ -4368,7 +4391,7 @@ export const AGENT_SKILLS = [
       fields: ['payloadJson', 'qualityJson'],
       adoptionExtension: 'product-production-artifacts',
     }],
-    lastVerifiedAt: '2026-10-23',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-OPEN-WORLD3-quality-review'],
   },
   {
@@ -4620,7 +4643,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-TEXTADV3-agent-team'],
   },
   {
@@ -4808,7 +4831,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['product-production.brief', 'product-production.adventure-visual-direction-inputs']),
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-TEXTADV3-agent-team'],
   },
   {
@@ -4830,7 +4853,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-10-22',
+    lastVerifiedAt: '2026-10-24',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
@@ -5330,7 +5353,7 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const productProductionModes = new Set<AgentSkillExecutionModeV1>(['product-production'])
   const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
+    'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'narrative-annotation-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
@@ -5484,7 +5507,7 @@ export function validateAgentSkillDefinitionsV1(
       for (const toolName of gateway.additionalReadToolNames) {
         const tool = AGENT_TOOL_BY_NAME.get(toolName)
         if (!tool || tool.risk !== 'read' || ![
-          'list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence',
+          'list_context_catalog', 'search_context', 'query_world_release', 'read_context_resource', 'read_original_evidence',
         ].includes(toolName)) {
           throw new Error(`Agent Skill ${skill.id} 的 Context Gateway 工具 ${toolName} 未登记`)
         }
