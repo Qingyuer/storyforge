@@ -1,3 +1,4 @@
+import { uniqueTextOpenWorldObjectiveInteractionLocationV1 } from './objective-scene-location'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
@@ -155,6 +156,9 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
    * executor sends only a disclosure-safe deterministic projection to the
    * model. Historical v1/v2 contexts omit this marker. */
   modelDisclosureContract?: 'governed-v3'
+  /** Fresh requests bind objective scenes to completion-compatible locations.
+   * Absence preserves the exact demand semantics of already-paid v1-v3 runs. */
+  objectiveSceneLocationContract?: 'completion-compatible-v1'
   productInstanceKey: string
   sourceLedger: TextOpenWorldSourceLedgerV1
   experienceContract: TextOpenWorldExperienceContractV1
@@ -211,7 +215,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
         | 'prerequisiteConditionKeys' | 'rewardContractKey' | 'acceptActionKey' | 'claimActionKey'>>
       objectives: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['objectives'][number],
         | 'key' | 'questKey' | 'stageKey' | 'title' | 'description' | 'requirementKeys'
-        | 'supportActionKeys' | 'completionActionKey' | 'completionConditionKeys'>>
+        | 'supportActionKeys' | 'completionActionKey' | 'completionConditionKeys'> & { sceneLocationKey?: string }>
       actions: TextOpenWorldSceneActionSourceV1[]
       endingBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings']
       catalogBindings: Pick<TextOpenWorldQuestDesignDocumentsV1['catalogBindings'],
@@ -618,7 +622,12 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
   for (const objective of context.questDesignDocuments.objectives) {
     const quest = context.questSkeletons.quests.find(item => item.key === objective.questKey) ?? fail(`缺少QuestSkeleton:${objective.questKey}`)
     const actions = playerActionKeys(hydrated, [...objective.supportActionKeys, objective.completionActionKey])
-    const locationKey = locationForActions(hydrated, actions, quest.locationKeys)
+    const locationKey = context.objectiveSceneLocationContract
+      ? objective.sceneLocationKey ?? fail(`Objective缺少冻结场景地点:${objective.key}`)
+      : locationForActions(hydrated, actions, quest.locationKeys)
+    const completion = actionByKey(hydrated, objective.completionActionKey)
+    if (context.objectiveSceneLocationContract && (!context.mapInteractionCatalog.locations.some(location => location.key === locationKey)
+      || completion.locationKeys.length && !completion.locationKeys.includes(locationKey))) fail(`Objective场景地点与完成Action冲突:${objective.key}`)
     const regionKey = context.version < 3
       ? quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
       : context.mapInteractionCatalog.locations.find(location => location.key === locationKey)?.regionKey
@@ -730,6 +739,8 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldSceneScriptsInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.objectiveSceneLocationContract !== undefined
+    && (context.version !== 3 || context.objectiveSceneLocationContract !== 'completion-compatible-v1')) fail('P9目标场景地点合同无效')
   if (context.questDesignDocuments.governance.actionPathEvidenceReady !== undefined
     && context.questDesignDocuments.governance.actionPathEvidenceReady !== true) fail('P9行动证据合同无效')
   if (context.npcRuntimeCatalog.vendorIdentityContract !== undefined
@@ -896,6 +907,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
   })))
   const base: TextOpenWorldSceneScriptsContextBaseV1 = {
     schema: 'storyforge.text-open-world-scene-scripts-input' as const, version: 3 as const,
+    objectiveSceneLocationContract: 'completion-compatible-v1',
     ...(questDesignDocuments.governance.knowledgeProgressReady === true
       ? { modelDisclosureContract: 'governed-v3' as const }
       : {}),
@@ -974,6 +986,18 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
         description: objective.description, requirementKeys: objective.requirementKeys,
         supportActionKeys: objective.supportActionKeys, completionActionKey: objective.completionActionKey,
         completionConditionKeys: objective.completionConditionKeys,
+        sceneLocationKey: (() => {
+          const completion = questDesignDocuments.actions.find(action => action.key === objective.completionActionKey)!
+          return uniqueTextOpenWorldObjectiveInteractionLocationV1({ objectiveKey: objective.key,
+            completionActionKey: completion.key, supportActionKeys: objective.supportActionKeys, graph: questDesignDocuments })
+            ?? objective.supportActionKeys.flatMap(key => {
+              const action = questDesignDocuments.actions.find(candidate => candidate.key === key)
+              return action && action.category !== 'start-combat' ? action.locationKeys : []
+            }).find(key => !completion.locationKeys.length || completion.locationKeys.includes(key))
+            ?? completion.locationKeys[0]
+            ?? questSkeletons.quests.find(quest => quest.key === objective.questKey)?.locationKeys[0]
+            ?? mapInteractionCatalog.initialLocationKey
+        })(),
       })),
       requirementBindings: questDesignDocuments.requirementBindings,
       ...(questDesignDocuments.knowledgeBindings

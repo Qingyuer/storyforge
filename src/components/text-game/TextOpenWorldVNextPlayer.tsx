@@ -154,7 +154,10 @@ export default function TextOpenWorldVNextPlayer() {
   const projection = store.runtimeState.textOpenWorld
   const storeIssue = store.issue
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
-  const projectedActions = selectTextOpenWorldVNextActions(store)
+  const projectedActions = useMemo(() => selectTextOpenWorldVNextActions({
+    selectedManifest: store.selectedManifest,
+    runtimeState: store.runtimeState,
+  }), [store.selectedManifest, store.runtimeState])
   const availableActions = projectedActions.filter(action => action.available)
   const modules = useMemo(
     () => runtimePackage ? parseTextOpenWorldModulesV1(runtimePackage) : null,

@@ -7098,6 +7098,14 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
   it('生产完整场景表现，并让系统Action、固定选项和自然语言共享同一P8F Action', async () => {
     const input = await sceneScriptsFixture()
     expect(input.sceneScriptsContext.version).toBe(3)
+    expect(input.sceneScriptsContext.objectiveSceneLocationContract).toBe('completion-compatible-v1')
+    for (const scene of input.sceneScriptsContext.sceneDemands.filter(scene => scene.sourceKind === 'quest-objective')) {
+      const objective = input.sceneScriptsContext.questDesignDocuments.objectives.find(row => row.key === scene.objectiveKey)!
+      const completion = input.sceneScriptsContext.questDesignDocuments.actions.find(row => row.key === objective.completionActionKey)!
+      expect(scene.locationKey).toBe(objective.sceneLocationKey)
+      if (completion.locationKeys.length) expect(completion.locationKeys).toContain(scene.locationKey)
+    }
+
     expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.scene-scripts-input')).toMatchObject({
       layer: 'L0', ownerFrom: 'work', protectedFromTrim: true, atomic: true,
     })
@@ -7249,9 +7257,35 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       context: input.sceneScriptsContext,
     })).resolves.toEqual({ sceneScripts, choiceContracts: choices, actionBindings: bindings })
 
+    // Reconstruct the previous compiler's Context without the new contract;
+    // old durable bytes must still compile and validate under their own rules.
+    const legacyLocationContext = structuredClone(input.sceneScriptsContext)
+    delete legacyLocationContext.objectiveSceneLocationContract
+    for (const objective of legacyLocationContext.questDesignDocuments.objectives) delete objective.sceneLocationKey
+    for (const scene of legacyLocationContext.sceneDemands.filter(row => row.sourceKind === 'quest-objective')) {
+      const objective = legacyLocationContext.questDesignDocuments.objectives.find(row => row.key === scene.objectiveKey)!
+      const quest = legacyLocationContext.questSkeletons.quests.find(row => row.key === scene.questKey)!
+      scene.locationKey = scene.actionKeys.map(key => legacyLocationContext.questDesignDocuments.actions.find(row => row.key === key)!)
+        .find(action => action.locationKeys.length)?.locationKeys[0]
+        ?? quest.locationKeys[0] ?? legacyLocationContext.mapInteractionCatalog.initialLocationKey
+      scene.regionKey = legacyLocationContext.mapInteractionCatalog.locations.find(row => row.key === scene.locationKey)!.regionKey
+      const actorKeys = legacyLocationContext.questDesignDocuments.requirementBindings
+        .filter(row => objective.requirementKeys.includes(row.requirementKey) && row.definitionKind === 'actor')
+        .flatMap(row => row.definitionKeys)
+      scene.participantKeys = [...new Set(actorKeys)].filter(key => legacyLocationContext.npcRuntimeCatalog.actors
+        .some(actor => actor.key === key && actor.homeLocationKey === scene.locationKey))
+    }
+    const { contextSelectionHash: _oldV3Hash, ...legacyLocationBody } = legacyLocationContext
+    legacyLocationContext.contextSelectionHash = await hashProductProductionValueV2(legacyLocationBody)
+    const oldV3Result = await executeSceneScripts({ ...input, sceneScriptsContextText: JSON.stringify(legacyLocationContext) })
+    const oldV3Scripts = oldV3Result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.scene-scripts')!
+      .payload as TextOpenWorldSceneScriptsV1
+    expect(oldV3Scripts.scenes.map(scene => [scene.key, scene.regionKey, scene.locationKey]))
+      .toEqual(legacyLocationContext.sceneDemands.map(scene => [scene.sceneKey, scene.regionKey, scene.locationKey]))
+
     // An already-paid v2 request keeps its original geography projection.
     // Fresh v3 requests derive geography from the selected frozen location.
-    const legacyV2 = structuredClone(input.sceneScriptsContext)
+    const legacyV2 = structuredClone(legacyLocationContext)
     legacyV2.version = 2
     for (const scene of legacyV2.sceneDemands.filter(scene => scene.sourceKind === 'quest-objective')) {
       const quest = legacyV2.questSkeletons.quests.find(candidate => candidate.key === scene.questKey)!
@@ -7268,7 +7302,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     // Historical v1 Contexts keep their original deterministic demand
     // semantics so an already-paid durable P9 run can still resume and be
     // verified after v2 stops promoting per-Action gates to whole scenes.
-    const legacyContext = structuredClone(input.sceneScriptsContext)
+    const legacyContext = structuredClone(legacyLocationContext)
     legacyContext.version = 1
     let legacyForeignOwnerEndpointCount = 0
     for (const scene of legacyContext.sceneDemands) {

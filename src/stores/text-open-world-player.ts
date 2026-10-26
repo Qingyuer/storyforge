@@ -1143,7 +1143,7 @@ export function selectTextOpenWorldAdventureActions(state: TextOpenWorldPlayerSt
     .filter(item => item.action.kind !== 'move')
 }
 
-export function selectTextOpenWorldVNextActions(state: TextOpenWorldPlayerState) {
+export function selectTextOpenWorldVNextActions(state: Pick<TextOpenWorldPlayerState, 'selectedManifest' | 'runtimeState'>) {
   const runtimePackage = state.selectedManifest?.textOpenWorldVNext
   if (!state.runtimeState.textOpenWorld || !runtimePackage) return []
   return createTextOpenWorldActionRegistryV1(runtimePackage)

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
+import { ensureTextOpenWorldCombatRetryCheckpointV1, inspectTextOpenWorldCheckpointV1 } from '../../src/lib/open-world/checkpoints'
 import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
 import {
   branchTextOpenWorldSessionFromCheckpointV1,
@@ -191,6 +192,34 @@ describe('Text Open World vNext · disclosure-safe player combat projection', ()
     // Projection only: the frozen label and event evidence retain their original spelling.
     expect(JSON.stringify(current.projection.runtimePackage)).toBe(frozenPackage)
     expect(JSON.stringify(current.events)).toBe(originalEvents)
+  }, 60_000)
+
+  it('第二场战斗可保留上一场胜利记录建立战前点，进行中的战斗仍不能建点', async () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    ;(runtimePackage.modules.combat.payload as any).enemies[0].maximumHealth = 1
+    const session = await createCombatSession(runtimePackage)
+    const start = (commandId: string) => executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.start-ridge-jackal',
+      targetKey: 'encounter.ridge-jackal', commandId,
+    })
+    await start('command.repeat-combat.first')
+    await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.combat-basic-attack',
+      targetKey: 'enemy.1.1', commandId: 'command.repeat-combat.win',
+    })
+    const won = await readProductRuntimeState(session.id!)
+    expect(won.textOpenWorld!.state.combat?.status).toBe('victory')
+    const checkpoint = await ensureTextOpenWorldCombatRetryCheckpointV1({
+      sessionId: session.id!, encounterKey: 'encounter.ridge-jackal',
+    })
+    expect(JSON.parse(checkpoint.stateJson).textOpenWorld.state.combat).toEqual(won.textOpenWorld!.state.combat)
+    await expect(inspectTextOpenWorldCheckpointV1(checkpoint.id!)).resolves.toMatchObject({ valid: true })
+    await expect(start('command.repeat-combat.second')).resolves.toMatchObject({ status: 'succeeded' })
+    expect((await readProductRuntimeState(session.id!)).textOpenWorld!.state.combat?.status).toBe('active')
+    await expect(ensureTextOpenWorldCombatRetryCheckpointV1({
+      sessionId: session.id!, encounterKey: 'encounter.ridge-jackal',
+    })).rejects.toThrow('只能在对应遭遇开始前建立战前重试点')
+    await expect(inspectTextOpenWorldCheckpointV1(checkpoint.id!)).resolves.toMatchObject({ valid: true })
   }, 60_000)
 
   it('胜利奖励只展示当前实例已经落盘的实际Effect，失败或逃跑不会预告奖励', async () => {

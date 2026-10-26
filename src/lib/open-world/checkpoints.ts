@@ -119,7 +119,7 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   if (purpose === 'combat-retry') {
     const modules = parseTextOpenWorldModulesV1(saved.textOpenWorld!.runtimePackage)
     const encounter = modules.combat.encounters.find(item => item.key === subjectKey)
-    if (!encounter || saved.textOpenWorld!.state.combat != null || saved.textOpenWorld!.state.player.health <= 0
+    if (!encounter || saved.textOpenWorld!.state.combat?.status === 'active' || saved.textOpenWorld!.state.player.health <= 0
       || saved.textOpenWorld!.state.map.currentLocationKey !== encounter.locationKey) {
       return { ...base, code: 'checkpoint-purpose-invalid', detail: '战前重试点没有冻结对应遭遇开始前的安全状态。', valid: false }
     }
@@ -182,7 +182,7 @@ export async function createTextOpenWorldCheckpointV1(input: {
     const modules = parseTextOpenWorldModulesV1(verified.state.textOpenWorld!.runtimePackage)
     const encounter = modules.combat.encounters.find(item => item.key === encounterKey) ?? fail(`战前重试点遭遇不存在:${encounterKey}`)
     const runtime = verified.state.textOpenWorld!.state
-    if (runtime.combat != null || runtime.player.health <= 0 || runtime.map.currentLocationKey !== encounter.locationKey) fail('只能在对应遭遇开始前建立战前重试点')
+    if (runtime.combat?.status === 'active' || runtime.player.health <= 0 || runtime.map.currentLocationKey !== encounter.locationKey) fail('只能在对应遭遇开始前建立战前重试点')
   }
   const checkpoint = await createProductRuntimeCheckpoint({ ...input, ...normalizedPurpose, throughSequence })
   const inspection = await inspectTextOpenWorldCheckpointV1(checkpoint.id!)

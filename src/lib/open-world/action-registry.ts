@@ -12,7 +12,7 @@ import { parseTextOpenWorldModulesV1 } from './modules'
 import { parseTextOpenWorldCommandEnvelopeV1 } from './command-contract'
 import { createTextOpenWorldConditionCatalogV1 } from './condition-dsl'
 import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
-import { planTextOpenWorldRouteV1 } from './map-topology'
+import { planTextOpenWorldRouteFromModulesV1 } from './map-topology'
 import {
   textOpenWorldSceneQuestInstanceKeysV1,
   textOpenWorldSceneEligibleV1,
@@ -414,8 +414,8 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           .map(point => point.locationKey)
           .filter(locationKey => locationKey !== context.currentLocationKey))
         const eligibleTargetKeys = validTargetKeys.filter(locationKey => unlockedLocationKeys.has(locationKey))
-        validTargetKeys = eligibleTargetKeys.filter(locationKey => planTextOpenWorldRouteV1({
-          runtimePackage: value,
+        validTargetKeys = eligibleTargetKeys.filter(locationKey => planTextOpenWorldRouteFromModulesV1({
+          modules,
           fromLocationKey: context.currentLocationKey,
           destinationLocationKey: locationKey,
           openEdgeKeys: context.openEdgeKeys,
